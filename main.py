@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Security, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security.api_key import APIKeyHeader
+from starlette.status import HTTP_403_FORBIDDEN
 from oauth_service.routes import oauth_router
 from dotenv import load_dotenv
 import uvicorn
@@ -14,6 +16,27 @@ SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").lower()
 WORKERS = int(os.getenv("WORKERS", "1"))
+API_KEY = os.getenv("API_KEY")
+
+if not API_KEY and ENVIRONMENT == "production":
+    raise ValueError("API_KEY must be set in production environment")
+
+# API Key security
+API_KEY_NAME = "X-API-Key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+async def get_api_key(api_key_header: str = Security(api_key_header)):
+    if not api_key_header:
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN,
+            detail="No API key provided"
+        )
+    if api_key_header != API_KEY:
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN,
+            detail="Invalid API key"
+        )
+    return api_key_header
 
 app = FastAPI(
     title="OAuth Service",
@@ -39,10 +62,14 @@ app.add_middleware(
     max_age=600,
 )
 
-# Include routes
-app.include_router(oauth_router, prefix="/oauth", tags=["oauth"])
+# Include routes without /oauth prefix, but with API key dependency
+app.include_router(
+    oauth_router,
+    dependencies=[Depends(get_api_key)],
+    tags=["oauth"]
+)
 
-# Health check endpoint
+# Health check endpoint (no API key required)
 @app.get("/health")
 async def health_check():
     return {
@@ -53,7 +80,7 @@ async def health_check():
         "port": SERVER_PORT
     }
 
-# Root endpoint
+# Root endpoint (no API key required)
 @app.get("/")
 async def root():
     return {
@@ -66,6 +93,13 @@ if __name__ == "__main__":
     print(f"Starting server on {SERVER_HOST}:{SERVER_PORT}")
     print(f"Environment: {ENVIRONMENT}")
     print(f"Log level: {LOG_LEVEL}")
+    
+    if ENVIRONMENT == "development":
+        print("Warning: Running in development mode")
+        if API_KEY:
+            print(f"API Key is set: {API_KEY[:4]}...")
+        else:
+            print("No API Key set")
     
     uvicorn.run(
         app,
