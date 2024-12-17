@@ -22,7 +22,7 @@ const LinkedInAuth: React.FC<LinkedInAuthProps> = ({
   const handleCallback = useCallback(async (code: string) => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:8000/oauth/linkedin/callback', {
+      const response = await fetch('https://dukat.see4.tech/oauth/linkedin/callback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -51,7 +51,7 @@ const LinkedInAuth: React.FC<LinkedInAuthProps> = ({
   const handleLogin = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('http://localhost:8000/oauth/linkedin/init', {
+      const response = await fetch('https://dukat.see4.tec/oauth/linkedin/init', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
