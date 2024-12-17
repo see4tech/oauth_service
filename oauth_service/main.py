@@ -22,7 +22,7 @@ if not API_KEY and ENVIRONMENT == "production":
     raise ValueError("API_KEY must be set in production environment")
 
 # API Key security
-API_KEY_NAME = "X-API-Key"
+API_KEY_NAME = "x-api-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 async def get_api_key(api_key_header: str = Security(api_key_header)):
