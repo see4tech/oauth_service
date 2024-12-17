@@ -82,8 +82,7 @@ class SqliteDB:
             ''')
             self.conn.commit()
     
-    def store_token(self, user_id: str, platform: str, token_:
-        """Store encrypted token data."""
+    def store_token(self, user_id: str, platform: str, token_ encrypted token data."""
         try:
             with self._lock:
                 cursor = self.conn.cursor()
