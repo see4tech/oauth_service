@@ -1,12 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from oauth_service.routes import oauth_router
+from routes import oauth_router
 from dotenv import load_dotenv
 import uvicorn
 import os
 
 # Load environment variables
 load_dotenv()
+
+# Get server configuration from environment
+SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
+SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "info").lower()
+WORKERS = int(os.getenv("WORKERS", "1"))
 
 app = FastAPI(
     title="OAuth Service",
@@ -15,28 +22,21 @@ app = FastAPI(
 )
 
 # Configure CORS
-# In development, allow all origins
-if os.getenv("ENVIRONMENT") == "development":
+if ENVIRONMENT == "development":
     origins = ["*"]
 else:
-    # In production, use configured origins or a secure default
-    default_origins = [
-        "http://localhost:3000",          # Local development
-        "http://localhost:8000",          # Local API
-        "https://your-domain.com",        # Your main domain
-        "https://*.your-domain.com",      # Subdomains
-    ]
-    origins = os.getenv("ALLOWED_ORIGINS", ",".join(default_origins)).split(",")
+    origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+    if not origins:
+        raise ValueError("ALLOWED_ORIGINS must be set in production")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.your-domain\.com",  # Allow all subdomains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
-    max_age=600,  # Cache preflight requests for 10 minutes
+    max_age=600,
 )
 
 # Include routes
@@ -48,7 +48,9 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "1.0.0",
-        "environment": os.getenv("ENVIRONMENT", "development")
+        "environment": ENVIRONMENT,
+        "host": SERVER_HOST,
+        "port": SERVER_PORT
     }
 
 # Root endpoint
@@ -61,11 +63,15 @@ async def root():
     }
 
 if __name__ == "__main__":
+    print(f"Starting server on {SERVER_HOST}:{SERVER_PORT}")
+    print(f"Environment: {ENVIRONMENT}")
+    print(f"Log level: {LOG_LEVEL}")
+    
     uvicorn.run(
-        "oauth_service.main:app",
-        host=os.getenv("SERVER_HOST", "0.0.0.0"),
-        port=int(os.getenv("SERVER_PORT", 8000)),
-        reload=os.getenv("ENVIRONMENT") == "development",
-        log_level=os.getenv("LOG_LEVEL", "info").lower(),
-        workers=int(os.getenv("WORKERS", 1))
+        app,
+        host=SERVER_HOST,
+        port=SERVER_PORT,
+        reload=ENVIRONMENT == "development",
+        log_level=LOG_LEVEL,
+        workers=WORKERS
     )
