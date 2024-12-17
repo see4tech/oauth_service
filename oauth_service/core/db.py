@@ -183,6 +183,8 @@ if __name__ == '__main__':
         
         print(f"Test token stored and retrieved: {retrieved_token}")
         assert retrieved_token == test_token, "Token retrieval failed"
+        
+        print("\nDatabase test completed successfully")
     
     except Exception as e:
         print(f"Error during direct module execution: {e}")
