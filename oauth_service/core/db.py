@@ -82,6 +82,53 @@ class SqliteDB:
             ''')
             self.conn.commit()
     
+    def store_token(self, user_id: str, platform: str, token_:
+        """Store encrypted token data."""
+        try:
+            with self._lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO oauth_tokens 
+                    (user_id, platform, token_data, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ''', (user_id, platform, token_data))
+                self.conn.commit()
+        except sqlite3.Error as e:
+            logger = _get_logger()
+            logger.error(f"Error storing token: {e}")
+            raise
+    
+    def get_token(self, user_id: str, platform: str) -> Optional[str]:
+        """Retrieve encrypted token data."""
+        try:
+            with self._lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT token_data FROM oauth_tokens
+                    WHERE user_id = ? AND platform = ?
+                ''', (user_id, platform))
+                result = cursor.fetchone()
+                return result[0] if result else None
+        except sqlite3.Error as e:
+            logger = _get_logger()
+            logger.error(f"Error retrieving token: {e}")
+            raise
+    
+    def delete_token(self, user_id: str, platform: str) -> None:
+        """Delete token data."""
+        try:
+            with self._lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    DELETE FROM oauth_tokens
+                    WHERE user_id = ? AND platform = ?
+                ''', (user_id, platform))
+                self.conn.commit()
+        except sqlite3.Error as e:
+            logger = _get_logger()
+            logger.error(f"Error deleting token: {e}")
+            raise
+    
     @classmethod
     def get_instance(cls):
         """
@@ -89,7 +136,10 @@ class SqliteDB:
         """
         return cls()
     
-    # ... (rest of the methods remain the same)
+    def __del__(self):
+        """Ensure database connection is closed."""
+        if hasattr(self, 'conn'):
+            self.conn.close()
 
 # Module-level function to get database instance
 def get_db():
