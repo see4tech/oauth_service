@@ -1,0 +1,176 @@
+openapi: 3.0.0
+info:
+  title: OAuth Service API
+  version: 1.0.0
+  description: A comprehensive OAuth service supporting multiple social media platforms
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: https://api.yourdomain.com
+    description: Production server
+
+tags:
+  - name: oauth
+    description: OAuth operations
+  - name: social
+    description: Social media operations
+
+paths:
+  /oauth/{platform}/init:
+    post:
+      tags:
+        - oauth
+      summary: Initialize OAuth flow
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [twitter, linkedin, facebook, instagram]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthInitRequest'
+      responses:
+        '200':
+          description: OAuth initialization successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthInitResponse'
+
+  /oauth/{platform}/callback:
+    post:
+      tags:
+        - oauth
+      summary: Handle OAuth callback
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [twitter, linkedin, facebook, instagram]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthCallbackRequest'
+      responses:
+        '200':
+          description: Token exchange successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+
+  /oauth/{platform}/post:
+    post:
+      tags:
+        - social
+      security:
+        - BearerAuth: []
+      summary: Create social media post
+      parameters:
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [twitter, linkedin, facebook, instagram]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostContent'
+      responses:
+        '200':
+          description: Post created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostResponse'
+
+components:
+  schemas:
+    OAuthInitRequest:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: Unique identifier of the user
+        redirect_uri:
+          type: string
+          format: uri
+          description: OAuth callback URL
+        scopes:
+          type: array
+          items:
+            type: string
+          description: Optional OAuth scopes
+
+    OAuthInitResponse:
+      type: object
+      properties:
+        authorization_url:
+          type: string
+          format: uri
+        state:
+          type: string
+        platform:
+          type: string
+        additional_params:
+          type: object
+          additionalProperties: true
+
+    OAuthCallbackRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        state:
+          type: string
+        redirect_uri:
+          type: string
+          format: uri
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+        refresh_token:
+          type: string
+        scope:
+          type: string
+
+    PostContent:
+      type: object
+      properties:
+        text:
+          type: string
+          maxLength: 5000
+        media_urls:
+          type: array
+          items:
+            type: string
+            format: uri
+        link:
+          type: string
+          format: uri
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
