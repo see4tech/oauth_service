@@ -6,11 +6,15 @@ After=network.target
 User=procesor
 Group=procesor
 WorkingDirectory=/home/procesor/oauth_service
-Environment="PATH=/home/procesor/oauth_service/venv/bin"
+Environment="PATH=/home/procesor/oauth_service/oauth_service/venv/bin"
 Environment="PYTHONPATH=/home/procesor/oauth_service"
-ExecStart=/home/procesor/oauth_service/venv/bin/python -m oauth_service.main
+ExecStart=/home/procesor/oauth_service/oauth_service/venv/bin/python -m oauth_service.main
 Restart=always
 RestartSec=5
+
+# Debugging options
+StandardOutput=journal
+StandardError=journal
 
 # Security options
 PrivateTmp=true
