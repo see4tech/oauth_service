@@ -2,13 +2,13 @@ import sqlite3
 from pathlib import Path
 import threading
 from typing import Optional, Dict
-import json
 import sys
 import traceback
-import importlib
 
-# Moved logger import to avoid potential circular imports
-from ..utils.logger import get_logger
+# Lazy import of logger to avoid potential circular imports
+def get_logger():
+    from ..utils.logger import get_logger
+    return get_logger(__name__)
 
 class SqliteDB:
     """Thread-safe SQLite database manager for OAuth tokens."""
@@ -17,44 +17,54 @@ class SqliteDB:
     _lock = threading.Lock()
     _initialized = False
     
+    def __init__(self):
+        # Prevent direct instantiation
+        if not self._initialized:
+            self._initialize()
+    
     @classmethod
     def get_instance(cls):
         """
-        Explicit class method to get or create the singleton instance
-        Helps avoid potential import-time initialization issues
+        Thread-safe singleton method to get database instance
         """
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = cls()
-        return cls._instance
-    
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
+                    cls._instance = object.__new__(cls)
                     cls._instance._initialize()
         return cls._instance
     
     def _initialize(self):
-        """Initialization method to avoid side effects during import."""
+        """
+        Lazy initialization method with robust error handling
+        """
         if not self._initialized:
-            logger = get_logger(__name__)
             try:
+                logger = get_logger()
                 logger.info("Initializing SqliteDB")
                 
+                # Ensure data directory exists
                 db_path = Path('data/oauth.db')
                 db_path.parent.mkdir(parents=True, exist_ok=True)
                 
+                # Initialize database connection
                 self.db_path = db_path
-                self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
+                self.conn = sqlite3.connect(
+                    str(db_path), 
+                    check_same_thread=False, 
+                    isolation_level=None  # Enable autocommit
+                )
                 self._lock = threading.Lock()
+                
+                # Create tables
                 self._init_db()
                 
+                # Mark as initialized
                 self._initialized = True
                 logger.info("SqliteDB initialization complete")
+            
             except Exception as e:
+                logger = get_logger()
                 logger.error(f"Error initializing SqliteDB: {e}")
                 logger.error(traceback.format_exc())
                 raise
@@ -76,17 +86,63 @@ class SqliteDB:
             ''')
             self.conn.commit()
     
-    # ... (rest of the methods remain the same)
-
+    def store_token(self, user_id: str, platform: str, token_data: str) -> None:
+        """Store encrypted token data."""
+        try:
+            with self._lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO oauth_tokens 
+                    (user_id, platform, token_data, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ''', (user_id, platform, token_data))
+                self.conn.commit()
+        except sqlite3.Error as e:
+            logger = get_logger()
+            logger.error(f"Error storing token: {e}")
+            raise
+    
+    def get_token(self, user_id: str, platform: str) -> Optional[str]:
+        """Retrieve encrypted token data."""
+        try:
+            with self._lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT token_data FROM oauth_tokens
+                    WHERE user_id = ? AND platform = ?
+                ''', (user_id, platform))
+                result = cursor.fetchone()
+                return result[0] if result else None
+        except sqlite3.Error as e:
+            logger = get_logger()
+            logger.error(f"Error retrieving token: {e}")
+            raise
+    
+    def delete_token(self, user_id: str, platform: str) -> None:
+        """Delete token data."""
+        try:
+            with self._lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    DELETE FROM oauth_tokens
+                    WHERE user_id = ? AND platform = ?
+                ''', (user_id, platform))
+                self.conn.commit()
+        except sqlite3.Error as e:
+            logger = get_logger()
+            logger.error(f"Error deleting token: {e}")
+            raise
+    
     def __del__(self):
         """Ensure database connection is closed."""
         if hasattr(self, 'conn'):
             self.conn.close()
 
-# Module-level function to get database instance
+# Lazy initialization function
 def get_db():
     """
     Provides a thread-safe way to access the database
+    Uses lazy initialization to avoid import-time side effects
     """
     return SqliteDB.get_instance()
 
@@ -100,15 +156,18 @@ def _debug_module_import():
     print(f"Module file: {__file__}")
     
     # Print some additional context
-    print(f"Caller's module: {sys._getframe(1).f_globals.get('__name__', 'Unknown')}")
+    try:
+        caller_module = sys._getframe(1).f_globals.get('__name__', 'Unknown')
+        print(f"Caller's module: {caller_module}")
+    except Exception:
+        print("Could not determine caller module")
 
-# Conditional debug output
+# Only run debug output when the module is directly executed
 if __name__ == '__main__':
-    # Only run debug output when the module is directly executed
     _debug_module_import()
     
-    # Demonstrate database usage when run directly
     try:
+        # Demonstrate database usage
         db = get_db()
         print("\nDatabase instance created successfully")
         
