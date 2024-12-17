@@ -1,35 +1,21 @@
 [Unit]
 Description=OAuth Service
 After=network.target
-Wants=network-online.target
 
 [Service]
-Type=simple
 User=procesor
 Group=procesor
 WorkingDirectory=/home/procesor/oauth_service
-
-# Updated paths to match your actual virtual environment location
+Environment="PATH=/home/procesor/oauth_service/venv/bin"
 Environment="PYTHONPATH=/home/procesor/oauth_service"
-Environment="PATH=/home/procesor/oauth_service/oauth_service/venv/bin:/usr/local/bin:/usr/bin:/bin"
-EnvironmentFile=/home/procesor/oauth_service/.env
-
-# Updated ExecStart with correct path
-ExecStart=/home/procesor/oauth_service/oauth_service/venv/bin/uvicorn oauth_service.main:app --host 0.0.0.0 --port 8000 --workers 4
-
+ExecStart=/home/procesor/oauth_service/venv/bin/python -m oauth_service.main
 Restart=always
-RestartSec=1
-StartLimitInterval=0
+RestartSec=5
 
-# Security measures
-NoNewPrivileges=true
+# Security options
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=read-only
-
-# Logging
-StandardOutput=append:/var/log/oauth_service/oauth.log
-StandardError=append:/var/log/oauth_service/error.log
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
