@@ -2,7 +2,7 @@ from fastapi import FastAPI, Security, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from starlette.status import HTTP_403_FORBIDDEN
-from oauth_service.routes import oauth_router
+from .routes import oauth_router
 from dotenv import load_dotenv
 import uvicorn
 import os
@@ -62,7 +62,7 @@ app.add_middleware(
     max_age=600,
 )
 
-# Include routes without /oauth prefix, but with API key dependency
+# Include routes with API key dependency
 app.include_router(
     oauth_router,
     dependencies=[Depends(get_api_key)],
@@ -102,7 +102,7 @@ if __name__ == "__main__":
             print("No API Key set")
     
     uvicorn.run(
-        app,
+        "oauth_service.main:app",
         host=SERVER_HOST,
         port=SERVER_PORT,
         reload=ENVIRONMENT == "development",
