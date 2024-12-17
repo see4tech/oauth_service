@@ -82,7 +82,15 @@ class SqliteDB:
             ''')
             self.conn.commit()
     
-    def store_token(self, user_id: str, platform: str, token_ encrypted token data."""
+    def store_token(self, user_id: str, platform: str, token_data: str) -> None:
+        """
+        Store encrypted token data.
+        
+        Args:
+            user_id (str): Unique identifier for the user
+            platform (str): Platform name for the token
+            token_data (str): Encrypted token data to store
+        """
         try:
             with self._lock:
                 cursor = self.conn.cursor()
@@ -98,7 +106,16 @@ class SqliteDB:
             raise
     
     def get_token(self, user_id: str, platform: str) -> Optional[str]:
-        """Retrieve encrypted token data."""
+        """
+        Retrieve encrypted token data.
+        
+        Args:
+            user_id (str): Unique identifier for the user
+            platform (str): Platform name for the token
+        
+        Returns:
+            Optional[str]: Retrieved token data or None if not found
+        """
         try:
             with self._lock:
                 cursor = self.conn.cursor()
@@ -114,7 +131,13 @@ class SqliteDB:
             raise
     
     def delete_token(self, user_id: str, platform: str) -> None:
-        """Delete token data."""
+        """
+        Delete token data.
+        
+        Args:
+            user_id (str): Unique identifier for the user
+            platform (str): Platform name for the token
+        """
         try:
             with self._lock:
                 cursor = self.conn.cursor()
@@ -131,7 +154,10 @@ class SqliteDB:
     @classmethod
     def get_instance(cls):
         """
-        Class method to get or create the singleton instance
+        Get or create the singleton instance of SqliteDB.
+        
+        Returns:
+            SqliteDB: Singleton instance of the database manager
         """
         return cls()
     
@@ -144,6 +170,9 @@ class SqliteDB:
 def get_db():
     """
     Provides a thread-safe way to access the database
+    
+    Returns:
+        SqliteDB: Singleton instance of the database manager
     """
     return SqliteDB.get_instance()
 
