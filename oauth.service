@@ -8,10 +8,15 @@ Type=simple
 User=procesor
 Group=procesor
 WorkingDirectory=/home/procesor/oauth_service
-Environment="PATH=/home/procesor/oauth_service/venv/bin"
+
+# Updated paths to match your actual virtual environment location
+Environment="PYTHONPATH=/home/procesor/oauth_service"
+Environment="PATH=/home/procesor/oauth_service/oauth_service/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/home/procesor/oauth_service/.env
 
-ExecStart=/home/procesor/oauth_service/venv/bin/python -m oauth_service.main
+# Updated ExecStart with correct path
+ExecStart=/home/procesor/oauth_service/oauth_service/venv/bin/uvicorn oauth_service.main:app --host 0.0.0.0 --port 8000 --workers 4
+
 Restart=always
 RestartSec=1
 StartLimitInterval=0
