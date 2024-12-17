@@ -1,0 +1,30 @@
+[Unit]
+Description=OAuth Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=procesor
+Group=procesor
+WorkingDirectory=/home/procesor/oauth_service
+Environment="PATH=/home/procesor/oauth_service/venv/bin"
+EnvironmentFile=/home/procesor/oauth_service/.env
+
+ExecStart=/home/procesor/oauth_service/venv/bin/python -m oauth_service.main
+Restart=always
+RestartSec=1
+StartLimitInterval=0
+
+# Security measures
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+
+# Logging
+StandardOutput=append:/var/log/oauth_service/oauth.log
+StandardError=append:/var/log/oauth_service/error.log
+
+[Install]
+WantedBy=multi-user.target
