@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from oauth_service.routes import oauth_router
+from routes import oauth_router
 from dotenv import load_dotenv
 import uvicorn
 import os
