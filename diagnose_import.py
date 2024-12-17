@@ -1,10 +1,10 @@
-# diagnose_import.py
+# diagnose_imports.py
 import sys
 import importlib
 import traceback
 
-def diagnose_module_import():
-    print("Starting Module Import Diagnosis")
+def diagnose_module_imports():
+    print("Starting Comprehensive Import Diagnosis")
     
     # Ensure the project root is in Python path
     sys.path.insert(0, '/home/procesor/oauth_service')
@@ -15,28 +15,30 @@ def diagnose_module_import():
     
     print("\nImport Diagnosis:")
     try:
-        # Explicitly reload the module to reset any previous state
-        if 'oauth_service.core.db' in sys.modules:
-            del sys.modules['oauth_service.core.db']
+        # Clear any existing imports to reset state
+        for key in list(sys.modules.keys()):
+            if key.startswith('oauth_service'):
+                del sys.modules[key]
         
-        # Perform the import
-        import oauth_service.core.db as db_module
+        # Perform imports with detailed tracking
+        print("\n--- Importing Core Modules ---")
+        import oauth_service
+        from oauth_service.core import get_oauth_base, get_token_manager
+        from oauth_service.core.db import get_db
         
-        print("\nModule Import Details:")
-        print(f"Module: {db_module}")
-        print(f"Module File: {db_module.__file__}")
-        
-        # Demonstrate database access
-        print("\nTesting Database Access:")
-        db_instance = db_module.get_db()
-        print("Database instance retrieved successfully")
-        
-        # Print module loading context
-        print("\nModule Loading Context:")
-        print("Modules in sys.modules:")
+        print("\n--- Module Import Details ---")
+        print("Imported modules:")
         for name, module in sys.modules.items():
-            if 'oauth_service' in str(name):
+            if 'oauth_service' in name:
                 print(f"  {name}")
+        
+        # Demonstrate usage
+        print("\n--- Testing Module Functionality ---")
+        oauth_base = get_oauth_base()
+        token_manager = get_token_manager()
+        db = get_db()
+        
+        print("\nModules imported and instantiated successfully")
     
     except ImportError as e:
         print("Import Error:")
@@ -46,4 +48,4 @@ def diagnose_module_import():
         print(traceback.format_exc())
 
 if __name__ == "__main__":
-    diagnose_module_import()
+    diagnose_module_imports()
