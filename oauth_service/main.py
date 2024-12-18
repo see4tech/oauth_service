@@ -36,6 +36,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://33d10367-52d6-4ff5-99d8-1c6792f179e5.lovableproject.com",
+        "https://id-preview--33d10367-52d6-4ff5-99d8-1c6792f179e5.lovable.app",
         "http://localhost:3000",
         "http://localhost:8000",
         "https://dukat.see4.tech"
