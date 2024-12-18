@@ -371,7 +371,7 @@ class LinkedInOAuth(OAuthBase):
             Authorization URL string
         """
         try:
-            scope_str = " ".join(scopes) if scopes else "r_liteprofile w_member_social"
+            scope_str = " ".join(scopes) if scopes else "openid profile w_member_social email"
             
             params = {
                 "response_type": "code",
@@ -508,12 +508,13 @@ class LinkedInOAuth(OAuthBase):
         try:
             headers = {
                 "Authorization": f"Bearer {token}",
-                "X-Restli-Protocol-Version": "2.0.0"
+                "X-Restli-Protocol-Version": "2.0.0",
+                "Accept": "application/json"
             }
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    f"{self.api_url}/me",
+                    "https://api.linkedin.com/v2/userinfo",
                     headers=headers
                 ) as response:
                     response_text = await response.text()
@@ -527,13 +528,13 @@ class LinkedInOAuth(OAuthBase):
                         )
                     
                     data = json.loads(response_text)
-                    member_id = data.get('id')
+                    member_id = data.get('sub')
                     if not member_id:
                         raise HTTPException(
                             status_code=500,
                             detail="Member ID not found in profile response"
                         )
-                    return member_id
+                    return member_id.replace('urn:li:person:', '')
                     
         except Exception as e:
             logger.error(f"Error getting user profile: {str(e)}")
