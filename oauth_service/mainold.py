@@ -3,29 +3,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from starlette.status import HTTP_403_FORBIDDEN
 from .routes import oauth_router
-from .config import get_settings
+from dotenv import load_dotenv
 import uvicorn
-import logging
-from .utils.logger import get_logger
+import os
 
-# Initialize settings and logger
-settings = get_settings()
-logger = get_logger(__name__)
+# Load environment variables
+load_dotenv()
+
+# Get server configuration from environment
+SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
+SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "info").lower()
+WORKERS = int(os.getenv("WORKERS", "1"))
+API_KEY = os.getenv("API_KEY")
+
+if not API_KEY and ENVIRONMENT == "production":
+    raise ValueError("API_KEY must be set in production environment")
 
 # API Key security
-API_KEY_NAME = "X-API-Key"
+API_KEY_NAME = "x-api-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 async def get_api_key(api_key_header: str = Security(api_key_header)):
-    if not settings.API_KEY:
-        return None  # No API key required if not set
-        
     if not api_key_header:
         raise HTTPException(
             status_code=HTTP_403_FORBIDDEN,
             detail="No API key provided"
         )
-    if api_key_header != settings.API_KEY:
+    if api_key_header != API_KEY:
         raise HTTPException(
             status_code=HTTP_403_FORBIDDEN,
             detail="Invalid API key"
@@ -39,9 +45,16 @@ app = FastAPI(
 )
 
 # Configure CORS
+if ENVIRONMENT == "development":
+    origins = ["*"]
+else:
+    origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+    if not origins:
+        raise ValueError("ALLOWED_ORIGINS must be set in production")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,15 +62,12 @@ app.add_middleware(
     max_age=600,
 )
 
-# Include routes with API key dependency if configured
-if settings.API_KEY:
-    app.include_router(
-        oauth_router,
-        dependencies=[Depends(get_api_key)],
-        tags=["oauth"]
-    )
-else:
-    app.include_router(oauth_router, tags=["oauth"])
+# Include routes with API key dependency
+app.include_router(
+    oauth_router,
+    dependencies=[Depends(get_api_key)],
+    tags=["oauth"]
+)
 
 # Health check endpoint (no API key required)
 @app.get("/health")
@@ -65,9 +75,9 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "1.0.0",
-        "environment": settings.ENVIRONMENT,
-        "host": settings.SERVER_HOST,
-        "port": settings.SERVER_PORT
+        "environment": ENVIRONMENT,
+        "host": SERVER_HOST,
+        "port": SERVER_PORT
     }
 
 # Root endpoint (no API key required)
@@ -80,26 +90,22 @@ async def root():
     }
 
 if __name__ == "__main__":
-    log_config = uvicorn.config.LOGGING_CONFIG
-    log_config["formatters"]["access"]["fmt"] = settings.LOG_FORMAT
+    print(f"Starting server on {SERVER_HOST}:{SERVER_PORT}")
+    print(f"Environment: {ENVIRONMENT}")
+    print(f"Log level: {LOG_LEVEL}")
     
-    print(f"Starting server on {settings.SERVER_HOST}:{settings.SERVER_PORT}")
-    print(f"Environment: {settings.ENVIRONMENT}")
-    print(f"Log level: {settings.LOG_LEVEL}")
-    
-    if settings.ENVIRONMENT == "development":
+    if ENVIRONMENT == "development":
         print("Warning: Running in development mode")
-        if settings.API_KEY:
-            print(f"API Key is set: {settings.API_KEY[:4]}...")
+        if API_KEY:
+            print(f"API Key is set: {API_KEY[:4]}...")
         else:
             print("No API Key set")
     
     uvicorn.run(
         "oauth_service.main:app",
-        host=settings.SERVER_HOST,
-        port=settings.SERVER_PORT,
-        reload=settings.ENVIRONMENT == "development",
-        log_level=settings.LOG_LEVEL.lower(),
-        workers=settings.WORKERS,
-        log_config=log_config
+        host=SERVER_HOST,
+        port=SERVER_PORT,
+        reload=ENVIRONMENT == "development",
+        log_level=LOG_LEVEL,
+        workers=WORKERS
     )

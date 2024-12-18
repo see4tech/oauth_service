@@ -1,18 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile
 from typing import Optional, Dict
 from ..core import TokenManager
 from ..platforms import TwitterOAuth, LinkedInOAuth, InstagramOAuth, FacebookOAuth
 from ..models.oauth_models import (
-    OAuthInitRequest, OAuthInitResponse, OAuthCallbackRequest,
-    TokenResponse, PostContent, PostResponse, MediaUploadResponse,
-    UserProfile, ErrorResponse
+    OAuthInitRequest,
+    OAuthInitResponse,
+    OAuthCallbackRequest,
+    TokenResponse,
+    PostContent,
+    PostResponse,
+    MediaUploadResponse,
+    UserProfile
 )
 from ..utils.logger import get_logger
+from ..config import get_settings
+import json
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/oauth", tags=["oauth"])
+router = APIRouter()
+settings = get_settings()
 
-async def get_oauth_handler(platform: str, client_id: str, client_secret: str, callback_url: str):
+async def get_oauth_handler(platform: str):
     """Get appropriate OAuth handler based on platform."""
     handlers = {
         "twitter": TwitterOAuth,
@@ -27,7 +35,11 @@ async def get_oauth_handler(platform: str, client_id: str, client_secret: str, c
             detail=f"Unsupported platform: {platform}"
         )
     
-    return handlers[platform](client_id, client_secret, callback_url)
+    try:
+        credentials = settings.get_platform_credentials(platform)
+        return handlers[platform](**credentials)
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{platform}/init", response_model=OAuthInitResponse)
 async def initialize_oauth(
@@ -36,7 +48,7 @@ async def initialize_oauth(
 ) -> OAuthInitResponse:
     """Initialize OAuth flow and get authorization URL."""
     try:
-        oauth_handler = await get_oauth_handler(platform, client_id, client_secret, request.redirect_uri)
+        oauth_handler = await get_oauth_handler(platform)
         state = oauth_handler.generate_state(request.user_id)
         
         auth_urls = await oauth_handler.get_authorization_url(
@@ -70,7 +82,7 @@ async def oauth_callback(
 ) -> TokenResponse:
     """Handle OAuth callback and token exchange."""
     try:
-        oauth_handler = await get_oauth_handler(platform, client_id, client_secret, request.redirect_uri)
+        oauth_handler = await get_oauth_handler(platform)
         user_id = oauth_handler.verify_state(request.state)
         
         if not user_id:
@@ -97,7 +109,7 @@ async def refresh_token(
 ) -> TokenResponse:
     """Refresh OAuth access token."""
     try:
-        oauth_handler = await get_oauth_handler(platform, client_id, client_secret, "")
+        oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
         token_data = await oauth_handler.refresh_token(refresh_token)
@@ -118,7 +130,7 @@ async def create_post(
 ) -> PostResponse:
     """Create a post on the specified platform."""
     try:
-        oauth_handler = await get_oauth_handler(platform, client_id, client_secret, "")
+        oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
         tokens = await token_manager.get_valid_token(platform, user_id)
@@ -148,7 +160,7 @@ async def upload_media(
 ) -> MediaUploadResponse:
     """Upload media to the specified platform."""
     try:
-        oauth_handler = await get_oauth_handler(platform, client_id, client_secret, "")
+        oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
         tokens = await token_manager.get_valid_token(platform, user_id)
@@ -180,7 +192,7 @@ async def get_profile(
 ) -> UserProfile:
     """Get user profile from the specified platform."""
     try:
-        oauth_handler = await get_oauth_handler(platform, client_id, client_secret, "")
+        oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
         tokens = await token_manager.get_valid_token(platform, user_id)
