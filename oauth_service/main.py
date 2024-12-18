@@ -8,7 +8,6 @@ import uvicorn
 import logging
 from .utils.logger import get_logger
 
-
 # Initialize settings and logger
 settings = get_settings()
 logger = get_logger(__name__)
@@ -19,18 +18,11 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 async def get_api_key(api_key_header: str = Security(api_key_header)):
     if not settings.API_KEY:
-        return None  # No API key required if not set
-        
+        return None
     if not api_key_header:
-        raise HTTPException(
-            status_code=HTTP_403_FORBIDDEN,
-            detail="No API key provided"
-        )
+        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="No API key provided")
     if api_key_header != settings.API_KEY:
-        raise HTTPException(
-            status_code=HTTP_403_FORBIDDEN,
-            detail="Invalid API key"
-        )
+        raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid API key")
     return api_key_header
 
 app = FastAPI(
@@ -44,8 +36,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://33d10367-52d6-4ff5-99d8-1c6792f179e5.lovableproject.com",
-        "http://localhost:3000",  # For local development
-        "http://localhost:8000",  # For API server
+        "http://localhost:3000",
+        "http://localhost:8000",
         "https://dukat.see4.tech"
     ],
     allow_credentials=True,
@@ -55,31 +47,25 @@ app.add_middleware(
     max_age=600,
 )
 
-# Configure routes that need API key
-secured_router = APIRouter()
-secured_router.include_router(
+# Include routes with API key requirement for non-callback endpoints
+app.include_router(
     oauth_router,
     prefix="/oauth",
     tags=["oauth"],
     dependencies=[Depends(get_api_key)],
-    # Exclude callback route from API key requirement
-    routes=[route for route in oauth_router.routes if "/callback" not in str(route.path)]
+    include_in_schema=True
 )
 
-# Configure routes that don't need API key
-unsecured_router = APIRouter()
-unsecured_router.include_router(
-    oauth_router,
-    prefix="/oauth",
-    tags=["oauth"],
-    routes=[route for route in oauth_router.routes if "/callback" in str(route.path)]
-)
+# Add callback routes without API key requirement
+callback_router = APIRouter()
 
-# Include both routers
-app.include_router(secured_router)
-app.include_router(unsecured_router)
+@callback_router.get("/{platform}/callback")
+async def oauth_callback(request: Request, platform: str):
+    return await oauth_router.url_path_for("oauth_callback")(request=request, platform=platform)
 
-# Health check endpoint (no API key required)
+app.include_router(callback_router, prefix="/oauth")
+
+# Health check endpoint
 @app.get("/health")
 async def health_check():
     return {
@@ -90,7 +76,7 @@ async def health_check():
         "port": settings.SERVER_PORT
     }
 
-# Root endpoint (no API key required)
+# Root endpoint
 @app.get("/")
 async def root():
     return {
