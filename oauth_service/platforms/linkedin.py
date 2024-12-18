@@ -41,7 +41,7 @@
 #             Authorization URL string
 #         """
 #         try:
-#             scope_str = " ".join(scopes) if scopes else "r_liteprofile w_member_social"
+#             scope_str = " ".join(scopes) if scopes else "openid profile w_member_social email"
             
 #             params = {
 #                 "response_type": "code",
@@ -173,83 +173,39 @@
 #                 detail=f"Error refreshing token: {str(e)}"
 #             )
 
-#     # async def create_post(self, token: str, content: Dict) -> Dict:
-#     #     """
-#     #     Create a LinkedIn post.
-        
-#     #     Args:
-#     #         token: Access token
-#     #         content: Post content dictionary
-            
-#     #     Returns:
-#     #         Dictionary containing post ID and status
-#     #     """
-#     #     try:
-#     #         headers = {
-#     #             "Authorization": f"Bearer {token}",
-#     #             "Content-Type": "application/json",
-#     #             "X-Restli-Protocol-Version": "2.0.0"
-#     #         }
-            
-#     #         post_data = {
-#     #             "author": "urn:li:person:me",
-#     #             "lifecycleState": "PUBLISHED",
-#     #             "specificContent": {
-#     #                 "com.linkedin.ugc.ShareContent": {
-#     #                     "shareCommentary": {
-#     #                         "text": content.get("text", "")
-#     #                     },
-#     #                     "shareMediaCategory": "NONE"
-#     #                 }
-#     #             },
-#     #             "visibility": {
-#     #                 "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-#     #             }
-#     #         }
-            
-#     #         logger.debug("Creating LinkedIn post")
-            
-#     #         async with aiohttp.ClientSession() as session:
-#     #             async with session.post(
-#     #                 f"{self.api_url}/ugcPosts",
-#     #                 headers=headers,
-#     #                 json=post_data
-#     #             ) as response:
-#     #                 response_text = await response.text()
-#     #                 logger.debug(f"Post creation response status: {response.status}")
-                    
-#     #                 if not response.ok:
-#     #                     raise HTTPException(
-#     #                         status_code=response.status,
-#     #                         detail=f"Failed to create post: {response_text}"
-#     #                     )
-                    
-#     #                 data = json.loads(response_text)
-#     #                 return {
-#     #                     "post_id": data["id"],
-#     #                     "status": "published",
-#     #                     "platform": "linkedin"
-#     #                 }
 #     async def get_user_profile(self, token: str) -> str:
 #         """Get LinkedIn user profile to obtain member ID."""
 #         try:
 #             headers = {
 #                 "Authorization": f"Bearer {token}",
-#                 "X-Restli-Protocol-Version": "2.0.0"
+#                 "X-Restli-Protocol-Version": "2.0.0",
+#                 "Accept": "application/json"
 #             }
             
 #             async with aiohttp.ClientSession() as session:
 #                 async with session.get(
-#                     f"{self.api_url}/me",
+#                     "https://api.linkedin.com/v2/userinfo",
 #                     headers=headers
 #                 ) as response:
+#                     response_text = await response.text()
+#                     logger.debug(f"Profile response status: {response.status}")
+#                     logger.debug(f"Profile response: {response_text}")
+                    
 #                     if not response.ok:
 #                         raise HTTPException(
 #                             status_code=response.status,
-#                             detail=f"Failed to get user profile: {await response.text()}"
+#                             detail=f"Failed to get user profile: {response_text}"
 #                         )
-#                     data = await response.json()
-#                     return data.get('id')
+                    
+#                     data = json.loads(response_text)
+#                     member_id = data.get('sub')
+#                     if not member_id:
+#                         raise HTTPException(
+#                             status_code=500,
+#                             detail="Member ID not found in profile response"
+#                         )
+#                     return member_id.replace('urn:li:person:', '')
+                    
 #         except Exception as e:
 #             logger.error(f"Error getting user profile: {str(e)}")
 #             raise HTTPException(
@@ -258,16 +214,20 @@
 #             )
 
 #     async def create_post(self, token: str, content: Dict) -> Dict:
-#         """Create a LinkedIn post."""
+#         """
+#         Create a LinkedIn post.
+        
+#         Args:
+#             token: Access token
+#             content: Post content dictionary
+            
+#         Returns:
+#             Dictionary containing post ID and status
+#         """
 #         try:
 #             # First, get the user's LinkedIn member ID
 #             member_id = await self.get_user_profile(token)
-#             if not member_id:
-#                 raise HTTPException(
-#                     status_code=500,
-#                     detail="Could not obtain LinkedIn member ID"
-#                 )
-
+            
 #             headers = {
 #                 "Authorization": f"Bearer {token}",
 #                 "Content-Type": "application/json",
@@ -275,7 +235,7 @@
 #             }
             
 #             post_data = {
-#                 "author": f"urn:li:person:{member_id}",  # Using actual member ID instead of 'me'
+#                 "author": f"urn:li:person:{member_id}",
 #                 "lifecycleState": "PUBLISHED",
 #                 "specificContent": {
 #                     "com.linkedin.ugc.ShareContent": {
@@ -291,6 +251,7 @@
 #             }
             
 #             logger.debug(f"Creating LinkedIn post with author URN: urn:li:person:{member_id}")
+#             logger.debug(f"Post data: {post_data}")
             
 #             async with aiohttp.ClientSession() as session:
 #                 async with session.post(
@@ -321,13 +282,6 @@
 #                 status_code=500,
 #                 detail=f"Error creating post: {str(e)}"
 #             )
-                            
-#         except Exception as e:
-#             logger.error(f"Error creating post: {str(e)}")
-#             raise HTTPException(
-#                 status_code=500,
-#                 detail=f"Error creating post: {str(e)}"
-#             )
 from typing import Dict, Optional, List
 import aiohttp
 from fastapi import HTTPException
@@ -341,7 +295,7 @@ from ..utils.logger import get_logger
 logger = get_logger(__name__)
 
 class LinkedInOAuth(OAuthBase):
-    """LinkedIn OAuth 2.0 implementation."""
+    """LinkedIn OAuth 2.0 implementation with image support."""
     
     def __init__(self, client_id: str, client_secret: str, callback_url: str):
         """
@@ -543,19 +497,107 @@ class LinkedInOAuth(OAuthBase):
                 detail=f"Error getting user profile: {str(e)}"
             )
 
+    async def download_image(self, image_url: str) -> bytes:
+        """Download image from URL and return binary data."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as response:
+                    if not response.ok:
+                        raise HTTPException(
+                            status_code=response.status,
+                            detail=f"Failed to download image: {await response.text()}"
+                        )
+                    return await response.read()
+        except Exception as e:
+            logger.error(f"Error downloading image: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error downloading image: {str(e)}"
+            )
+
+    async def register_upload(self, token: str, member_id: str) -> Dict:
+        """Register image upload with LinkedIn."""
+        try:
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "X-Restli-Protocol-Version": "2.0.0"
+            }
+            
+            register_data = {
+                "registerUploadRequest": {
+                    "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
+                    "owner": f"urn:li:person:{member_id}",
+                    "serviceRelationships": [{
+                        "relationshipType": "OWNER",
+                        "identifier": "urn:li:userGeneratedContent"
+                    }]
+                }
+            }
+            
+            logger.debug(f"Registering upload with data: {register_data}")
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.api_url}/assets?action=registerUpload",
+                    headers=headers,
+                    json=register_data
+                ) as response:
+                    response_text = await response.text()
+                    logger.debug(f"Register upload response: {response_text}")
+                    
+                    if not response.ok:
+                        raise HTTPException(
+                            status_code=response.status,
+                            detail=f"Failed to register upload: {response_text}"
+                        )
+                    
+                    data = json.loads(response_text)
+                    return data["value"]["asset"]
+                    
+        except Exception as e:
+            logger.error(f"Error registering upload: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error registering upload: {str(e)}"
+            )
+
+    async def upload_image(self, upload_url: str, image_data: bytes) -> None:
+        """Upload image binary data to LinkedIn."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.put(
+                    upload_url,
+                    data=image_data,
+                    headers={
+                        "Content-Type": "application/octet-stream"
+                    }
+                ) as response:
+                    if not response.ok:
+                        raise HTTPException(
+                            status_code=response.status,
+                            detail=f"Failed to upload image: {await response.text()}"
+                        )
+        except Exception as e:
+            logger.error(f"Error uploading image: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error uploading image: {str(e)}"
+            )
+
     async def create_post(self, token: str, content: Dict) -> Dict:
         """
-        Create a LinkedIn post.
+        Create a LinkedIn post with optional image.
         
         Args:
             token: Access token
-            content: Post content dictionary
+            content: Post content dictionary with optional image_url
             
         Returns:
             Dictionary containing post ID and status
         """
         try:
-            # First, get the user's LinkedIn member ID
+            # Get user's LinkedIn member ID
             member_id = await self.get_user_profile(token)
             
             headers = {
@@ -564,24 +606,61 @@ class LinkedInOAuth(OAuthBase):
                 "X-Restli-Protocol-Version": "2.0.0"
             }
             
+            # Initialize post data
             post_data = {
                 "author": f"urn:li:person:{member_id}",
                 "lifecycleState": "PUBLISHED",
-                "specificContent": {
+                "visibility": {
+                    "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+                }
+            }
+
+            # Handle image if provided
+            if image_url := content.get("image_url"):
+                logger.debug(f"Processing image from URL: {image_url}")
+                
+                # Download image
+                image_data = await self.download_image(image_url)
+                
+                # Register upload
+                register_data = await self.register_upload(token, member_id)
+                upload_url = register_data["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
+                asset_id = register_data["id"]
+                
+                # Upload image
+                await self.upload_image(upload_url, image_data)
+                
+                # Add media to post data
+                post_data["specificContent"] = {
+                    "com.linkedin.ugc.ShareContent": {
+                        "shareCommentary": {
+                            "text": content.get("text", "")
+                        },
+                        "shareMediaCategory": "IMAGE",
+                        "media": [{
+                            "status": "READY",
+                            "description": {
+                                "text": content.get("image_description", "")
+                            },
+                            "media": asset_id,
+                            "title": {
+                                "text": content.get("image_title", "")
+                            }
+                        }]
+                    }
+                }
+            else:
+                # Text-only post
+                post_data["specificContent"] = {
                     "com.linkedin.ugc.ShareContent": {
                         "shareCommentary": {
                             "text": content.get("text", "")
                         },
                         "shareMediaCategory": "NONE"
                     }
-                },
-                "visibility": {
-                    "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
                 }
-            }
             
-            logger.debug(f"Creating LinkedIn post with author URN: urn:li:person:{member_id}")
-            logger.debug(f"Post data: {post_data}")
+            logger.debug(f"Creating LinkedIn post with data: {post_data}")
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -590,7 +669,6 @@ class LinkedInOAuth(OAuthBase):
                     json=post_data
                 ) as response:
                     response_text = await response.text()
-                    logger.debug(f"Post creation response status: {response.status}")
                     logger.debug(f"Post creation response: {response_text}")
                     
                     if not response.ok:
