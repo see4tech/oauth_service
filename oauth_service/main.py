@@ -88,18 +88,23 @@ if __name__ == "__main__":
     print(f"Log level: {settings.LOG_LEVEL}")
     
     if settings.ENVIRONMENT == "development":
-        print("Warning: Running in development mode")
-        if settings.API_KEY:
-            print(f"API Key is set: {settings.API_KEY[:4]}...")
-        else:
-            print("No API Key set")
-    
-    uvicorn.run(
-        "oauth_service.main:app",
-        host=settings.SERVER_HOST,
-        port=settings.SERVER_PORT,
-        reload=settings.ENVIRONMENT == "development",
-        log_level=settings.LOG_LEVEL.lower(),
-        workers=settings.WORKERS,
-        log_config=log_config
-    )
+        print("Warning: Running in development mode with reload enabled")
+        uvicorn.run(
+            "oauth_service.main:app",
+            host=settings.SERVER_HOST,
+            port=settings.SERVER_PORT,
+            reload=True,
+            log_level=settings.LOG_LEVEL.lower(),
+            log_config=log_config
+        )
+    else:
+        print(f"Running in production mode with {settings.WORKERS} workers")
+        uvicorn.run(
+            "oauth_service.main:app",
+            host=settings.SERVER_HOST,
+            port=settings.SERVER_PORT,
+            reload=False,
+            workers=settings.WORKERS,
+            log_level=settings.LOG_LEVEL.lower(),
+            log_config=log_config
+        )
