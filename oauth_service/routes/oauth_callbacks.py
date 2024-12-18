@@ -144,12 +144,11 @@ async def oauth_callback(
     except Exception as e:
         logger.error(f"Error handling OAuth callback for {platform}: {str(e)}")
         return create_html_response(error=str(e))
-
 def create_html_response(
     code: Optional[str] = None,
     state: Optional[str] = None,
     platform: Optional[str] = None,
-    token_data: Optional[Dict] = None,
+    token_
     error: Optional[str] = None
 ) -> HTMLResponse:
     """Create HTML response that posts message to opener window."""
@@ -171,21 +170,23 @@ def create_html_response(
     # Convert message_data to JSON string
     message_json = json.dumps(message_data)
 
+    # Create a nonce
+    nonce = base64.b64encode(os.urandom(16)).decode('utf-8')
+
     html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <title>Processing Authentication</title>
-            <script>
+            <meta http-equiv="Content-Security-Policy" 
+                  content="default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'">
+            <script nonce="{nonce}">
                 window.onload = function() {{
                     try {{
                         if (window.opener) {{
-                            // Post message to opener
                             window.opener.postMessage({message_json}, window.location.origin);
-                            // Close this window
                             window.close();
                         }} else {{
-                            // If no opener, redirect to origin
                             window.location.href = window.location.origin;
                         }}
                     }} catch (e) {{
@@ -202,4 +203,67 @@ def create_html_response(
         </html>
     """
     
-    return HTMLResponse(content=html_content)
+    headers = {
+        'Content-Security-Policy': f"default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'"
+    }
+    
+    return HTMLResponse(content=html_content, headers=headers)
+
+# def create_html_response(
+#     code: Optional[str] = None,
+#     state: Optional[str] = None,
+#     platform: Optional[str] = None,
+#     token_data: Optional[Dict] = None,
+#     error: Optional[str] = None
+# ) -> HTMLResponse:
+#     """Create HTML response that posts message to opener window."""
+    
+#     if error:
+#         message_data = {
+#             "type": "LINKEDIN_AUTH_CALLBACK",
+#             "error": error
+#         }
+#     else:
+#         message_data = {
+#             "type": "LINKEDIN_AUTH_CALLBACK",
+#             "code": code,
+#             "state": state,
+#             "platform": platform,
+#             "token_data": token_data
+#         }
+
+#     # Convert message_data to JSON string
+#     message_json = json.dumps(message_data)
+
+#     html_content = f"""
+#         <!DOCTYPE html>
+#         <html>
+#         <head>
+#             <title>Processing Authentication</title>
+#             <script>
+#                 window.onload = function() {{
+#                     try {{
+#                         if (window.opener) {{
+#                             // Post message to opener
+#                             window.opener.postMessage({message_json}, window.location.origin);
+#                             // Close this window
+#                             window.close();
+#                         }} else {{
+#                             // If no opener, redirect to origin
+#                             window.location.href = window.location.origin;
+#                         }}
+#                     }} catch (e) {{
+#                         console.error('Error posting message:', e);
+#                         window.location.href = window.location.origin;
+#                     }}
+#                 }};
+#             </script>
+#         </head>
+#         <body>
+#             <h3>Processing authentication...</h3>
+#             <p>This window should close automatically. If it doesn't, you may close it.</p>
+#         </body>
+#         </html>
+#     """
+    
+#     return HTMLResponse(content=html_content)

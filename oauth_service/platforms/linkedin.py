@@ -66,45 +66,34 @@ class LinkedInOAuth(OAuthBase):
                 status_code=500,
                 detail=f"Error generating authorization URL: {str(e)}"
             )
-    
     async def get_access_token(self, code: str) -> Dict:
         """
         Exchange authorization code for access token.
-        
-        Args:
-            code: Authorization code from callback
-            
-        Returns:
-            Dictionary containing access token and related data
         """
         try:
             logger.debug(f"Exchanging code for access token. Code: {code[:10]}...")
-            
-            # Create basic auth header
-            auth_str = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
-            auth_header = base64.b64encode(auth_str.encode()).decode()
             
             # Prepare request data
             data = {
                 "grant_type": "authorization_code",
                 "code": code,
+                "client_id": self.client_id,
+                "client_secret": self.crypto.decrypt(self._client_secret),
                 "redirect_uri": self.callback_url
             }
             
-            # Log request data
+            # Log request data (excluding secret)
             debug_data = dict(data)
-            logger.debug(f"Request data: {debug_data}")
-            logger.debug(f"Using client_id: {self.client_id}")
-            logger.debug(f"Redirect URI: {self.callback_url}")
+            debug_data['client_secret'] = '[REDACTED]'
+            logger.debug(f"Request data (excluding secret): {debug_data}")
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.token_url,
-                    data=urlencode(data),
+                    data=data,
                     headers={
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'Accept': 'application/json',
-                        'Authorization': f'Basic {auth_header}'
+                        'Accept': 'application/json'
                     }
                 ) as response:
                     logger.debug(f"Token response status: {response.status}")
@@ -117,26 +106,89 @@ class LinkedInOAuth(OAuthBase):
                             detail=f"LinkedIn token exchange failed: {response_text}"
                         )
                     
-                    try:
-                        data = json.loads(response_text)
-                        return {
-                            "access_token": data["access_token"],
-                            "expires_in": data.get("expires_in", 3600),
-                            "refresh_token": data.get("refresh_token")
-                        }
-                    except (json.JSONDecodeError, KeyError) as e:
-                        logger.error(f"Error parsing token response: {str(e)}")
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"Invalid response format: {str(e)}"
-                        )
+                    data = json.loads(response_text)
+                    return {
+                        "access_token": data["access_token"],
+                        "expires_in": data.get("expires_in", 3600),
+                        "refresh_token": data.get("refresh_token")
+                    }
                     
         except Exception as e:
             logger.error(f"Error exchanging code for token: {str(e)}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Error exchanging code for token: {str(e)}"
-            )
+            )    
+    # async def get_access_token(self, code: str) -> Dict:
+    #     """
+    #     Exchange authorization code for access token.
+        
+    #     Args:
+    #         code: Authorization code from callback
+            
+    #     Returns:
+    #         Dictionary containing access token and related data
+    #     """
+    #     try:
+    #         logger.debug(f"Exchanging code for access token. Code: {code[:10]}...")
+            
+    #         # Create basic auth header
+    #         auth_str = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
+    #         auth_header = base64.b64encode(auth_str.encode()).decode()
+            
+    #         # Prepare request data
+    #         data = {
+    #             "grant_type": "authorization_code",
+    #             "code": code,
+    #             "redirect_uri": self.callback_url
+    #         }
+            
+    #         # Log request data
+    #         debug_data = dict(data)
+    #         logger.debug(f"Request data: {debug_data}")
+    #         logger.debug(f"Using client_id: {self.client_id}")
+    #         logger.debug(f"Redirect URI: {self.callback_url}")
+            
+    #         async with aiohttp.ClientSession() as session:
+    #             async with session.post(
+    #                 self.token_url,
+    #                 data=urlencode(data),
+    #                 headers={
+    #                     'Content-Type': 'application/x-www-form-urlencoded',
+    #                     'Accept': 'application/json',
+    #                     'Authorization': f'Basic {auth_header}'
+    #                 }
+    #             ) as response:
+    #                 logger.debug(f"Token response status: {response.status}")
+    #                 response_text = await response.text()
+    #                 logger.debug(f"Token response text: {response_text}")
+                    
+    #                 if not response.ok:
+    #                     raise HTTPException(
+    #                         status_code=response.status,
+    #                         detail=f"LinkedIn token exchange failed: {response_text}"
+    #                     )
+                    
+    #                 try:
+    #                     data = json.loads(response_text)
+    #                     return {
+    #                         "access_token": data["access_token"],
+    #                         "expires_in": data.get("expires_in", 3600),
+    #                         "refresh_token": data.get("refresh_token")
+    #                     }
+    #                 except (json.JSONDecodeError, KeyError) as e:
+    #                     logger.error(f"Error parsing token response: {str(e)}")
+    #                     raise HTTPException(
+    #                         status_code=500,
+    #                         detail=f"Invalid response format: {str(e)}"
+    #                     )
+                    
+    #     except Exception as e:
+    #         logger.error(f"Error exchanging code for token: {str(e)}")
+    #         raise HTTPException(
+    #             status_code=500,
+    #             detail=f"Error exchanging code for token: {str(e)}"
+    #         )
     
     async def refresh_token(self, refresh_token: str) -> Dict:
         """
