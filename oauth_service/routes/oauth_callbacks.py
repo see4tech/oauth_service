@@ -118,7 +118,8 @@ async def oauth_callback(
         
         state_data = oauth_handler.verify_state(state)
         
-        if not state_Invalid state parameter. Received state: {state}")
+        if not state_data:
+            logger.error(f"Invalid state parameter. Received state: {state}")
             return create_html_response(error="Invalid state parameter")
 
         logger.info(f"State verification successful. State data: {state_data}")
@@ -147,7 +148,7 @@ def create_html_response(
     code: Optional[str] = None,
     state: Optional[str] = None,
     platform: Optional[str] = None,
-    token_data: Optional[dict] = None,
+    token_
     error: Optional[str] = None
 ) -> HTMLResponse:
     """Create HTML response that posts message to opener window."""
