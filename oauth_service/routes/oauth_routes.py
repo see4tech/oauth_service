@@ -617,7 +617,6 @@ async def create_post(
     except Exception as e:
         logger.error(f"Error creating post on {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 @router.post("/{platform}/media/upload", response_model=MediaUploadResponse)
 async def upload_media(
     platform: str,
@@ -643,7 +642,9 @@ async def upload_media(
         token_manager = TokenManager()
         
         token_data = await token_manager.get_valid_token(platform, request.user_id)
-        if not token_status_code=401,
+        if not token_data:
+            raise HTTPException(
+                status_code=401,
                 detail="No valid token found"
             )
         
@@ -665,6 +666,53 @@ async def upload_media(
     except Exception as e:
         logger.error(f"Error uploading media to {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+# @router.post("/{platform}/media/upload", response_model=MediaUploadResponse)
+# async def upload_media(
+#     platform: str,
+#     file: UploadFile = File(...),
+#     request: MediaUploadRequest = None,
+# ) -> MediaUploadResponse:
+#     """
+#     Upload media to the specified platform.
+    
+#     Args:
+#         platform (str): The platform to upload to
+#         file (UploadFile): The media file to upload
+#         request (MediaUploadRequest): Contains user_id
+        
+#     Returns:
+#         MediaUploadResponse: Contains media ID and URLs
+        
+#     Raises:
+#         HTTPException: If upload fails
+#     """
+#     try:
+#         oauth_handler = await get_oauth_handler(platform)
+#         token_manager = TokenManager()
+        
+#         token_data = await token_manager.get_valid_token(platform, request.user_id)
+#         if not token_status_code=401,
+#                 detail="No valid token found"
+#             )
+        
+#         content = await file.read()
+        
+#         result = await oauth_handler.upload_media(
+#             token_data["access_token"],
+#             content,
+#             file.filename
+#         )
+        
+#         return MediaUploadResponse(
+#             media_id=result["media_id"],
+#             media_type=file.content_type,
+#             url=result.get("url"),
+#             thumbnail_url=result.get("thumbnail_url")
+#         )
+        
+#     except Exception as e:
+#         logger.error(f"Error uploading media to {platform}: {str(e)}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{platform}/profile", response_model=UserProfile)
 async def get_profile(
