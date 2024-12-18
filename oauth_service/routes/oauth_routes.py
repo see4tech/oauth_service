@@ -593,7 +593,7 @@ class LinkedInOAuth(OAuthBase):
                 detail=f"Error registering upload: {str(e)}"
             )
 
-    async def upload_image(self, upload_url: str, image_ None:
+    async def upload_image(self, upload_url: str, image_data: bytes) -> None:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.put(
