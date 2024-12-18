@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Security, HTTPException, Depends
+from fastapi import FastAPI, Security, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from starlette.status import HTTP_403_FORBIDDEN
@@ -38,6 +38,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Add origin logging middleware
+@app.middleware("http")
+async def log_origin(request: Request, call_next):
+    # Log the origin URL
+    origin = request.headers.get('origin')
+    logger.info(f"Request Origin: {origin}")
+    logger.info(f"Request URL: {request.url}")
+    logger.info(f"Request Method: {request.method}")
+    
+    response = await call_next(request)
+    return response
+
 # Configure CORS with broader settings for your domain
 app.add_middleware(
     CORSMiddleware,
@@ -68,6 +80,11 @@ else:
         prefix="/oauth",
         tags=["oauth"]
     )
+
+# Add an explicit OPTIONS handler
+@app.options("/{rest_of_path:path}")
+async def options_handler(rest_of_path: str):
+    return {"status": "ok"}
 
 # Health check endpoint (no API key required)
 @app.get("/health")
