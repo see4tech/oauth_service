@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     ALLOWED_ORIGINS: str = "*"
     WORKERS: int = 4
-     
+    
     # Security
     SECRET_KEY: str
     ENCRYPTION_KEY: str
@@ -83,6 +83,13 @@ class Settings(BaseSettings):
             }
         }
 
+    def get_platform_credentials(self, platform: str) -> Dict:
+        """Get credentials for a specific platform."""
+        creds = self.oauth_credentials.get(platform)
+        if not creds:
+            raise ValueError(f"No credentials found for platform: {platform}")
+        return creds
+
     @property
     def cors_origins(self) -> List[str]:
         """Get CORS origins as list."""
@@ -90,7 +97,6 @@ class Settings(BaseSettings):
             return ["*"]
         else:
             origins = self.ALLOWED_ORIGINS.split(",")
-            # Ensure we have at least these origins
             required_origins = [
                 "https://33d10367-52d6-4ff5-99d8-1c6792f179e5.lovableproject.com",
                 "https://dukat.see4.tech",
@@ -99,50 +105,21 @@ class Settings(BaseSettings):
             ]
             return list(set(origins + required_origins))
 
-    def get_platform_credentials(self, platform: str) -> Dict:
-        """Get credentials for a specific platform."""
-        creds = self.oauth_credentials.get(platform)
-        if not creds:
-            raise ValueError(f"No credentials found for platform: {platform}")
-        return creds
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+        "validate_default": True
+    }
 
-    # class Config:
-    #     env_file = ".env"
-    #     case_sensitive = True
-        
-    #     # Example validation
-    #     @classmethod
-    #     def validate_all(cls, settings: "Settings") -> None:
-    #         """Validate all settings."""
-    #         # Validate environment
-    #         if settings.ENVIRONMENT not in ["development", "production", "testing"]:
-    #             raise ValueError("Invalid environment")
-                
-    #         # Validate required security settings in production
-    #         if settings.ENVIRONMENT == "production":
-    #             if not settings.API_KEY:
-    #                 raise ValueError("API_KEY must be set in production")
-    #             if not settings.SECRET_KEY:
-    #                 raise ValueError("SECRET_KEY must be set in production")
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        
-        @classmethod
-        def validate_default(cls, settings: "Settings") -> None:
-            if settings.ENVIRONMENT not in ["development", "production", "testing"]:
-                raise ValueError("Invalid environment")
-                
-            if settings.ENVIRONMENT == "production":
-                if not settings.API_KEY:
-                    raise ValueError("API_KEY must be set in production")
-                if not settings.SECRET_KEY:
-                    raise ValueError("SECRET_KEY must be set in production")
-
-# Create cached settings instance
 @lru_cache()
 def get_settings() -> Settings:
     """Get cached settings instance."""
     settings = Settings()
-    settings.Config.validate_all(settings)
+    if settings.ENVIRONMENT not in ["development", "production", "testing"]:
+        raise ValueError("Invalid environment")
+    if settings.ENVIRONMENT == "production":
+        if not settings.API_KEY:
+            raise ValueError("API_KEY must be set in production")
+        if not settings.SECRET_KEY:
+            raise ValueError("SECRET_KEY must be set in production")
     return settings
