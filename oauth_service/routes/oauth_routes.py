@@ -171,7 +171,8 @@ async def create_post(
         token_manager = TokenManager()
         
         token_data = await token_manager.get_valid_token(platform, request.user_id)
-        if not token_ HTTPException(
+        if not token_data:
+            raise HTTPException(
                 status_code=401,
                 detail="No valid token found for this user"
             )
@@ -240,9 +241,7 @@ async def get_profile(
         token_manager = TokenManager()
         
         token_data = await token_manager.get_valid_token(platform, request.user_id)
-        if not token_data:
-            raise HTTPException(
-                status_code=401,
+        if not token_status_code=401,
                 detail="No valid token found"
             )
         
