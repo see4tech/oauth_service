@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Security, HTTPException, Depends, Request, Response
+from fastapi import FastAPI, Security, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from starlette.status import HTTP_403_FORBIDDEN
@@ -6,7 +6,6 @@ from .routes import oauth_router
 from .config import get_settings
 import uvicorn
 import logging
-import re
 from .utils.logger import get_logger
 
 # Initialize settings and logger
@@ -39,88 +38,45 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Comprehensive CORS Middleware with Extensive Debugging
-@app.middleware("http")
-async def debug_cors_middleware(request: Request, call_next):
-    # Log all incoming request details
-    logger.info(f"Incoming Request:")
-    logger.info(f"Method: {request.method}")
-    logger.info(f"URL: {request.url}")
-    
-    # Log all headers
-    headers = dict(request.headers)
-    for key, value in headers.items():
-        logger.info(f"Header - {key}: {value}")
-    
-    response = await call_next(request)
-    
-    # Log response headers
-    logger.info(f"Response Headers:")
-    for key, value in response.headers.items():
-        logger.info(f"Header - {key}: {value}")
-    
-    return response
-
-# CORS Configuration with Maximum Flexibility
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Most permissive for debugging
+    allow_origins=[
+        "https://33d10367-52d6-4ff5-99d8-1c6792f179e5.lovableproject.com",
+        "http://localhost:3000",  # For local development
+        "http://localhost:8000",  # For API server
+        "https://dukat.see4.tech"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
-    max_age=86400  # 24 hours
+    max_age=600,
 )
 
-# CORS Debugging Endpoint
-@app.get("/cors-debug")
-async def cors_debug(request: Request):
-    # Collect all headers for debugging
-    headers = dict(request.headers)
-    return {
-        "headers": headers,
-        "origin": request.headers.get('origin', 'No origin header'),
-        "access_control_request_method": request.headers.get('access-control-request-method', 'No access control method'),
-        "host": request.headers.get('host', 'No host header')
-    }
+# Configure routes that need API key
+secured_router = APIRouter()
+secured_router.include_router(
+    oauth_router,
+    prefix="/oauth",
+    tags=["oauth"],
+    dependencies=[Depends(get_api_key)],
+    # Exclude callback route from API key requirement
+    routes=[route for route in oauth_router.routes if "/callback" not in str(route.path)]
+)
 
-# Explicit OPTIONS Handler with Detailed Logging
-@app.options("/{rest_of_path:path}")
-async def options_handler(rest_of_path: str, request: Request):
-    # Collect headers
-    headers = dict(request.headers)
-    
-    # Log OPTIONS request details
-    logger.info(f"OPTIONS Request - Path: {rest_of_path}")
-    for key, value in headers.items():
-        logger.info(f"OPTIONS Header - {key}: {value}")
-    
-    # Create response with comprehensive CORS headers
-    return Response(
-        content="OK",
-        headers={
-            "Access-Control-Allow-Origin": request.headers.get('origin', '*'),
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Max-Age": "86400",
-            "Access-Control-Allow-Credentials": "true"
-        }
-    )
+# Configure routes that don't need API key
+unsecured_router = APIRouter()
+unsecured_router.include_router(
+    oauth_router,
+    prefix="/oauth",
+    tags=["oauth"],
+    routes=[route for route in oauth_router.routes if "/callback" in str(route.path)]
+)
 
-# Include routes with API key dependency if configured
-if settings.API_KEY:
-    app.include_router(
-        oauth_router,
-        prefix="/oauth",
-        dependencies=[Depends(get_api_key)],
-        tags=["oauth"]
-    )
-else:
-    app.include_router(
-        oauth_router,
-        prefix="/oauth",
-        tags=["oauth"]
-    )
+# Include both routers
+app.include_router(secured_router)
+app.include_router(unsecured_router)
 
 # Health check endpoint (no API key required)
 @app.get("/health")

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     ALLOWED_ORIGINS: str = "*"
     WORKERS: int = 4
-    
+     
     # Security
     SECRET_KEY: str
     ENCRYPTION_KEY: str
