@@ -1,5 +1,6 @@
 # from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile, Request
 # from typing import Optional, Dict, List
+# from pydantic import BaseModel
 # from ..core import TokenManager
 # from ..platforms import TwitterOAuth, LinkedInOAuth, InstagramOAuth, FacebookOAuth
 # from ..models.oauth_models import (
@@ -14,6 +15,11 @@
 # logger = get_logger(__name__)
 # router = APIRouter()
 # settings = get_settings()
+
+# # Add new model for the simplified post request
+# class SimplePostRequest(BaseModel):
+#     user_id: str
+#     content: Dict[str, str]
 
 # async def get_oauth_handler(platform: str):
 #     """
@@ -207,18 +213,14 @@
 # @router.post("/{platform}/post", response_model=PostResponse)
 # async def create_post(
 #     platform: str,
-#     content: PostContent,
-#     user_id: str,
-#     authorization: str = Header(...)
+#     request: SimplePostRequest,
 # ) -> PostResponse:
 #     """
 #     Create a post on the specified platform.
     
 #     Args:
 #         platform (str): The platform to post to
-#         content (PostContent): The content to post
-#         user_id (str): The user's ID
-#         authorization (str): Bearer token
+#         request (SimplePostRequest): Contains user_id and post content
         
 #     Returns:
 #         PostResponse: Contains post ID and related data
@@ -230,18 +232,18 @@
 #         oauth_handler = await get_oauth_handler(platform)
 #         token_manager = TokenManager()
         
-#         # Get valid token
-#         token_data = await token_manager.get_valid_token(platform, user_id)
-#         if not token_data:
+#         # Get valid token using user_id from request
+#         token_data = await token_manager.get_valid_token(platform, request.user_id)
+#         if not token_data:  # Fixed the syntax error here
 #             raise HTTPException(
 #                 status_code=401,
-#                 detail="No valid token found"
+#                 detail="No valid token found for this user"
 #             )
         
-#         # Create the post
+#         # Create the post using the stored token
 #         result = await oauth_handler.create_post(
 #             token_data["access_token"],
-#             content.dict()
+#             request.content
 #         )
         
 #         return PostResponse(
@@ -379,10 +381,19 @@ logger = get_logger(__name__)
 router = APIRouter()
 settings = get_settings()
 
-# Add new model for the simplified post request
+# Request models
 class SimplePostRequest(BaseModel):
     user_id: str
     content: Dict[str, str]
+
+class MediaUploadRequest(BaseModel):
+    user_id: str
+
+class ProfileRequest(BaseModel):
+    user_id: str
+
+class RefreshTokenRequest(BaseModel):
+    user_id: str
 
 async def get_oauth_handler(platform: str):
     """
@@ -438,19 +449,16 @@ async def initialize_oauth(
     try:
         oauth_handler = await get_oauth_handler(platform)
         
-        # Generate state with user ID and callback URL
         state = oauth_handler.generate_state(
             user_id=request.user_id,
             frontend_callback_url=str(request.frontend_callback_url)
         )
         
-        # Get authorization URL with scopes
         auth_url = await oauth_handler.get_authorization_url(
             state=state,
             scopes=request.scopes
         )
         
-        # Handle platforms that return multiple URLs (like Twitter)
         if isinstance(auth_url, dict):
             return OAuthInitResponse(
                 authorization_url=auth_url.get('oauth2_url'),
@@ -490,7 +498,6 @@ async def exchange_code(
     try:
         oauth_handler = await get_oauth_handler(platform)
         
-        # Verify the state matches
         state_data = oauth_handler.verify_state(request.state)
         if not state_data:
             raise HTTPException(
@@ -498,10 +505,8 @@ async def exchange_code(
                 detail="Invalid state parameter"
             )
             
-        # Exchange the code for tokens
         token_data = await oauth_handler.get_access_token(request.code)
         
-        # Store the tokens
         token_manager = TokenManager()
         await token_manager.store_token(
             platform=platform,
@@ -524,16 +529,14 @@ async def exchange_code(
 @router.post("/{platform}/refresh", response_model=TokenResponse)
 async def refresh_token(
     platform: str,
-    user_id: str,
-    authorization: str = Header(...)
+    request: RefreshTokenRequest
 ) -> TokenResponse:
     """
     Refresh an expired access token.
     
     Args:
         platform (str): The platform identifier
-        user_id (str): The user's ID
-        authorization (str): Bearer token
+        request (RefreshTokenRequest): Contains user_id
         
     Returns:
         TokenResponse: Contains new access token and related data
@@ -545,21 +548,18 @@ async def refresh_token(
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
-        # Get existing token data
-        token_data = await token_manager.get_valid_token(platform, user_id)
+        token_data = await token_manager.get_valid_token(platform, request.user_id)
         if not token_data:
             raise HTTPException(
                 status_code=401,
                 detail="No valid token found"
             )
         
-        # Refresh the token
         new_token_data = await oauth_handler.refresh_token(
             token_data.get("refresh_token")
         )
         
-        # Store the new tokens
-        await token_manager.store_token(platform, user_id, new_token_data)
+        await token_manager.store_token(platform, request.user_id, new_token_data)
         
         return TokenResponse(
             access_token=new_token_data["access_token"],
@@ -595,15 +595,13 @@ async def create_post(
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
-        # Get valid token using user_id from request
         token_data = await token_manager.get_valid_token(platform, request.user_id)
-        if not token_data:  # Fixed the syntax error here
+        if not token_data:
             raise HTTPException(
                 status_code=401,
                 detail="No valid token found for this user"
             )
         
-        # Create the post using the stored token
         result = await oauth_handler.create_post(
             token_data["access_token"],
             request.content
@@ -624,8 +622,7 @@ async def create_post(
 async def upload_media(
     platform: str,
     file: UploadFile = File(...),
-    user_id: str = None,
-    authorization: str = Header(...)
+    request: MediaUploadRequest = None,
 ) -> MediaUploadResponse:
     """
     Upload media to the specified platform.
@@ -633,8 +630,7 @@ async def upload_media(
     Args:
         platform (str): The platform to upload to
         file (UploadFile): The media file to upload
-        user_id (str): The user's ID
-        authorization (str): Bearer token
+        request (MediaUploadRequest): Contains user_id
         
     Returns:
         MediaUploadResponse: Contains media ID and URLs
@@ -646,20 +642,15 @@ async def upload_media(
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
-        # Get valid token
-        token_data = await token_manager.get_valid_token(platform, user_id)
-        if not token_data:
-            raise HTTPException(
-                status_code=401,
+        token_data = await token_manager.get_valid_token(platform, request.user_id)
+        if not token_status_code=401,
                 detail="No valid token found"
             )
         
-        # Read file content
         content = await file.read()
         
-        # Upload media
         result = await oauth_handler.upload_media(
-            token_data,
+            token_data["access_token"],
             content,
             file.filename
         )
@@ -675,19 +666,17 @@ async def upload_media(
         logger.error(f"Error uploading media to {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/{platform}/profile", response_model=UserProfile)
+@router.post("/{platform}/profile", response_model=UserProfile)
 async def get_profile(
     platform: str,
-    user_id: str,
-    authorization: str = Header(...)
+    request: ProfileRequest,
 ) -> UserProfile:
     """
     Get user profile from the specified platform.
     
     Args:
         platform (str): The platform to get profile from
-        user_id (str): The user's ID
-        authorization (str): Bearer token
+        request (ProfileRequest): Contains user_id
         
     Returns:
         UserProfile: Contains user profile data
@@ -699,15 +688,13 @@ async def get_profile(
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
-        # Get valid token
-        token_data = await token_manager.get_valid_token(platform, user_id)
+        token_data = await token_manager.get_valid_token(platform, request.user_id)
         if not token_data:
             raise HTTPException(
                 status_code=401,
                 detail="No valid token found"
             )
         
-        # Get profile data
         profile_data = await oauth_handler.get_profile(
             token_data["access_token"]
         )
