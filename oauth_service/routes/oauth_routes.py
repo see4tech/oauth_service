@@ -597,7 +597,9 @@ async def create_post(
         
         # Get valid token using user_id from request
         token_data = await token_manager.get_valid_token(platform, request.user_id)
-        if not token_,
+        if not token_data:  # Fixed the syntax error here
+            raise HTTPException(
+                status_code=401,
                 detail="No valid token found for this user"
             )
         
