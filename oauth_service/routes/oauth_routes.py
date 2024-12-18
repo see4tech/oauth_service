@@ -387,18 +387,6 @@ class RefreshTokenRequest(BaseModel):
     user_id: str
 
 async def get_oauth_handler(platform: str):
-    """
-    Get the appropriate OAuth handler for the specified platform.
-    
-    Args:
-        platform (str): The platform identifier (twitter, linkedin, etc.)
-        
-    Returns:
-        OAuthBase: An instance of the platform-specific OAuth handler
-        
-    Raises:
-        HTTPException: If platform is unsupported or credentials are invalid
-    """
     handlers = {
         "twitter": TwitterOAuth,
         "linkedin": LinkedInOAuth,
@@ -424,19 +412,6 @@ async def initialize_oauth(
     platform: str, 
     request: OAuthInitRequest
 ) -> OAuthInitResponse:
-    """
-    Initialize OAuth flow for the specified platform.
-    
-    Args:
-        platform (str): The platform to authenticate with
-        request (OAuthInitRequest): The initialization request data
-        
-    Returns:
-        OAuthInitResponse: Contains authorization URL and state
-        
-    Raises:
-        HTTPException: If initialization fails
-    """
     try:
         oauth_handler = await get_oauth_handler(platform)
         
@@ -473,19 +448,6 @@ async def exchange_code(
     platform: str,
     request: OAuthCallbackRequest
 ) -> TokenResponse:
-    """
-    Exchange authorization code for access token.
-    
-    Args:
-        platform (str): The platform identifier
-        request (OAuthCallbackRequest): The callback request data
-        
-    Returns:
-        TokenResponse: Contains access token and related data
-        
-    Raises:
-        HTTPException: If token exchange fails
-    """
     try:
         oauth_handler = await get_oauth_handler(platform)
         
@@ -522,19 +484,6 @@ async def refresh_token(
     platform: str,
     request: RefreshTokenRequest
 ) -> TokenResponse:
-    """
-    Refresh an expired access token.
-    
-    Args:
-        platform (str): The platform identifier
-        request (RefreshTokenRequest): Contains user_id
-        
-    Returns:
-        TokenResponse: Contains new access token and related data
-        
-    Raises:
-        HTTPException: If token refresh fails
-    """
     try:
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
@@ -569,30 +518,17 @@ async def create_post(
     platform: str,
     request: SimplePostRequest,
 ) -> PostResponse:
-    """
-    Create a post on the specified platform.
-    
-    Args:
-        platform (str): The platform to post to
-        request (SimplePostRequest): Contains user_id and post content
-        
-    Returns:
-        PostResponse: Contains post ID and related data
-        
-    Raises:
-        HTTPException: If posting fails
-    """
     try:
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
         token_data = await token_manager.get_valid_token(platform, request.user_id)
-        if not token_ HTTPException(
+        if not token_data:
+            raise HTTPException(
                 status_code=401,
                 detail="No valid token found for this user"
             )
         
-        # Convert Pydantic model to dict for the OAuth handler
         content_dict = request.content.dict(exclude_none=True)
         
         result = await oauth_handler.create_post(
@@ -617,26 +553,13 @@ async def upload_media(
     file: UploadFile = File(...),
     request: MediaUploadRequest = None,
 ) -> MediaUploadResponse:
-    """
-    Upload media to the specified platform.
-    
-    Args:
-        platform (str): The platform to upload to
-        file (UploadFile): The media file to upload
-        request (MediaUploadRequest): Contains user_id
-        
-    Returns:
-        MediaUploadResponse: Contains media ID and URLs
-        
-    Raises:
-        HTTPException: If upload fails
-    """
     try:
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
         token_data = await token_manager.get_valid_token(platform, request.user_id)
-        if not token_ HTTPException(
+        if not token_data:
+            raise HTTPException(
                 status_code=401,
                 detail="No valid token found"
             )
@@ -665,26 +588,12 @@ async def get_profile(
     platform: str,
     request: ProfileRequest,
 ) -> UserProfile:
-    """
-    Get user profile from the specified platform.
-    
-    Args:
-        platform (str): The platform to get profile from
-        request (ProfileRequest): Contains user_id
-        
-    Returns:
-        UserProfile: Contains user profile data
-        
-    Raises:
-        HTTPException: If profile retrieval fails
-    """
     try:
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
         token_data = await token_manager.get_valid_token(platform, request.user_id)
-        if not token_data:
-            raise HTTPException(
+        if not token_ HTTPException(
                 status_code=401,
                 detail="No valid token found"
             )
