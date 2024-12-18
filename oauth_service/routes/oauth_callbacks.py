@@ -76,7 +76,6 @@
 #         )
 #         logger.error(f"Redirecting to error URL: {error_url}")
 #         return RedirectResponse(url=error_url)
-import os
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional, Dict
@@ -84,8 +83,6 @@ from ..core import TokenManager
 from ..utils.logger import get_logger
 from .oauth_routes import get_oauth_handler
 import json
-import hashlib
-import base64
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
@@ -122,7 +119,8 @@ async def oauth_callback(
         
         state_data = oauth_handler.verify_state(state)
         
-        if not state_Invalid state parameter. Received state: {state}")
+        if not state_data:
+            logger.error(f"Invalid state parameter. Received state: {state}")
             return create_html_response(error="Invalid state parameter")
 
         logger.info(f"State verification successful. State data: {state_data}")
@@ -173,40 +171,28 @@ def create_html_response(
     # Convert message_data to JSON string
     message_json = json.dumps(message_data)
 
-    # Create the script content
-    script_content = f"""
-        window.onload = function() {{
-            try {{
-                if (window.opener) {{
-                    window.opener.postMessage({message_json}, window.location.origin);
-                    window.close();
-                }} else {{
-                    window.location.href = window.location.origin;
-                }}
-            }} catch (e) {{
-                console.error('Error posting message:', e);
-                window.location.href = window.location.origin;
-            }}
-        }};
-    """
-
-    # Generate nonce
-    nonce = base64.b64encode(os.urandom(16)).decode('utf-8')
-
-    # Generate script hash
-    script_hash = base64.b64encode(
-        hashlib.sha256(script_content.encode('utf-8')).digest()
-    ).decode('utf-8')
-
     html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <title>Processing Authentication</title>
-            <meta http-equiv="Content-Security-Policy" 
-                  content="default-src 'self'; script-src 'nonce-{nonce}' 'sha256-{script_hash}';">
-            <script nonce="{nonce}">
-                {script_content}
+            <script>
+                window.onload = function() {{
+                    try {{
+                        if (window.opener) {{
+                            // Post message to opener
+                            window.opener.postMessage({message_json}, window.location.origin);
+                            // Close this window
+                            window.close();
+                        }} else {{
+                            // If no opener, redirect to origin
+                            window.location.href = window.location.origin;
+                        }}
+                    }} catch (e) {{
+                        console.error('Error posting message:', e);
+                        window.location.href = window.location.origin;
+                    }}
+                }};
             </script>
         </head>
         <body>
@@ -216,8 +202,4 @@ def create_html_response(
         </html>
     """
     
-    headers = {
-        "Content-Security-Policy": f"default-src 'self'; script-src 'nonce-{nonce}' 'sha256-{script_hash}'"
-    }
-    
-    return HTMLResponse(content=html_content, headers=headers)
+    return HTMLResponse(content=html_content)
