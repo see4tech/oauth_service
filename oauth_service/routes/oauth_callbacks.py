@@ -17,6 +17,9 @@ async def oauth_callback(
     error: Optional[str] = None,
     error_description: Optional[str] = None
 ) -> RedirectResponse:
+    """
+    Handle OAuth callback from providers
+    """
     try:
         # Handle OAuth errors
         if error:
@@ -40,7 +43,7 @@ async def oauth_callback(
         token_data = await oauth_handler.get_access_token(code)
         await token_manager.store_token(platform, user_id, token_data)
 
-        # Construct success URL with authorization code
+        # Construct success URL
         success_url = (
             f"{frontend_callback_url}"
             f"?platform={platform}"
