@@ -106,19 +106,33 @@ class Settings(BaseSettings):
             raise ValueError(f"No credentials found for platform: {platform}")
         return creds
 
+    # class Config:
+    #     env_file = ".env"
+    #     case_sensitive = True
+        
+    #     # Example validation
+    #     @classmethod
+    #     def validate_all(cls, settings: "Settings") -> None:
+    #         """Validate all settings."""
+    #         # Validate environment
+    #         if settings.ENVIRONMENT not in ["development", "production", "testing"]:
+    #             raise ValueError("Invalid environment")
+                
+    #         # Validate required security settings in production
+    #         if settings.ENVIRONMENT == "production":
+    #             if not settings.API_KEY:
+    #                 raise ValueError("API_KEY must be set in production")
+    #             if not settings.SECRET_KEY:
+    #                 raise ValueError("SECRET_KEY must be set in production")
     class Config:
         env_file = ".env"
         case_sensitive = True
         
-        # Example validation
         @classmethod
-        def validate_all(cls, settings: "Settings") -> None:
-            """Validate all settings."""
-            # Validate environment
+        def validate_default(cls, settings: "Settings") -> None:
             if settings.ENVIRONMENT not in ["development", "production", "testing"]:
                 raise ValueError("Invalid environment")
                 
-            # Validate required security settings in production
             if settings.ENVIRONMENT == "production":
                 if not settings.API_KEY:
                     raise ValueError("API_KEY must be set in production")
