@@ -1,8 +1,8 @@
 from pydantic_settings import BaseSettings
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
-import os
 from functools import lru_cache
+import os
 
 # Load environment variables
 load_dotenv()
@@ -83,6 +83,22 @@ class Settings(BaseSettings):
             }
         }
 
+    @property
+    def cors_origins(self) -> List[str]:
+        """Get CORS origins as list."""
+        if self.ENVIRONMENT == "development":
+            return ["*"]
+        else:
+            origins = self.ALLOWED_ORIGINS.split(",")
+            # Ensure we have at least these origins
+            required_origins = [
+                "https://33d10367-52d6-4ff5-99d8-1c6792f179e5.lovableproject.com",
+                "https://dukat.see4.tech",
+                "http://localhost:3000",
+                "http://localhost:8000"
+            ]
+            return list(set(origins + required_origins))
+
     def get_platform_credentials(self, platform: str) -> Dict:
         """Get credentials for a specific platform."""
         creds = self.oauth_credentials.get(platform)
@@ -90,18 +106,29 @@ class Settings(BaseSettings):
             raise ValueError(f"No credentials found for platform: {platform}")
         return creds
 
-    @property
-    def cors_origins(self) -> List[str]:
-        """Get CORS origins as list."""
-        if self.ENVIRONMENT == "development" or self.ALLOWED_ORIGINS == "*":
-            return ["*"]
-        return self.ALLOWED_ORIGINS.split(",")
-
     class Config:
         env_file = ".env"
         case_sensitive = True
+        
+        # Example validation
+        @classmethod
+        def validate_all(cls, settings: "Settings") -> None:
+            """Validate all settings."""
+            # Validate environment
+            if settings.ENVIRONMENT not in ["development", "production", "testing"]:
+                raise ValueError("Invalid environment")
+                
+            # Validate required security settings in production
+            if settings.ENVIRONMENT == "production":
+                if not settings.API_KEY:
+                    raise ValueError("API_KEY must be set in production")
+                if not settings.SECRET_KEY:
+                    raise ValueError("SECRET_KEY must be set in production")
 
+# Create cached settings instance
 @lru_cache()
 def get_settings() -> Settings:
     """Get cached settings instance."""
-    return Settings()
+    settings = Settings()
+    settings.Config.validate_all(settings)
+    return settings

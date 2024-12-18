@@ -38,13 +38,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS
+# Configure CORS with broader settings for your domain
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=[
+        "https://33d10367-52d6-4ff5-99d8-1c6792f179e5.lovableproject.com",
+        "http://localhost:3000",  # For local development
+        "http://localhost:8000",  # For API server
+        "https://dukat.see4.tech"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"],  # Including x-api-key
     expose_headers=["*"],
     max_age=600,
 )
