@@ -6,6 +6,7 @@ from .routes import oauth_router
 from .config import get_settings
 import uvicorn
 import logging
+import re
 from .utils.logger import get_logger
 
 # Initialize settings and logger
@@ -32,39 +33,95 @@ async def get_api_key(api_key_header: str = Security(api_key_header)):
         )
     return api_key_header
 
+def is_valid_origin(origin: str):
+    allowed_patterns = [
+        r"https://.*\.lovableproject\.com",
+        r"https://dukat\.see4\.tech",
+        r"http://localhost:\d+",
+    ]
+    return any(re.match(pattern, origin) for pattern in allowed_patterns)
+
 app = FastAPI(
     title="OAuth Service",
     description="A comprehensive OAuth implementation supporting multiple platforms",
     version="1.0.0"
 )
 
-# Add origin logging middleware
+# Comprehensive CORS Middleware with Debugging
 @app.middleware("http")
-async def log_origin(request: Request, call_next):
-    # Log the origin URL
+async def debug_cors(request: Request, call_next):
+    # Log all headers for debugging
+    logger.info("--- Request Debugging ---")
+    logger.info(f"Full URL: {request.url}")
+    logger.info(f"Method: {request.method}")
+    
+    # Log headers
+    for header, value in request.headers.items():
+        logger.info(f"Header - {header}: {value}")
+    
+    # Log Origin and Access-Control details
     origin = request.headers.get('origin')
-    logger.info(f"Request Origin: {origin}")
-    logger.info(f"Request URL: {request.url}")
-    logger.info(f"Request Method: {request.method}")
+    access_control_method = request.headers.get('access-control-request-method')
+    
+    logger.info(f"Origin: {origin}")
+    logger.info(f"Access-Control Method: {access_control_method}")
+    
+    # Perform origin validation
+    if origin:
+        is_allowed = is_valid_origin(origin)
+        logger.info(f"Origin Validation Result: {is_allowed}")
     
     response = await call_next(request)
+    
+    # Manually add CORS headers
+    if origin:
+        response.headers['Access-Control-Allow-Origin'] = origin
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    
     return response
 
-# Configure CORS with broader settings for your domain
+# Configure CORS with comprehensive settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://33d10367-52d6-4ff5-99d8-1c6792f179e5.lovableproject.com",
-        "http://localhost:3000",  # For local development
-        "http://localhost:8000",  # For API server
-        "https://dukat.see4.tech"
+        "https://dukat.see4.tech",
+        "http://localhost:3000",
+        "http://localhost:8000",
     ],
+    allow_origin_regex=r"https://.*\.lovableproject\.com$|https://dukat\.see4\.tech$|http://localhost:\d+",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],  # Including x-api-key
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=[
+        "Content-Type", 
+        "X-Requested-With", 
+        "Authorization", 
+        "X-Auth-Token", 
+        "x-api-key",
+        "Origin", 
+        "Accept",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers"
+    ],
     expose_headers=["*"],
     max_age=600,
 )
+
+# Explicit OPTIONS handler with detailed logging
+@app.options("/{rest_of_path:path}")
+async def options_handler(rest_of_path: str, request: Request):
+    origin = request.headers.get('origin')
+    access_control_method = request.headers.get('access-control-request-method')
+    
+    logger.info(f"OPTIONS Request - Path: {rest_of_path}")
+    logger.info(f"OPTIONS Request - Origin: {origin}")
+    logger.info(f"OPTIONS Request - Method: {access_control_method}")
+    
+    return {
+        "status": "ok",
+        "origin": origin,
+        "method": access_control_method
+    }
 
 # Include routes with API key dependency if configured
 if settings.API_KEY:
@@ -80,11 +137,6 @@ else:
         prefix="/oauth",
         tags=["oauth"]
     )
-
-# Add an explicit OPTIONS handler
-@app.options("/{rest_of_path:path}")
-async def options_handler(rest_of_path: str):
-    return {"status": "ok"}
 
 # Health check endpoint (no API key required)
 @app.get("/health")
