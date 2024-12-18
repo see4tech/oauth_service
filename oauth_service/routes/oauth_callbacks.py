@@ -78,10 +78,11 @@
 #         return RedirectResponse(url=error_url)
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from typing import Optional
+from typing import Optional, Dict
 from ..core import TokenManager
 from ..utils.logger import get_logger
 from .oauth_routes import get_oauth_handler
+import json
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
@@ -148,7 +149,7 @@ def create_html_response(
     code: Optional[str] = None,
     state: Optional[str] = None,
     platform: Optional[str] = None,
-    token_
+    token_data: Optional[Dict] = None,
     error: Optional[str] = None
 ) -> HTMLResponse:
     """Create HTML response that posts message to opener window."""
@@ -167,6 +168,9 @@ def create_html_response(
             "token_data": token_data
         }
 
+    # Convert message_data to JSON string
+    message_json = json.dumps(message_data)
+
     html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -177,7 +181,7 @@ def create_html_response(
                     try {{
                         if (window.opener) {{
                             // Post message to opener
-                            window.opener.postMessage({message_data}, window.location.origin);
+                            window.opener.postMessage({message_json}, window.location.origin);
                             // Close this window
                             window.close();
                         }} else {{
