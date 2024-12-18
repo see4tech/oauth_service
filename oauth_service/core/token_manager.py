@@ -103,6 +103,7 @@
 #         except Exception as e:
 #             logger.error(f"Error refreshing token: {str(e)}")
 #             return None
+
 from typing import Dict, Optional
 from datetime import datetime
 import json
@@ -220,7 +221,7 @@ class TokenManager:
             logger.error(f"Error retrieving token: {str(e)}")
             return None
     
-    async def refresh_token(self, platform: str, user_id: str, token_
+    async def refresh_token(self, platform: str, user_id: str, token_data: Dict) -> Optional[Dict]:
         """
         Refresh expired token.
         
