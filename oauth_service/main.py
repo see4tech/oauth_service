@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Security, HTTPException, Depends, Request
+from fastapi import FastAPI, Security, HTTPException, Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from starlette.status import HTTP_403_FORBIDDEN
@@ -33,95 +33,79 @@ async def get_api_key(api_key_header: str = Security(api_key_header)):
         )
     return api_key_header
 
-def is_valid_origin(origin: str):
-    allowed_patterns = [
-        r"https://.*\.lovableproject\.com",
-        r"https://dukat\.see4\.tech",
-        r"http://localhost:\d+",
-    ]
-    return any(re.match(pattern, origin) for pattern in allowed_patterns)
-
 app = FastAPI(
     title="OAuth Service",
     description="A comprehensive OAuth implementation supporting multiple platforms",
     version="1.0.0"
 )
 
-# Comprehensive CORS Middleware with Debugging
+# Comprehensive CORS Middleware with Extensive Debugging
 @app.middleware("http")
-async def debug_cors(request: Request, call_next):
-    # Log all headers for debugging
-    logger.info("--- Request Debugging ---")
-    logger.info(f"Full URL: {request.url}")
+async def debug_cors_middleware(request: Request, call_next):
+    # Log all incoming request details
+    logger.info(f"Incoming Request:")
     logger.info(f"Method: {request.method}")
+    logger.info(f"URL: {request.url}")
     
-    # Log headers
-    for header, value in request.headers.items():
-        logger.info(f"Header - {header}: {value}")
-    
-    # Log Origin and Access-Control details
-    origin = request.headers.get('origin')
-    access_control_method = request.headers.get('access-control-request-method')
-    
-    logger.info(f"Origin: {origin}")
-    logger.info(f"Access-Control Method: {access_control_method}")
-    
-    # Perform origin validation
-    if origin:
-        is_allowed = is_valid_origin(origin)
-        logger.info(f"Origin Validation Result: {is_allowed}")
+    # Log all headers
+    headers = dict(request.headers)
+    for key, value in headers.items():
+        logger.info(f"Header - {key}: {value}")
     
     response = await call_next(request)
     
-    # Manually add CORS headers
-    if origin:
-        response.headers['Access-Control-Allow-Origin'] = origin
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    # Log response headers
+    logger.info(f"Response Headers:")
+    for key, value in response.headers.items():
+        logger.info(f"Header - {key}: {value}")
     
     return response
 
-# Configure CORS with comprehensive settings
+# CORS Configuration with Maximum Flexibility
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://33d10367-52d6-4ff5-99d8-1c6792f179e5.lovableproject.com",
-        "https://dukat.see4.tech",
-        "http://localhost:3000",
-        "http://localhost:8000",
-    ],
-    allow_origin_regex=r"https://.*\.lovableproject\.com$|https://dukat\.see4\.tech$|http://localhost:\d+",
+    allow_origins=["*"],  # Most permissive for debugging
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
-    allow_headers=[
-        "Content-Type", 
-        "X-Requested-With", 
-        "Authorization", 
-        "X-Auth-Token", 
-        "x-api-key",
-        "Origin", 
-        "Accept",
-        "Access-Control-Request-Method",
-        "Access-Control-Request-Headers"
-    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
     expose_headers=["*"],
-    max_age=600,
+    max_age=86400  # 24 hours
 )
 
-# Explicit OPTIONS handler with detailed logging
+# CORS Debugging Endpoint
+@app.get("/cors-debug")
+async def cors_debug(request: Request):
+    # Collect all headers for debugging
+    headers = dict(request.headers)
+    return {
+        "headers": headers,
+        "origin": request.headers.get('origin', 'No origin header'),
+        "access_control_request_method": request.headers.get('access-control-request-method', 'No access control method'),
+        "host": request.headers.get('host', 'No host header')
+    }
+
+# Explicit OPTIONS Handler with Detailed Logging
 @app.options("/{rest_of_path:path}")
 async def options_handler(rest_of_path: str, request: Request):
-    origin = request.headers.get('origin')
-    access_control_method = request.headers.get('access-control-request-method')
+    # Collect headers
+    headers = dict(request.headers)
     
+    # Log OPTIONS request details
     logger.info(f"OPTIONS Request - Path: {rest_of_path}")
-    logger.info(f"OPTIONS Request - Origin: {origin}")
-    logger.info(f"OPTIONS Request - Method: {access_control_method}")
+    for key, value in headers.items():
+        logger.info(f"OPTIONS Header - {key}: {value}")
     
-    return {
-        "status": "ok",
-        "origin": origin,
-        "method": access_control_method
-    }
+    # Create response with comprehensive CORS headers
+    return Response(
+        content="OK",
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get('origin', '*'),
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "86400",
+            "Access-Control-Allow-Credentials": "true"
+        }
+    )
 
 # Include routes with API key dependency if configured
 if settings.API_KEY:
