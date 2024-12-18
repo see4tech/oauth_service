@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Security, HTTPException, Depends
+from fastapi import FastAPI, Security, HTTPException, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from starlette.status import HTTP_403_FORBIDDEN
@@ -7,6 +7,7 @@ from .config import get_settings
 import uvicorn
 import logging
 from .utils.logger import get_logger
+
 
 # Initialize settings and logger
 settings = get_settings()
