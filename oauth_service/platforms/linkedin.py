@@ -639,13 +639,7 @@ class LinkedInOAuth(OAuthBase):
                         "shareMediaCategory": "IMAGE",
                         "media": [{
                             "status": "READY",
-                            "description": {
-                                "text": content.get("image_description", "")
-                            },
-                            "media": asset_id,
-                            "title": {
-                                "text": content.get("image_title", "")
-                            }
+                            "media": asset_id
                         }]
                     }
                 }
