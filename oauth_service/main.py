@@ -13,7 +13,7 @@ settings = get_settings()
 logger = get_logger(__name__)
 
 # API Key security
-API_KEY_NAME = "X-API-Key"
+API_KEY_NAME = "x-api-key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 async def get_api_key(api_key_header: str = Security(api_key_header)):
@@ -53,11 +53,16 @@ app.add_middleware(
 if settings.API_KEY:
     app.include_router(
         oauth_router,
+        prefix="/oauth",
         dependencies=[Depends(get_api_key)],
         tags=["oauth"]
     )
 else:
-    app.include_router(oauth_router, tags=["oauth"])
+    app.include_router(
+        oauth_router,
+        prefix="/oauth",
+        tags=["oauth"]
+    )
 
 # Health check endpoint (no API key required)
 @app.get("/health")
@@ -89,6 +94,10 @@ if __name__ == "__main__":
     
     if settings.ENVIRONMENT == "development":
         print("Warning: Running in development mode with reload enabled")
+        if settings.API_KEY:
+            print(f"API Key is set: {settings.API_KEY[:4]}...")
+        else:
+            print("No API Key set")
         uvicorn.run(
             "oauth_service.main:app",
             host=settings.SERVER_HOST,
