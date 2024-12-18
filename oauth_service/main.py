@@ -1,8 +1,109 @@
+# from fastapi import FastAPI, Security, HTTPException, Depends, APIRouter, Request
+# from fastapi.middleware.cors import CORSMiddleware
+# from fastapi.security.api_key import APIKeyHeader
+# from fastapi.responses import JSONResponse
+# from starlette.status import HTTP_403_FORBIDDEN
+# from contextlib import asynccontextmanager
+# from .routes.oauth_routes import router as oauth_router
+# from .routes.oauth_callbacks import callback_router
+# from .config import get_settings
+# import uvicorn
+# from datetime import datetime
+# from .utils.logger import get_logger
+
+# # Initialize settings and logger
+# settings = get_settings()
+# logger = get_logger(__name__)
+
+# # API Key security
+# API_KEY_NAME = "x-api-key"
+# api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+# async def get_api_key(api_key_header: str = Security(api_key_header)):
+#     """Validate API key from request header."""
+#     if not settings.API_KEY:
+#         return None
+#     if not api_key_header:
+#         raise HTTPException(
+#             status_code=HTTP_403_FORBIDDEN, 
+#             detail="No API key provided"
+#         )
+#     if api_key_header != settings.API_KEY:
+#         raise HTTPException(
+#             status_code=HTTP_403_FORBIDDEN, 
+#             detail="Invalid API key"
+#         )
+#     return api_key_header
+
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     """Lifespan context manager for startup and shutdown events."""
+#     # Startup
+#     logger.info(f"Starting OAuth Service in {settings.ENVIRONMENT} environment")
+#     logger.info(f"Debug mode: {settings.DEBUG}")
+#     logger.info(f"API documentation available at: {'/docs' if settings.ENVIRONMENT != 'production' else 'Disabled'}")
+    
+#     # Log configuration
+#     logger.debug("OAuth Service Configuration:")
+#     logger.debug(f"Server Host: {settings.SERVER_HOST}")
+#     logger.debug(f"Server Port: {settings.SERVER_PORT}")
+#     logger.debug(f"Environment: {settings.ENVIRONMENT}")
+#     logger.debug(f"Allowed Origins: {settings.ALLOWED_ORIGINS}")
+    
+#     # Log OAuth configurations
+#     logger.debug("OAuth Configurations:")
+#     for platform in ['linkedin', 'twitter', 'facebook', 'instagram']:
+#         creds = settings.oauth_credentials.get(platform, {})
+#         logger.debug(f"{platform.title()} Configuration:")
+#         logger.debug(f"- Client ID configured: {'Yes' if creds.get('client_id') else 'No'}")
+#         logger.debug(f"- Callback URL: {creds.get('callback_url')}")
+    
+#     yield
+    
+#     # Shutdown
+#     logger.info("Shutting down OAuth Service")
+
+# # Initialize FastAPI app
+# app = FastAPI(
+#     title="OAuth Service",
+#     description="A comprehensive OAuth implementation supporting multiple platforms",
+#     version="1.0.0",
+#     docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
+#     redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
+#     lifespan=lifespan
+# )
+
+# # Configure CORS
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=settings.ALLOWED_ORIGINS.split(','),
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+#     expose_headers=["*"],
+#     max_age=600,
+# )
+
+# # Add callback routes WITHOUT API key requirement
+# app.include_router(
+#     callback_router,
+#     prefix="/oauth",
+#     tags=["oauth-callbacks"],
+# )
+
+# # Add protected routes WITH API key requirement
+# app.include_router(
+#     oauth_router,
+#     prefix="/oauth",
+#     tags=["oauth"],
+#     dependencies=[Depends(get_api_key)],
+# )
 from fastapi import FastAPI, Security, HTTPException, Depends, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.responses import JSONResponse
 from starlette.status import HTTP_403_FORBIDDEN
+from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 from .routes.oauth_routes import router as oauth_router
 from .routes.oauth_callbacks import callback_router
@@ -18,6 +119,25 @@ logger = get_logger(__name__)
 # API Key security
 API_KEY_NAME = "x-api-key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+# Security Headers Middleware
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self' https:; "
+            "frame-src 'self' https://www.linkedin.com https://api.linkedin.com; "
+            "frame-ancestors 'self'"
+        )
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
 
 async def get_api_key(api_key_header: str = Security(api_key_header)):
     """Validate API key from request header."""
@@ -72,6 +192,9 @@ app = FastAPI(
     redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
     lifespan=lifespan
 )
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Configure CORS
 app.add_middleware(
