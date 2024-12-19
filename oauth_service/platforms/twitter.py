@@ -35,13 +35,21 @@ class TwitterOAuth(OAuthBase):
     async def get_authorization_url(self, state: Optional[str] = None) -> Dict[str, str]:
         """Get authorization URLs for both OAuth 1.0a and 2.0."""
         try:
+            logger.debug("Starting OAuth 2.0 authorization URL generation")
+            logger.debug(f"Using client_id: {self.client_id}")
+            logger.debug(f"Using callback_url: {self.callback_url}")
+            
             # OAuth 2.0 - keep it minimal
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
-                'https://twitter.com/i/oauth2/authorize'
+                'https://twitter.com/i/oauth2/authorize',
+                state=state
             )
+            logger.debug(f"Generated OAuth 2.0 URL: {oauth2_auth_url}")
             
             # OAuth 1.0a
+            logger.debug("Starting OAuth 1.0a authorization URL generation")
             oauth1_auth_url = self.oauth1_handler.get_authorization_url()
+            logger.debug(f"Generated OAuth 1.0a URL: {oauth1_auth_url}")
             
             return {
                 'oauth1_url': oauth1_auth_url,
@@ -50,6 +58,11 @@ class TwitterOAuth(OAuthBase):
             }
         except Exception as e:
             logger.error(f"Error getting authorization URLs: {str(e)}")
+            logger.error(f"OAuth2Session details: client_id={self.client_id}, redirect_uri={self.callback_url}")
+            if hasattr(e, 'response'):
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response headers: {e.response.headers}")
+                logger.error(f"Response body: {e.response.text}")
             raise
     
     async def get_access_token(self, 
