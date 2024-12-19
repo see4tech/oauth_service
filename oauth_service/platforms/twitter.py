@@ -29,7 +29,8 @@ class TwitterOAuth(OAuthBase):
         self.oauth2_client = OAuth2Session(
             client_id=self.client_id,
             redirect_uri=callback_url,
-            scope=['tweet.read', 'tweet.write', 'users.read']
+            scope=['tweet.read', 'tweet.write', 'users.read'],
+            code_challenge_method='S256'  # Enable PKCE by default
         )
         # Store decrypted secret for token exchange
         self._decrypted_secret = decrypted_secret
@@ -45,15 +46,19 @@ class TwitterOAuth(OAuthBase):
             Dictionary containing both OAuth 1.0a and 2.0 authorization URLs
         """
         try:
-            # Get OAuth 2.0 authorization URL
+            # Get OAuth 2.0 authorization URL with PKCE
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
                 state=state,
-                code_challenge_method='S256'  # Enable PKCE
+                response_type='code',
+                code_challenge_method='S256'
             )
             
             # Get OAuth 1.0a authorization URL
             oauth1_auth_url = self.oauth1_handler.get_authorization_url()
+            
+            logger.debug(f"Generated OAuth 2.0 URL: {oauth2_auth_url}")
+            logger.debug(f"Generated OAuth 1.0a URL: {oauth1_auth_url}")
             
             return {
                 'oauth1_url': oauth1_auth_url,
