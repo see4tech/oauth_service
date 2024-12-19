@@ -34,36 +34,34 @@ class TwitterOAuth(OAuthBase):
     
     async def get_authorization_url(self, state: Optional[str] = None) -> Dict[str, str]:
         """Get authorization URLs for both OAuth 1.0a and 2.0."""
+        result = {}
+        
+        # OAuth 2.0 first - this should always work as it doesn't require authentication
         try:
             logger.debug("Starting OAuth 2.0 authorization URL generation")
-            logger.debug(f"Using client_id: {self.client_id}")
-            logger.debug(f"Using callback_url: {self.callback_url}")
-            
-            # OAuth 2.0 - keep it minimal
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
                 state=state
             )
             logger.debug(f"Generated OAuth 2.0 URL: {oauth2_auth_url}")
-            
-            # OAuth 1.0a
+            result['oauth2_url'] = oauth2_auth_url
+            result['state'] = oauth2_state
+        except Exception as e:
+            logger.error(f"Error generating OAuth 2.0 URL: {str(e)}")
+            raise
+        
+        # OAuth 1.0a - handle separately as it requires request token
+        try:
             logger.debug("Starting OAuth 1.0a authorization URL generation")
             oauth1_auth_url = self.oauth1_handler.get_authorization_url()
             logger.debug(f"Generated OAuth 1.0a URL: {oauth1_auth_url}")
-            
-            return {
-                'oauth1_url': oauth1_auth_url,
-                'oauth2_url': oauth2_auth_url,
-                'state': oauth2_state
-            }
+            result['oauth1_url'] = oauth1_auth_url
         except Exception as e:
-            logger.error(f"Error getting authorization URLs: {str(e)}")
-            logger.error(f"OAuth2Session details: client_id={self.client_id}, redirect_uri={self.callback_url}")
-            if hasattr(e, 'response'):
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response headers: {e.response.headers}")
-                logger.error(f"Response body: {e.response.text}")
-            raise
+            logger.error(f"Error generating OAuth 1.0a URL: {str(e)}")
+            # Don't raise - we still have OAuth 2.0 URL
+            result['oauth1_error'] = str(e)
+        
+        return result
     
     async def get_access_token(self, 
                              oauth2_code: Optional[str] = None,
