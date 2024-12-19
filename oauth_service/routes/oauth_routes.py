@@ -79,29 +79,27 @@ async def initialize_oauth(
             frontend_callback_url=str(request.frontend_callback_url)
         )
         
-        # Twitter has predefined scopes in the OAuth handler
+        # Get authorization URLs
+        auth_urls = await oauth_handler.get_authorization_url(state=state)
+        
+        # For Twitter, handle the case where OAuth 1.0a might fail
         if platform == "twitter":
-            auth_urls = await oauth_handler.get_authorization_url(state=state)
-            # Return both OAuth URLs for Twitter
             return OAuthInitResponse(
                 authorization_url=auth_urls['oauth2_url'],
-                state=state,
+                state=auth_urls['state'],
                 platform=platform,
                 additional_params={
-                    "oauth1_url": auth_urls['oauth1_url'],
-                    "oauth1_state": auth_urls.get('state', state)  # Use OAuth 2.0 state if no specific OAuth 1.0a state
+                    'oauth1_url': auth_urls.get('oauth1_url'),
+                    'oauth1_error': auth_urls.get('oauth1_error')
                 }
             )
-        else:
-            auth_url = await oauth_handler.get_authorization_url(
-                state=state,
-                scopes=request.scopes
-            )
-            return OAuthInitResponse(
-                authorization_url=auth_url,
-                state=state,
-                platform=platform
-            )
+        
+        # For other platforms
+        return OAuthInitResponse(
+            authorization_url=auth_urls['oauth2_url'] if isinstance(auth_urls, dict) else auth_urls,
+            state=auth_urls.get('state', state),
+            platform=platform
+        )
         
     except Exception as e:
         logger.error(f"Error initializing OAuth for {platform}: {str(e)}")
