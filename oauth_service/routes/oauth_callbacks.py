@@ -9,6 +9,7 @@ import json
 import os
 import base64
 import secrets
+from datetime import datetime, timedelta
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
@@ -16,6 +17,10 @@ callback_router = APIRouter()
 def generate_api_key() -> str:
     """Generate a secure API key."""
     return f"user_{secrets.token_urlsafe(32)}"
+
+def get_api_key_expiration() -> str:
+    """Get API key expiration date (30 days from now)."""
+    return (datetime.utcnow() + timedelta(days=30)).isoformat()
 
 @callback_router.get("/{platform}/callback")
 async def oauth_callback(
@@ -88,13 +93,17 @@ async def oauth_callback(
         else:
             logger.info(f"Retrieved existing API key for user {user_id}")
 
+        # Get API key expiration date
+        api_key_expiration = get_api_key_expiration()
+
         # Return HTML that will post a message to the opener window
         return create_html_response(
             code=code,
             state=state,
             platform=platform,
             token_data=token_data,
-            api_key=api_key
+            api_key=api_key,
+            api_key_expiration=api_key_expiration
         )
 
     except Exception as e:
@@ -107,6 +116,7 @@ def create_html_response(
     platform: Optional[str] = None,
     token_data: Optional[Dict] = None,
     api_key: Optional[str] = None,
+    api_key_expiration: Optional[str] = None,
     error: Optional[str] = None
 ) -> HTMLResponse:
     """Create HTML response that posts message to opener window."""
@@ -126,6 +136,7 @@ def create_html_response(
             "platform": platform,
             "token_data": token_data,
             "api_key": api_key,
+            "api_key_expiration": api_key_expiration,
             "status": "success"
         }
 
@@ -232,7 +243,6 @@ def create_html_response(
                 <h2 class="message {'error' if error else 'success'}">
                     {error if error else f'Successfully authenticated with {platform.title()}!'}
                 </h2>
-                {f'<div class="api-key">Your API Key: {api_key}</div>' if api_key and not error else ''}
                 <p id="timer" class="timer">Window will close in 5 seconds...</p>
             </div>
         </body>
