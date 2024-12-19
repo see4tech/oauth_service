@@ -39,11 +39,28 @@ class TwitterOAuth(OAuthBase):
         # OAuth 2.0 first - this should always work as it doesn't require authentication
         try:
             logger.debug("Starting OAuth 2.0 authorization URL generation")
+            
+            # Generate PKCE challenge
+            from base64 import urlsafe_b64encode
+            import hashlib
+            import secrets
+            
+            # Generate code verifier
+            code_verifier = secrets.token_urlsafe(32)
+            
+            # Generate code challenge
+            code_challenge_bytes = hashlib.sha256(code_verifier.encode('utf-8')).digest()
+            code_challenge = urlsafe_b64encode(code_challenge_bytes).decode('utf-8').rstrip('=')
+            
+            # Store code verifier for later use during token exchange
+            self.code_verifier = code_verifier
+            
             # Add PKCE and specific parameters
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
                 state=state,
-                code_challenge_method='S256'  # Enable PKCE here, not in session init
+                code_challenge=code_challenge,
+                code_challenge_method='S256'
             )
             logger.debug(f"Generated OAuth 2.0 URL: {oauth2_auth_url}")
             result['oauth2_url'] = oauth2_auth_url
@@ -58,6 +75,7 @@ class TwitterOAuth(OAuthBase):
             logger.debug(f"- scope: {params.get('scope', [''])[0]}")
             logger.debug(f"- response_type: {params.get('response_type', [''])[0]}")
             logger.debug(f"- code_challenge_method: {params.get('code_challenge_method', [''])[0]}")
+            logger.debug(f"- code_challenge: {params.get('code_challenge', [''])[0]}")
             
         except Exception as e:
             logger.error(f"Error generating OAuth 2.0 URL: {str(e)}")
@@ -86,10 +104,12 @@ class TwitterOAuth(OAuthBase):
         
         if oauth2_code:
             try:
+                # Include code verifier for PKCE
                 token = self.oauth2_client.fetch_token(
                     'https://api.twitter.com/2/oauth2/token',
                     code=oauth2_code,
-                    client_secret=self._decrypted_secret
+                    client_secret=self._decrypted_secret,
+                    code_verifier=getattr(self, 'code_verifier', None)
                 )
                 tokens['oauth2'] = {
                     'access_token': token['access_token'],
