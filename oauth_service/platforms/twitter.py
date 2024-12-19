@@ -50,7 +50,6 @@ class TwitterOAuth(OAuthBase):
                 'https://twitter.com/i/oauth2/authorize',
                 state=state,
                 code_challenge_method='S256',  # Enable PKCE
-                client_id=self.client_id,
                 auth=(self.client_id, self._decrypted_secret)
             )
             
