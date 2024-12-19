@@ -4,12 +4,18 @@ from typing import Optional, Dict
 from ..core import TokenManager
 from ..utils.logger import get_logger
 from .oauth_routes import get_oauth_handler, get_code_verifier
+from ..core.db import SqliteDB
 import json
 import os
 import base64
+import secrets
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
+
+def generate_api_key() -> str:
+    """Generate a secure API key."""
+    return f"user_{secrets.token_urlsafe(32)}"
 
 @callback_router.get("/{platform}/callback")
 async def oauth_callback(
@@ -54,6 +60,7 @@ async def oauth_callback(
         logger.info(f"Processing callback for user_id: {user_id}")
         
         token_manager = TokenManager()
+        db = SqliteDB()
         
         # Handle Twitter OAuth 2.0 with PKCE
         if platform == "twitter":
@@ -71,13 +78,23 @@ async def oauth_callback(
             token_data = await oauth_handler.get_access_token(code)
             
         await token_manager.store_token(platform, user_id, token_data)
+        
+        # Generate or retrieve user API key
+        api_key = db.get_user_api_key(user_id)
+        if not api_key:
+            api_key = generate_api_key()
+            db.store_user_api_key(user_id, api_key)
+            logger.info(f"Generated new API key for user {user_id}")
+        else:
+            logger.info(f"Retrieved existing API key for user {user_id}")
 
         # Return HTML that will post a message to the opener window
         return create_html_response(
             code=code,
             state=state,
             platform=platform,
-            token_data=token_data
+            token_data=token_data,
+            api_key=api_key
         )
 
     except Exception as e:
@@ -89,6 +106,7 @@ def create_html_response(
     state: Optional[str] = None,
     platform: Optional[str] = None,
     token_data: Optional[Dict] = None,
+    api_key: Optional[str] = None,
     error: Optional[str] = None
 ) -> HTMLResponse:
     """Create HTML response that posts message to opener window."""
@@ -107,6 +125,7 @@ def create_html_response(
             "state": state,
             "platform": platform,
             "token_data": token_data,
+            "api_key": api_key,
             "status": "success"
         }
 
@@ -161,20 +180,26 @@ def create_html_response(
                 .error {{
                     color: #dc3545;
                 }}
+                .api-key {{
+                    background: #f8f9fa;
+                    padding: 0.5rem;
+                    border-radius: 4px;
+                    font-family: monospace;
+                    margin: 1rem 0;
+                    word-break: break-all;
+                }}
             </style>
             <script nonce="{nonce}">
-                window.onload = function() {{
-                    let timeLeft = 5;
+                function startCountdown() {{
                     const timerElement = document.getElementById('timer');
+                    let timeLeft = 5;
                     
-                    const timer = setInterval(() => {{
-                        timeLeft--;
+                    function updateTimer() {{
                         if (timerElement) {{
                             timerElement.textContent = `Window will close in ${timeLeft} seconds...`;
                         }}
                         
                         if (timeLeft <= 0) {{
-                            clearInterval(timer);
                             try {{
                                 if (window.opener) {{
                                     window.opener.postMessage({message_json}, window.location.origin);
@@ -186,9 +211,17 @@ def create_html_response(
                                 console.error('Error posting message:', e);
                                 window.location.href = window.location.origin;
                             }}
+                            return;
                         }}
-                    }}, 1000);
-                }};
+                        
+                        timeLeft--;
+                        setTimeout(updateTimer, 1000);
+                    }}
+                    
+                    updateTimer();
+                }}
+
+                window.onload = startCountdown;
             </script>
         </head>
         <body>
@@ -197,6 +230,7 @@ def create_html_response(
                 <h2 class="message {'error' if error else 'success'}">
                     {error if error else f'Successfully authenticated with {platform.title()}!'}
                 </h2>
+                {f'<div class="api-key">Your API Key: {api_key}</div>' if api_key and not error else ''}
                 <p id="timer" class="timer">Window will close in 5 seconds...</p>
             </div>
         </body>

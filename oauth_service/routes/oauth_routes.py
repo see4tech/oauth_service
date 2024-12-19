@@ -254,8 +254,25 @@ async def refresh_token(
 async def create_post(
     platform: str,
     request: SimplePostRequest,
+    x_api_key: str = Header(..., alias="X-Api-Key")
 ) -> PostResponse:
     try:
+        # Validate user API key
+        db = SqliteDB()
+        user_id = db.validate_user_api_key(x_api_key)
+        if not user_id:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid API key"
+            )
+        
+        # Verify user_id matches the one in the request
+        if user_id != request.user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="API key does not match user_id"
+            )
+        
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
@@ -269,7 +286,7 @@ async def create_post(
         content_dict = request.content.dict(exclude_none=True)
         
         result = await oauth_handler.create_post(
-            token_data["access_token"],
+            token_data,
             content_dict
         )
         
@@ -289,8 +306,25 @@ async def upload_media(
     platform: str,
     file: UploadFile = File(...),
     request: MediaUploadRequest = None,
+    x_api_key: str = Header(..., alias="X-Api-Key")
 ) -> MediaUploadResponse:
     try:
+        # Validate user API key
+        db = SqliteDB()
+        user_id = db.validate_user_api_key(x_api_key)
+        if not user_id:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid API key"
+            )
+        
+        # Verify user_id matches the one in the request
+        if user_id != request.user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="API key does not match user_id"
+            )
+        
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
@@ -304,7 +338,7 @@ async def upload_media(
         content = await file.read()
         
         result = await oauth_handler.upload_media(
-            token_data["access_token"],
+            token_data,
             content,
             file.filename
         )
