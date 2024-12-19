@@ -50,7 +50,18 @@ async def get_oauth_handler(platform: str):
     
     try:
         credentials = settings.get_platform_credentials(platform)
-        return handlers[platform](**credentials)
+        
+        # For Twitter, only pass OAuth 2.0 credentials during initialization
+        if platform == "twitter":
+            oauth_credentials = {
+                "client_id": credentials["client_id"],
+                "client_secret": credentials["client_secret"],
+                "callback_url": credentials["callback_url"]
+            }
+        else:
+            oauth_credentials = credentials
+            
+        return handlers[platform](**oauth_credentials)
     except ValueError as e:
         logger.error(f"Error getting OAuth handler for {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
