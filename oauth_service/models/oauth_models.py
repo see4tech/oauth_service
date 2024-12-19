@@ -21,6 +21,7 @@ class OAuthCallbackRequest(BaseModel):
     code: str
     state: str
     redirect_uri: HttpUrl
+    oauth1_verifier: Optional[str] = None  # For Twitter OAuth 1.0a
 
 class TokenResponse(BaseModel):
     """Response model for OAuth tokens."""

@@ -120,8 +120,15 @@ async def exchange_code(
                 status_code=400, 
                 detail="Invalid state parameter"
             )
-            
-        token_data = await oauth_handler.get_access_token(request.code)
+        
+        # Handle Twitter's dual OAuth flows
+        if platform == "twitter":
+            token_data = await oauth_handler.get_access_token(
+                oauth2_code=request.code,
+                oauth1_verifier=request.oauth1_verifier if hasattr(request, 'oauth1_verifier') else None
+            )
+        else:
+            token_data = await oauth_handler.get_access_token(request.code)
         
         token_manager = TokenManager()
         await token_manager.store_token(
@@ -129,6 +136,24 @@ async def exchange_code(
             user_id=state_data['user_id'],
             token_data=token_data
         )
+        
+        # For Twitter, prioritize OAuth 2.0 tokens if available
+        if platform == "twitter" and "oauth2" in token_data:
+            oauth2_data = token_data["oauth2"]
+            return TokenResponse(
+                access_token=oauth2_data["access_token"],
+                token_type="Bearer",
+                expires_in=oauth2_data.get("expires_in", 3600),
+                refresh_token=oauth2_data.get("refresh_token"),
+                scope=oauth2_data.get("scope")
+            )
+        elif platform == "twitter" and "oauth1" in token_data:
+            oauth1_data = token_data["oauth1"]
+            return TokenResponse(
+                access_token=oauth1_data["access_token"],
+                token_type="OAuth1",
+                access_token_secret=oauth1_data["access_token_secret"]
+            )
         
         return TokenResponse(
             access_token=token_data["access_token"],
