@@ -2,73 +2,13 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Instagram } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
+import { InstagramPopupHandler } from "./InstagramPopupHandler";
+import { InstagramTokenExchange } from "./InstagramTokenExchange";
 
 interface InstagramAuthProps {
   redirectUri: string;
   onSuccess: (tokens: any) => void;
   onError: (error: Error) => void;
-}
-
-class InstagramAuthHandler {
-  static async initializeAuth(userId: string, redirectUri: string): Promise<any> {
-    const response = await fetch('http://localhost:8000/oauth/instagram/init', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        user_id: userId,
-        redirect_uri: redirectUri,
-        frontend_callback_url: `${window.location.origin}/oauth/instagram/callback`
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to initialize Instagram auth');
-    }
-
-    return response.json();
-  }
-
-  static async exchangeCodeForToken(code: string, state: string, redirectUri: string): Promise<any> {
-    console.log('Exchanging code for token:', { code, state });
-    
-    const response = await fetch('http://localhost:8000/oauth/instagram/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        code,
-        state,
-        redirect_uri: redirectUri
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('Token exchange error:', error);
-      throw new Error(error.message || 'Failed to exchange code for token');
-    }
-
-    const data = await response.json();
-    console.log('Token exchange successful:', data);
-    return data;
-  }
-
-  static openAuthWindow(url: string): Window | null {
-    const width = 600;
-    const height = 700;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-
-    return window.open(
-      url,
-      'Instagram Auth',
-      `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no`
-    );
-  }
 }
 
 const InstagramAuth: React.FC<InstagramAuthProps> = ({
@@ -84,17 +24,8 @@ const InstagramAuth: React.FC<InstagramAuthProps> = ({
       setIsLoading(true);
       console.log('Starting Instagram authorization process...');
       
-      // Verify state matches what we stored
-      const storedState = sessionStorage.getItem('instagram_auth_state');
-      if (state !== storedState) {
-        throw new Error('Security validation failed. Please try again.');
-      }
-
-      const result = await InstagramAuthHandler.exchangeCodeForToken(code, state, redirectUri);
+      const result = await InstagramTokenExchange.exchangeCodeForToken(code, state, redirectUri);
       console.log('Instagram authorization successful');
-
-      // Clear stored state
-      sessionStorage.removeItem('instagram_auth_state');
       
       onSuccess(result);
 
@@ -175,6 +106,9 @@ const InstagramAuth: React.FC<InstagramAuthProps> = ({
     if (message.includes('timeout')) {
       return 'The request timed out. Please try again';
     }
+    if (message.includes('business')) {
+      return 'This Instagram account needs to be a Business or Creator account';
+    }
     
     return message;
   };
@@ -198,13 +132,13 @@ const InstagramAuth: React.FC<InstagramAuthProps> = ({
       setIsLoading(true);
       console.log('Initializing Instagram authorization...');
       
-      const authData = await InstagramAuthHandler.initializeAuth(userId, redirectUri);
+      const authData = await InstagramPopupHandler.initializeAuth(userId, redirectUri);
       console.log('Authorization URL received');
       
       if (authData.authorization_url) {
         sessionStorage.setItem('instagram_auth_state', authData.state);
         
-        const newWindow = InstagramAuthHandler.openAuthWindow(authData.authorization_url);
+        const newWindow = InstagramPopupHandler.openAuthWindow(authData.authorization_url);
         if (!newWindow) {
           throw new Error('popup_blocked');
         }
