@@ -49,7 +49,9 @@ class TwitterOAuth(OAuthBase):
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
                 state=state,
-                code_challenge_method='S256'  # Enable PKCE
+                code_challenge_method='S256',  # Enable PKCE
+                client_id=self.client_id,
+                auth=(self.client_id, self._decrypted_secret)
             )
             
             # Get OAuth 1.0a authorization URL
@@ -89,8 +91,7 @@ class TwitterOAuth(OAuthBase):
                 token = self.oauth2_client.fetch_token(
                     'https://api.twitter.com/2/oauth2/token',
                     code=oauth2_code,
-                    client_id=self.client_id,
-                    client_secret=self._decrypted_secret,
+                    auth=(self.client_id, self._decrypted_secret),
                     include_client_id=True
                 )
                 logger.debug("Successfully obtained OAuth 2.0 tokens")
