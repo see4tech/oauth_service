@@ -16,47 +16,32 @@ class TwitterOAuth(OAuthBase):
         self.rate_limiter = RateLimiter(platform="twitter")
         
         # Decrypt client secret once
-        decrypted_secret = self.crypto.decrypt(self._client_secret)
+        self._decrypted_secret = self.crypto.decrypt(self._client_secret)
         
-        # OAuth 1.0a setup for media uploads
+        # OAuth 1.0a setup
         self.oauth1_handler = tweepy.OAuthHandler(
             self.client_id,
-            decrypted_secret,
+            self._decrypted_secret,
             callback_url
         )
         
-        # OAuth 2.0 setup for API v2
+        # OAuth 2.0 setup - keep it simple
         self.oauth2_client = OAuth2Session(
             client_id=self.client_id,
             redirect_uri=callback_url,
             scope=['tweet.read', 'tweet.write', 'users.read']
         )
-        # Store decrypted secret for token exchange
-        self._decrypted_secret = decrypted_secret
     
     async def get_authorization_url(self, state: Optional[str] = None) -> Dict[str, str]:
-        """
-        Get authorization URLs for both OAuth 1.0a and 2.0.
-        
-        Args:
-            state: Optional state parameter for CSRF protection
-            
-        Returns:
-            Dictionary containing both OAuth 1.0a and 2.0 authorization URLs
-        """
+        """Get authorization URLs for both OAuth 1.0a and 2.0."""
         try:
-            # Get OAuth 2.0 authorization URL with PKCE
+            # OAuth 2.0 - keep it minimal
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
-                'https://twitter.com/i/oauth2/authorize',
-                state=state
+                'https://twitter.com/i/oauth2/authorize'
             )
             
-            # Get OAuth 1.0a authorization URL
-            # This internally handles the request token step
+            # OAuth 1.0a
             oauth1_auth_url = self.oauth1_handler.get_authorization_url()
-            
-            logger.debug(f"Generated OAuth 2.0 URL: {oauth2_auth_url}")
-            logger.debug(f"Generated OAuth 1.0a URL: {oauth1_auth_url}")
             
             return {
                 'oauth1_url': oauth1_auth_url,
@@ -70,29 +55,16 @@ class TwitterOAuth(OAuthBase):
     async def get_access_token(self, 
                              oauth2_code: Optional[str] = None,
                              oauth1_verifier: Optional[str] = None) -> Dict:
-        """
-        Exchange authorization codes for access tokens.
-        
-        Args:
-            oauth2_code: Authorization code for OAuth 2.0
-            oauth1_verifier: Verifier for OAuth 1.0a
-            
-        Returns:
-            Dictionary containing both OAuth 1.0a and 2.0 tokens
-        """
+        """Exchange authorization codes for access tokens."""
         tokens = {}
         
-        # Handle OAuth 2.0 token exchange
         if oauth2_code:
             try:
-                logger.debug("Exchanging OAuth 2.0 code for tokens")
                 token = self.oauth2_client.fetch_token(
                     'https://api.twitter.com/2/oauth2/token',
-                    client_secret=self._decrypted_secret,
                     code=oauth2_code,
-                    include_client_id=True
+                    client_secret=self._decrypted_secret
                 )
-                logger.debug("Successfully obtained OAuth 2.0 tokens")
                 tokens['oauth2'] = {
                     'access_token': token['access_token'],
                     'refresh_token': token.get('refresh_token'),
@@ -103,13 +75,9 @@ class TwitterOAuth(OAuthBase):
                 logger.error(f"Error exchanging OAuth 2.0 code: {str(e)}")
                 raise
         
-        # Handle OAuth 1.0a token exchange
         if oauth1_verifier:
             try:
-                logger.debug("Exchanging OAuth 1.0a verifier for tokens")
-                # This internally handles the access token exchange
                 self.oauth1_handler.get_access_token(oauth1_verifier)
-                logger.debug("Successfully obtained OAuth 1.0a tokens")
                 tokens['oauth1'] = {
                     'access_token': self.oauth1_handler.access_token,
                     'access_token_secret': self.oauth1_handler.access_token_secret
