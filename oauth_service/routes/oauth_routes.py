@@ -51,11 +51,11 @@ async def get_oauth_handler(platform: str):
     try:
         credentials = settings.get_platform_credentials(platform)
         
-        # For Twitter, only pass OAuth 2.0 credentials during initialization
+        # For Twitter, pass both OAuth 1.0a and 2.0 credentials
         if platform == "twitter":
             oauth_credentials = {
-                "client_id": credentials["client_id"],
-                "client_secret": credentials["client_secret"],
+                "client_id": credentials["consumer_key"],  # Use OAuth 1.0a key as client_id
+                "client_secret": credentials["consumer_secret"],  # Use OAuth 1.0a secret
                 "callback_url": credentials["callback_url"]
             }
         else:
