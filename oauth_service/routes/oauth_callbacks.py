@@ -97,7 +97,8 @@ def create_html_response(
         message_data = {
             "type": "OAUTH_CALLBACK",
             "error": error,
-            "platform": platform
+            "platform": platform,
+            "status": "error"
         }
     else:
         message_data = {
@@ -105,7 +106,8 @@ def create_html_response(
             "code": code,
             "state": state,
             "platform": platform,
-            "token_data": token_data
+            "token_data": token_data,
+            "status": "success"
         }
 
     # Convert message_data to JSON string
@@ -118,34 +120,91 @@ def create_html_response(
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Processing Authentication</title>
+            <title>Authentication Status</title>
             <meta http-equiv="Content-Security-Policy" 
-                  content="default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'">
+                  content="default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'; style-src 'unsafe-inline'">
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100vh;
+                    margin: 0;
+                    background-color: #f8f9fa;
+                    color: #212529;
+                }}
+                .container {{
+                    text-align: center;
+                    padding: 2rem;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    max-width: 400px;
+                    width: 90%;
+                }}
+                .icon {{
+                    font-size: 48px;
+                    margin-bottom: 1rem;
+                }}
+                .message {{
+                    margin-bottom: 1rem;
+                }}
+                .timer {{
+                    color: #6c757d;
+                    font-size: 0.9rem;
+                }}
+                .success {{
+                    color: #28a745;
+                }}
+                .error {{
+                    color: #dc3545;
+                }}
+            </style>
             <script nonce="{nonce}">
                 window.onload = function() {{
-                    try {{
-                        if (window.opener) {{
-                            window.opener.postMessage({message_json}, window.location.origin);
-                            window.close();
-                        }} else {{
-                            window.location.href = window.location.origin;
+                    let timeLeft = 5;
+                    const timerElement = document.getElementById('timer');
+                    
+                    const timer = setInterval(() => {{
+                        timeLeft--;
+                        if (timerElement) {{
+                            timerElement.textContent = `Window will close in ${timeLeft} seconds...`;
                         }}
-                    }} catch (e) {{
-                        console.error('Error posting message:', e);
-                        window.location.href = window.location.origin;
-                    }}
+                        
+                        if (timeLeft <= 0) {{
+                            clearInterval(timer);
+                            try {{
+                                if (window.opener) {{
+                                    window.opener.postMessage({message_json}, window.location.origin);
+                                    window.close();
+                                }} else {{
+                                    window.location.href = window.location.origin;
+                                }}
+                            }} catch (e) {{
+                                console.error('Error posting message:', e);
+                                window.location.href = window.location.origin;
+                            }}
+                        }}
+                    }}, 1000);
                 }};
             </script>
         </head>
         <body>
-            <h3>Processing authentication...</h3>
-            <p>This window should close automatically. If it doesn't, you may close it.</p>
+            <div class="container">
+                {'<div class="icon error">❌</div>' if error else '<div class="icon success">✅</div>'}
+                <h2 class="message {'error' if error else 'success'}">
+                    {error if error else f'Successfully authenticated with {platform.title()}!'}
+                </h2>
+                <p id="timer" class="timer">Window will close in 5 seconds...</p>
+            </div>
         </body>
         </html>
     """
     
     headers = {
-        'Content-Security-Policy': f"default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'"
+        'Content-Security-Policy': f"default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'; style-src 'unsafe-inline'"
     }
     
     return HTMLResponse(content=html_content, headers=headers)
