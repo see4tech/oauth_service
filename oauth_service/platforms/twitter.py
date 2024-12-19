@@ -49,8 +49,7 @@ class TwitterOAuth(OAuthBase):
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
                 state=state,
-                code_challenge_method='S256',  # Enable PKCE
-                response_type='code'
+                code_challenge_method='S256'  # Enable PKCE
             )
             
             # Get OAuth 1.0a authorization URL
