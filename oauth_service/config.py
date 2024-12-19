@@ -29,8 +29,10 @@ class Settings(BaseSettings):
     
     # OAuth Credentials
     # Twitter
-    TWITTER_CLIENT_ID: str
-    TWITTER_CLIENT_SECRET: str
+    TWITTER_CLIENT_ID: str           # OAuth 2.0
+    TWITTER_CLIENT_SECRET: str       # OAuth 2.0
+    TWITTER_CONSUMER_KEY: str        # OAuth 1.0a
+    TWITTER_CONSUMER_SECRET: str     # OAuth 1.0a
     TWITTER_CALLBACK_URL: str
     
     # LinkedIn
@@ -64,6 +66,8 @@ class Settings(BaseSettings):
             "twitter": {
                 "client_id": self.TWITTER_CLIENT_ID,
                 "client_secret": self.TWITTER_CLIENT_SECRET,
+                "consumer_key": self.TWITTER_CONSUMER_KEY,        # OAuth 1.0a
+                "consumer_secret": self.TWITTER_CONSUMER_SECRET,  # OAuth 1.0a
                 "callback_url": self.TWITTER_CALLBACK_URL
             },
             "linkedin": {
