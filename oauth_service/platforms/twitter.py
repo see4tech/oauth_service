@@ -29,8 +29,7 @@ class TwitterOAuth(OAuthBase):
         self.oauth2_client = OAuth2Session(
             client_id=self.client_id,
             redirect_uri=callback_url,
-            scope=['tweet.read', 'tweet.write', 'users.read'],
-            code_challenge_method='S256'  # Enable PKCE
+            scope=['tweet.read', 'tweet.write', 'users.read']
         )
     
     async def get_authorization_url(self, state: Optional[str] = None) -> Dict[str, str]:
@@ -44,8 +43,7 @@ class TwitterOAuth(OAuthBase):
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
                 state=state,
-                code_challenge_method='S256',
-                response_type='code'
+                code_challenge_method='S256'  # Enable PKCE here, not in session init
             )
             logger.debug(f"Generated OAuth 2.0 URL: {oauth2_auth_url}")
             result['oauth2_url'] = oauth2_auth_url
@@ -59,6 +57,7 @@ class TwitterOAuth(OAuthBase):
             logger.debug(f"- redirect_uri: {params.get('redirect_uri', [''])[0]}")
             logger.debug(f"- scope: {params.get('scope', [''])[0]}")
             logger.debug(f"- response_type: {params.get('response_type', [''])[0]}")
+            logger.debug(f"- code_challenge_method: {params.get('code_challenge_method', [''])[0]}")
             
         except Exception as e:
             logger.error(f"Error generating OAuth 2.0 URL: {str(e)}")
