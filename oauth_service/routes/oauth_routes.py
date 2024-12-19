@@ -81,26 +81,27 @@ async def initialize_oauth(
         
         # Twitter has predefined scopes in the OAuth handler
         if platform == "twitter":
-            auth_url = await oauth_handler.get_authorization_url(state=state)
+            auth_urls = await oauth_handler.get_authorization_url(state=state)
+            # Return both OAuth URLs for Twitter
+            return OAuthInitResponse(
+                authorization_url=auth_urls['oauth2_url'],
+                state=state,
+                platform=platform,
+                additional_params={
+                    "oauth1_url": auth_urls['oauth1_url'],
+                    "oauth1_state": auth_urls.get('state', state)  # Use OAuth 2.0 state if no specific OAuth 1.0a state
+                }
+            )
         else:
             auth_url = await oauth_handler.get_authorization_url(
                 state=state,
                 scopes=request.scopes
             )
-        
-        if isinstance(auth_url, dict):
             return OAuthInitResponse(
-                authorization_url=auth_url.get('oauth2_url'),
+                authorization_url=auth_url,
                 state=state,
-                platform=platform,
-                additional_params={"oauth1_url": auth_url.get('oauth1_url')}
+                platform=platform
             )
-        
-        return OAuthInitResponse(
-            authorization_url=auth_url,
-            state=state,
-            platform=platform
-        )
         
     except Exception as e:
         logger.error(f"Error initializing OAuth for {platform}: {str(e)}")
@@ -121,12 +122,43 @@ async def exchange_code(
                 detail="Invalid state parameter"
             )
         
-        # Handle Twitter's dual OAuth flows
+        # For Twitter, handle OAuth 1.0a and 2.0 separately
         if platform == "twitter":
-            token_data = await oauth_handler.get_access_token(
-                oauth2_code=request.code,
-                oauth1_verifier=request.oauth1_verifier if hasattr(request, 'oauth1_verifier') else None
-            )
+            # Check if this is an OAuth 1.0a callback
+            if request.oauth1_verifier:
+                token_data = await oauth_handler.get_access_token(
+                    oauth1_verifier=request.oauth1_verifier
+                )
+                if not token_data or 'oauth1' not in token_data:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Failed to get OAuth 1.0a tokens"
+                    )
+                oauth1_data = token_data['oauth1']
+                return TokenResponse(
+                    access_token=oauth1_data["access_token"],
+                    token_type="OAuth1",
+                    expires_in=0,  # OAuth 1.0a tokens don't expire
+                    access_token_secret=oauth1_data["access_token_secret"]
+                )
+            # Otherwise, treat as OAuth 2.0
+            else:
+                token_data = await oauth_handler.get_access_token(
+                    oauth2_code=request.code
+                )
+                if not token_data or 'oauth2' not in token_data:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Failed to get OAuth 2.0 tokens"
+                    )
+                oauth2_data = token_data['oauth2']
+                return TokenResponse(
+                    access_token=oauth2_data["access_token"],
+                    token_type="Bearer",
+                    expires_in=oauth2_data.get("expires_in", 3600),
+                    refresh_token=oauth2_data.get("refresh_token"),
+                    scope=oauth2_data.get("scope")
+                )
         else:
             token_data = await oauth_handler.get_access_token(request.code)
         
@@ -136,24 +168,6 @@ async def exchange_code(
             user_id=state_data['user_id'],
             token_data=token_data
         )
-        
-        # For Twitter, prioritize OAuth 2.0 tokens if available
-        if platform == "twitter" and "oauth2" in token_data:
-            oauth2_data = token_data["oauth2"]
-            return TokenResponse(
-                access_token=oauth2_data["access_token"],
-                token_type="Bearer",
-                expires_in=oauth2_data.get("expires_in", 3600),
-                refresh_token=oauth2_data.get("refresh_token"),
-                scope=oauth2_data.get("scope")
-            )
-        elif platform == "twitter" and "oauth1" in token_data:
-            oauth1_data = token_data["oauth1"]
-            return TokenResponse(
-                access_token=oauth1_data["access_token"],
-                token_type="OAuth1",
-                access_token_secret=oauth1_data["access_token_secret"]
-            )
         
         return TokenResponse(
             access_token=token_data["access_token"],

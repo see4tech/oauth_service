@@ -27,9 +27,10 @@ class TokenResponse(BaseModel):
     """Response model for OAuth tokens."""
     access_token: str
     token_type: str = "Bearer"
-    expires_in: int
+    expires_in: int = 0  # 0 for OAuth 1.0a tokens that don't expire
     refresh_token: Optional[str] = None
     scope: Optional[str] = None
+    access_token_secret: Optional[str] = None  # For OAuth 1.0a tokens
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class PostContent(BaseModel):
