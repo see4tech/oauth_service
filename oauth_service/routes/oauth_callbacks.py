@@ -190,36 +190,35 @@ def create_html_response(
                 }}
             </style>
             <script nonce="{nonce}">
-                function startCountdown() {{
+                function startCountdown() {
                     const timerElement = document.getElementById('timer');
-                    let timeLeft = 5;
+                    const timeLeft = 5;
                     
-                    function updateTimer() {{
-                        if (timerElement) {{
-                            timerElement.textContent = `Window will close in ${timeLeft} seconds...`;
-                        }}
+                    function updateTimer(secondsLeft) {
+                        if (timerElement) {
+                            timerElement.textContent = `Window will close in ${secondsLeft} seconds...`;
+                        }
                         
-                        if (timeLeft <= 0) {{
-                            try {{
-                                if (window.opener) {{
+                        if (secondsLeft <= 0) {
+                            try {
+                                if (window.opener) {
                                     window.opener.postMessage({message_json}, window.location.origin);
                                     window.close();
-                                }} else {{
+                                } else {
                                     window.location.href = window.location.origin;
-                                }}
-                            }} catch (e) {{
+                                }
+                            } catch (e) {
                                 console.error('Error posting message:', e);
                                 window.location.href = window.location.origin;
-                            }}
+                            }
                             return;
-                        }}
+                        }
                         
-                        timeLeft--;
-                        setTimeout(updateTimer, 1000);
-                    }}
+                        setTimeout(() => updateTimer(secondsLeft - 1), 1000);
+                    }
                     
-                    updateTimer();
-                }}
+                    updateTimer(timeLeft);
+                }
 
                 window.onload = startCountdown;
             </script>
