@@ -11,6 +11,8 @@ from .config import get_settings
 import uvicorn
 from datetime import datetime
 from .utils.logger import get_logger
+from .core.token_refresh import start_refresh_service, stop_refresh_service
+import asyncio
 
 # Initialize settings and logger
 settings = get_settings()
@@ -184,6 +186,25 @@ async def general_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": "Internal server error"}
     )
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on application startup."""
+    try:
+        # Start token refresh service in the background
+        asyncio.create_task(start_refresh_service())
+        logger.info("Token refresh service started")
+    except Exception as e:
+        logger.error(f"Error starting token refresh service: {str(e)}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop background tasks on application shutdown."""
+    try:
+        await stop_refresh_service()
+        logger.info("Token refresh service stopped")
+    except Exception as e:
+        logger.error(f"Error stopping token refresh service: {str(e)}")
 
 # Run the application
 if __name__ == "__main__":

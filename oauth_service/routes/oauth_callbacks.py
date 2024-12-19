@@ -4,11 +4,11 @@ from typing import Optional, Dict
 from ..core import TokenManager
 from ..utils.logger import get_logger
 from .oauth_routes import get_oauth_handler, get_code_verifier
-from ..core.db import SqliteDB
 import json
 import os
 import base64
 import secrets
+import aiohttp
 from datetime import datetime, timedelta
 
 logger = get_logger(__name__)
@@ -18,9 +18,45 @@ def generate_api_key() -> str:
     """Generate a secure API key."""
     return f"user_{secrets.token_urlsafe(32)}"
 
-def get_api_key_expiration() -> str:
-    """Get API key expiration date (30 days from now)."""
-    return (datetime.utcnow() + timedelta(days=30)).isoformat()
+async def store_api_key(user_id: str, platform: str, token_data: Dict):
+    """Store API key in external storage service."""
+    storage_url = os.getenv("API_KEY_STORAGE")
+    api_key = os.getenv("API_KEY")
+    
+    if not storage_url or not api_key:
+        raise ValueError("API_KEY_STORAGE or API_KEY not configured")
+
+    # Generate new API key
+    user_api_key = generate_api_key()
+
+    # Prepare expiration based on platform
+    token_expiration = None
+    if platform == "twitter" and "oauth2" in token_data:
+        token_expiration = token_data["oauth2"].get("expires_at")
+    elif platform == "linkedin":
+        token_expiration = token_data.get("expires_at")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                storage_url,
+                json={
+                    "user_id": user_id,
+                    "platform": platform,
+                    "api_key": user_api_key,
+                    "token_expiration": token_expiration
+                },
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key
+                }
+            ) as response:
+                if not response.ok:
+                    raise ValueError(f"Failed to store API key: {await response.text()}")
+                return await response.json()
+    except Exception as e:
+        logger.error(f"Error storing API key: {str(e)}")
+        raise
 
 @callback_router.get("/{platform}/callback")
 async def oauth_callback(
@@ -41,103 +77,81 @@ async def oauth_callback(
         if error:
             error_msg = error_description or error
             logger.error(f"OAuth error for {platform}: {error_msg}")
-            return create_html_response(error=error_msg)
+            return create_html_response(error=error_msg, platform=platform)
 
         if not code or not state:
             logger.error("Missing code or state parameter")
-            return create_html_response(error="Missing code or state parameter")
+            return create_html_response(error="Missing code or state parameter", platform=platform)
 
         oauth_handler = await get_oauth_handler(platform)
-        
-        # Log the state before verification
-        logger.info(f"Attempting to verify state: {state}")
-        
         state_data = oauth_handler.verify_state(state)
         
         if not state_data:
             logger.error(f"Invalid state parameter. Received state: {state}")
-            return create_html_response(error="Invalid state parameter")
+            return create_html_response(error="Invalid state parameter", platform=platform)
 
         logger.info(f"State verification successful. State data: {state_data}")
 
         user_id = state_data['user_id']
-        frontend_callback_url = state_data['frontend_callback_url']
         logger.info(f"Processing callback for user_id: {user_id}")
         
         token_manager = TokenManager()
-        db = SqliteDB()
         
-        # Handle Twitter OAuth 2.0 with PKCE
-        if platform == "twitter":
-            # Retrieve code verifier
-            code_verifier = await get_code_verifier(state)
-            if not code_verifier:
-                logger.error("Code verifier not found for Twitter OAuth")
-                return create_html_response(error="Code verifier not found")
+        # Handle platform-specific token exchange
+        try:
+            if platform == "twitter":
+                code_verifier = await get_code_verifier(state)
+                if not code_verifier:
+                    logger.error("Code verifier not found for Twitter OAuth")
+                    return create_html_response(error="Code verifier not found", platform=platform)
+                    
+                token_data = await oauth_handler.get_access_token(
+                    oauth2_code=code,
+                    code_verifier=code_verifier
+                )
+            else:
+                token_data = await oauth_handler.get_access_token(code)
                 
-            token_data = await oauth_handler.get_access_token(
-                oauth2_code=code,
-                code_verifier=code_verifier
-            )
-        else:
-            token_data = await oauth_handler.get_access_token(code)
+            await token_manager.store_token(platform, user_id, token_data)
             
-        await token_manager.store_token(platform, user_id, token_data)
-        
-        # Generate or retrieve user API key
-        api_key = db.get_user_api_key(user_id)
-        if not api_key:
-            api_key = generate_api_key()
-            db.store_user_api_key(user_id, api_key)
-            logger.info(f"Generated new API key for user {user_id}")
-        else:
-            logger.info(f"Retrieved existing API key for user {user_id}")
+            # Store API key in external service
+            await store_api_key(user_id, platform, token_data)
 
-        # Get API key expiration date
-        api_key_expiration = get_api_key_expiration()
+            # Return simplified success response
+            message_data = {
+                "success": True,
+                "user_id": user_id,
+                "platform": platform
+            }
 
-        # Return HTML that will post a message to the opener window
-        return create_html_response(
-            code=code,
-            state=state,
-            platform=platform,
-            token_data=token_data,
-            api_key=api_key,
-            api_key_expiration=api_key_expiration
-        )
+            return create_html_response(
+                platform=platform,
+                message_data=message_data
+            )
+
+        except Exception as e:
+            logger.error(f"Error during token exchange for {platform}: {str(e)}")
+            return create_html_response(
+                error=f"Error during token exchange: {str(e)}",
+                platform=platform
+            )
 
     except Exception as e:
         logger.error(f"Error handling OAuth callback for {platform}: {str(e)}")
-        return create_html_response(error=str(e))
+        return create_html_response(error=str(e), platform=platform)
 
 def create_html_response(
-    code: Optional[str] = None,
-    state: Optional[str] = None,
     platform: Optional[str] = None,
-    token_data: Optional[Dict] = None,
-    api_key: Optional[str] = None,
-    api_key_expiration: Optional[str] = None,
+    message_data: Optional[Dict] = None,
     error: Optional[str] = None
 ) -> HTMLResponse:
     """Create HTML response that posts message to opener window."""
     
     if error:
         message_data = {
-            "type": "OAUTH_CALLBACK",
+            "success": False,
             "error": error,
-            "platform": platform,
-            "status": "error"
-        }
-    else:
-        message_data = {
-            "type": "OAUTH_CALLBACK",
-            "code": code,
-            "state": state,
-            "platform": platform,
-            "token_data": token_data,
-            "api_key": api_key,
-            "api_key_expiration": api_key_expiration,
-            "status": "success"
+            "platform": platform
         }
 
     # Convert message_data to JSON string
@@ -190,14 +204,6 @@ def create_html_response(
                 }}
                 .error {{
                     color: #dc3545;
-                }}
-                .api-key {{
-                    background: #f8f9fa;
-                    padding: 0.5rem;
-                    border-radius: 4px;
-                    font-family: monospace;
-                    margin: 1rem 0;
-                    word-break: break-all;
                 }}
             </style>
             <script nonce="{nonce}">

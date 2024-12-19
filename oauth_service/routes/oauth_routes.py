@@ -23,6 +23,7 @@ class PostContent(BaseModel):
 
 class SimplePostRequest(BaseModel):
     user_id: str
+    api_key: str
     content: PostContent
 
 class MediaUploadRequest(BaseModel):
@@ -253,13 +254,12 @@ async def refresh_token(
 @router.post("/{platform}/post", response_model=PostResponse)
 async def create_post(
     platform: str,
-    request: SimplePostRequest,
-    x_api_key: str = Header(..., alias="X-Api-Key")
+    request: SimplePostRequest
 ) -> PostResponse:
     try:
         # Validate user API key
         db = SqliteDB()
-        user_id = db.validate_user_api_key(x_api_key)
+        user_id = db.validate_user_api_key(request.api_key)
         if not user_id:
             raise HTTPException(
                 status_code=401,
@@ -284,6 +284,17 @@ async def create_post(
             )
         
         content_dict = request.content.dict(exclude_none=True)
+        
+        # Special handling for Twitter with media
+        if platform == "twitter" and content_dict.get("image_url"):
+            # First upload media using v1.1 API
+            media_id = await oauth_handler.upload_media_v1(
+                token_data,
+                content_dict["image_url"]
+            )
+            # Then create tweet with media_id using v2 API
+            content_dict["media_ids"] = [media_id]
+            del content_dict["image_url"]  # Remove image_url as we now have media_id
         
         result = await oauth_handler.create_post(
             token_data,

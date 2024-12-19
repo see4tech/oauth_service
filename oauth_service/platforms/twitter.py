@@ -196,13 +196,50 @@ class TwitterOAuth(OAuthBase):
         
         return {'media_id': str(media.media_id)}
     
-    async def create_tweet(self, token_data: Dict, content: Dict) -> Dict:
+    async def upload_media_v1(self, token_data: Dict, image_url: str) -> str:
         """
-        Create a tweet using OAuth 2.0.
+        Upload media using Twitter API v1.1.
         
         Args:
             token_data: Dictionary containing OAuth tokens
-            content: Tweet content including text and media IDs
+            image_url: URL of the image to upload
+            
+        Returns:
+            Media ID string
+        """
+        try:
+            # Download the image
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as response:
+                    if not response.ok:
+                        raise ValueError(f"Failed to download image: {response.status}")
+                    image_data = await response.read()
+
+            # Create Twitter API v1.1 client
+            auth = tweepy.OAuth1UserHandler(
+                consumer_key=self._consumer_key,
+                consumer_secret=self._decrypted_consumer_secret,
+                access_token=token_data['oauth1']['access_token'],
+                access_token_secret=token_data['oauth1']['access_token_secret']
+            )
+            api = tweepy.API(auth)
+
+            # Upload media
+            media = api.media_upload(filename='image', file=image_data)
+            
+            return str(media.media_id)
+
+        except Exception as e:
+            logger.error(f"Error uploading media to Twitter: {str(e)}")
+            raise ValueError(f"Failed to upload media: {str(e)}")
+    
+    async def create_tweet(self, token_data: Dict, content: Dict) -> Dict:
+        """
+        Create a tweet using Twitter API v2.
+        
+        Args:
+            token_data: Dictionary containing OAuth tokens
+            content: Tweet content including text and media_ids
             
         Returns:
             Dictionary containing tweet data
@@ -217,26 +254,17 @@ class TwitterOAuth(OAuthBase):
             access_token=token_data['oauth2']['access_token']
         )
         
-        # Handle media attachments
-        media_ids = []
-        if content.get('media_urls'):
-            for media_url in content['media_urls']:
-                media_result = await self.upload_media(
-                    token_data,
-                    await self._fetch_media(media_url),
-                    f"media_{len(media_ids)}"
-                )
-                media_ids.append(media_result['media_id'])
-        
-        # Create tweet
+        # Create tweet with text and media IDs
         tweet = client.create_tweet(
             text=content['text'],
-            media_ids=media_ids if media_ids else None
+            media_ids=content.get('media_ids')
         )
         
         return {
-            'tweet_id': tweet.data['id'],
-            'text': tweet.data['text']
+            'post_id': str(tweet.data['id']),
+            'text': tweet.data['text'],
+            'platform': 'twitter',
+            'url': f"https://twitter.com/i/web/status/{tweet.data['id']}"
         }
     
     async def _fetch_media(self, url: str) -> bytes:
