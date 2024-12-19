@@ -29,8 +29,7 @@ class TwitterOAuth(OAuthBase):
         self.oauth2_client = OAuth2Session(
             client_id=self.client_id,
             redirect_uri=callback_url,
-            scope=['tweet.read', 'tweet.write', 'users.read'],
-            code_challenge_method='S256'  # Enable PKCE by default
+            scope=['tweet.read', 'tweet.write', 'users.read']
         )
         # Store decrypted secret for token exchange
         self._decrypted_secret = decrypted_secret
@@ -50,8 +49,8 @@ class TwitterOAuth(OAuthBase):
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
                 state=state,
-                response_type='code',
-                code_challenge_method='S256'
+                code_challenge_method='S256',  # Enable PKCE
+                response_type='code'
             )
             
             # Get OAuth 1.0a authorization URL
