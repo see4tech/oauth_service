@@ -19,9 +19,11 @@ class TwitterOAuth(OAuthBase):
         self._consumer_key = consumer_key or client_id
         self._consumer_secret = consumer_secret or client_secret
         
-        # Decrypt secrets once
+        # Decrypt OAuth 2.0 client secret
         self._decrypted_client_secret = self.crypto.decrypt(self._client_secret)
-        self._decrypted_consumer_secret = self.crypto.decrypt(self._consumer_secret) if consumer_secret else self._decrypted_client_secret
+        
+        # For OAuth 1.0a, use raw secrets as they come from settings
+        self._decrypted_consumer_secret = self._consumer_secret
         
         # OAuth 1.0a setup
         self.oauth1_handler = tweepy.OAuthHandler(
@@ -181,8 +183,8 @@ class TwitterOAuth(OAuthBase):
             raise ValueError("OAuth 1.0a tokens required for media upload")
         
         auth = tweepy.OAuthHandler(
-            self.client_id,
-            self._decrypted_client_secret
+            self._consumer_key,
+            self._decrypted_consumer_secret
         )
         auth.set_access_token(
             token_data['oauth1']['access_token'],
@@ -210,8 +212,8 @@ class TwitterOAuth(OAuthBase):
         
         client = tweepy.Client(
             bearer_token=None,
-            consumer_key=self.client_id,
-            consumer_secret=self._decrypted_client_secret,
+            consumer_key=self._consumer_key,
+            consumer_secret=self._decrypted_consumer_secret,
             access_token=token_data['oauth2']['access_token']
         )
         
