@@ -25,11 +25,12 @@ class TwitterOAuth(OAuthBase):
             callback_url
         )
         
-        # OAuth 2.0 setup - keep it simple
+        # OAuth 2.0 setup - with minimum required scopes
         self.oauth2_client = OAuth2Session(
             client_id=self.client_id,
             redirect_uri=callback_url,
-            scope=['tweet.read', 'tweet.write', 'users.read']
+            scope=['tweet.read', 'tweet.write', 'users.read'],
+            code_challenge_method='S256'  # Enable PKCE
         )
     
     async def get_authorization_url(self, state: Optional[str] = None) -> Dict[str, str]:
@@ -39,15 +40,31 @@ class TwitterOAuth(OAuthBase):
         # OAuth 2.0 first - this should always work as it doesn't require authentication
         try:
             logger.debug("Starting OAuth 2.0 authorization URL generation")
+            # Add PKCE and specific parameters
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
-                state=state
+                state=state,
+                code_challenge_method='S256',
+                response_type='code'
             )
             logger.debug(f"Generated OAuth 2.0 URL: {oauth2_auth_url}")
             result['oauth2_url'] = oauth2_auth_url
             result['state'] = oauth2_state
+            
+            # Log URL components for debugging
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(oauth2_auth_url)
+            params = parse_qs(parsed.query)
+            logger.debug("OAuth 2.0 URL components:")
+            logger.debug(f"- redirect_uri: {params.get('redirect_uri', [''])[0]}")
+            logger.debug(f"- scope: {params.get('scope', [''])[0]}")
+            logger.debug(f"- response_type: {params.get('response_type', [''])[0]}")
+            
         except Exception as e:
             logger.error(f"Error generating OAuth 2.0 URL: {str(e)}")
+            if hasattr(e, 'response'):
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response body: {e.response.text}")
             raise
         
         # OAuth 1.0a - handle separately as it requires request token
@@ -58,7 +75,6 @@ class TwitterOAuth(OAuthBase):
             result['oauth1_url'] = oauth1_auth_url
         except Exception as e:
             logger.error(f"Error generating OAuth 1.0a URL: {str(e)}")
-            # Don't raise - we still have OAuth 2.0 URL
             result['oauth1_error'] = str(e)
         
         return result
