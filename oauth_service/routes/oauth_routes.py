@@ -79,10 +79,14 @@ async def initialize_oauth(
             frontend_callback_url=str(request.frontend_callback_url)
         )
         
-        auth_url = await oauth_handler.get_authorization_url(
-            state=state,
-            scopes=request.scopes
-        )
+        # Twitter has predefined scopes in the OAuth handler
+        if platform == "twitter":
+            auth_url = await oauth_handler.get_authorization_url(state=state)
+        else:
+            auth_url = await oauth_handler.get_authorization_url(
+                state=state,
+                scopes=request.scopes
+            )
         
         if isinstance(auth_url, dict):
             return OAuthInitResponse(
