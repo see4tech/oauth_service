@@ -18,6 +18,27 @@ const TwitterAuth: React.FC<TwitterAuthProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [authWindow, setAuthWindow] = useState<Window | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Check authentication status on mount and after token changes
+  useEffect(() => {
+    const checkAuth = async () => {
+      const isAuthed = TwitterTokenExchange.isAuthenticated();
+      setIsAuthenticated(isAuthed);
+      
+      if (isAuthed) {
+        // Try to get a valid token (this will refresh if needed)
+        const token = await TwitterTokenExchange.getValidToken();
+        if (!token) {
+          // Token refresh failed or no refresh token available
+          setIsAuthenticated(false);
+          TwitterTokenExchange.clearTokens();
+        }
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   const handleCallback = useCallback(async (code: string, state: string, isOAuth1: boolean = false, oauth1Verifier?: string) => {
     try {
@@ -33,6 +54,7 @@ const TwitterAuth: React.FC<TwitterAuthProps> = ({
       );
       console.log('Twitter authorization successful');
       
+      setIsAuthenticated(true);
       onSuccess(result);
 
       if (authWindow && !authWindow.closed) {
@@ -44,6 +66,8 @@ const TwitterAuth: React.FC<TwitterAuthProps> = ({
       toast.success('Successfully connected your Twitter account');
     } catch (error) {
       console.error('Twitter authorization error:', error);
+      setIsAuthenticated(false);
+      TwitterTokenExchange.clearTokens();
       onError(error as Error);
       toast.error(getErrorMessage(error));
     } finally {
@@ -121,6 +145,20 @@ const TwitterAuth: React.FC<TwitterAuthProps> = ({
     return message;
   };
 
+  const handleDisconnect = async () => {
+    try {
+      setIsLoading(true);
+      TwitterTokenExchange.clearTokens();
+      setIsAuthenticated(false);
+      toast.success('Successfully disconnected Twitter account');
+    } catch (error) {
+      console.error('Error disconnecting Twitter:', error);
+      toast.error('Failed to disconnect Twitter account');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleLogin = async () => {
     const userString = localStorage.getItem('user');
     if (!userString) {
@@ -174,20 +212,20 @@ const TwitterAuth: React.FC<TwitterAuthProps> = ({
 
   return (
     <Button
-      onClick={handleLogin}
+      onClick={isAuthenticated ? handleDisconnect : handleLogin}
       disabled={isLoading}
       className="w-full"
-      variant="outline"
+      variant={isAuthenticated ? "destructive" : "outline"}
     >
       {isLoading ? (
         <>
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Connecting to Twitter...
+          {isAuthenticated ? 'Disconnecting...' : 'Connecting to Twitter...'}
         </>
       ) : (
         <>
           <Twitter className="mr-2 h-4 w-4" />
-          Connect Twitter
+          {isAuthenticated ? 'Disconnect Twitter' : 'Connect Twitter'}
         </>
       )}
     </Button>

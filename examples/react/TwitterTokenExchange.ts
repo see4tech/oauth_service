@@ -1,4 +1,6 @@
 export class TwitterTokenExchange {
+  private static readonly TOKEN_EXPIRY_BUFFER = 300; // 5 minutes buffer before expiry
+
   static async exchangeCodeForToken(
     code: string, 
     state: string, 
@@ -42,11 +44,7 @@ export class TwitterTokenExchange {
     }
 
     const data = await response.json();
-    // Store tokens with platform prefix to avoid conflicts
-    localStorage.setItem('twitter_tokens', JSON.stringify({
-      ...data,
-      timestamp: Date.now()
-    }));
+    await this.storeTokens(data);
     console.log('Twitter tokens stored in localStorage');
     
     return data;
@@ -77,15 +75,85 @@ export class TwitterTokenExchange {
     }
 
     const data = await response.json();
-    const currentTokens = JSON.parse(localStorage.getItem('twitter_tokens') || '{}');
-    
-    // Update stored tokens
-    localStorage.setItem('twitter_tokens', JSON.stringify({
-      ...currentTokens,
-      ...data,
-      timestamp: Date.now()
-    }));
+    await this.storeTokens(data);
     
     return data;
+  }
+
+  private static async storeTokens(tokens: any) {
+    const storageData = {
+      ...tokens,
+      timestamp: Date.now(),
+      expires_at: tokens.expires_in ? Date.now() + (tokens.expires_in * 1000) : null
+    };
+    
+    localStorage.setItem('twitter_tokens', JSON.stringify(storageData));
+  }
+
+  static async getValidToken(): Promise<string | null> {
+    try {
+      const storedData = localStorage.getItem('twitter_tokens');
+      if (!storedData) return null;
+
+      const tokens = JSON.parse(storedData);
+      
+      // For OAuth 1.0a tokens (they don't expire)
+      if (tokens.oauth1) {
+        return tokens.oauth1.access_token;
+      }
+
+      // For OAuth 2.0 tokens
+      if (!tokens.oauth2) return null;
+
+      const now = Date.now();
+      const expiresAt = tokens.expires_at;
+      
+      // Check if token is expired or will expire soon
+      if (expiresAt && (expiresAt - now) < (this.TOKEN_EXPIRY_BUFFER * 1000)) {
+        // Token is expired or will expire soon, try to refresh
+        if (tokens.oauth2.refresh_token) {
+          console.log('Token expired or expiring soon, refreshing...');
+          const newTokens = await this.refreshToken(tokens.oauth2.refresh_token);
+          return newTokens.oauth2.access_token;
+        } else {
+          console.log('No refresh token available');
+          return null;
+        }
+      }
+
+      return tokens.oauth2.access_token;
+    } catch (error) {
+      console.error('Error getting valid token:', error);
+      return null;
+    }
+  }
+
+  static isAuthenticated(): boolean {
+    try {
+      const storedData = localStorage.getItem('twitter_tokens');
+      if (!storedData) return false;
+
+      const tokens = JSON.parse(storedData);
+      
+      // Check for OAuth 1.0a tokens
+      if (tokens.oauth1?.access_token) return true;
+
+      // Check for OAuth 2.0 tokens
+      if (!tokens.oauth2?.access_token) return false;
+
+      const now = Date.now();
+      const expiresAt = tokens.expires_at;
+      
+      // Consider authenticated if token exists and is not expired
+      return expiresAt ? now < expiresAt : false;
+    } catch (error) {
+      console.error('Error checking authentication status:', error);
+      return false;
+    }
+  }
+
+  static clearTokens() {
+    localStorage.removeItem('twitter_tokens');
+    sessionStorage.removeItem('twitter_auth_state');
   }
 } 
