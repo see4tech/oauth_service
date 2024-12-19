@@ -84,9 +84,12 @@ class OAuthBase(ABC):
                 logger.warning(f"State expired. Age: {age} seconds")
                 return None
             
-            # Verify platform matches
-            if state_data.get('platform') != self.platform_name:
-                logger.warning(f"Platform mismatch. Expected: {self.platform_name}, Got: {state_data.get('platform')}")
+            # Get platform from state
+            state_platform = state_data.get('platform', '')
+            
+            # Verify platform matches (support both with and without 'oauth' suffix)
+            if state_platform != self.platform_name and state_platform != self.platform_name.replace('oauth', ''):
+                logger.warning(f"Platform mismatch. Expected: {self.platform_name}, Got: {state_platform}")
                 return None
                 
             return {

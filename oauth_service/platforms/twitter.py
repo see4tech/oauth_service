@@ -15,10 +15,13 @@ class TwitterOAuth(OAuthBase):
         super().__init__(client_id, client_secret, callback_url)
         self.rate_limiter = RateLimiter(platform="twitter")
         
+        # Decrypt client secret once
+        decrypted_secret = self.crypto.decrypt(self._client_secret)
+        
         # OAuth 1.0a setup for media uploads
         self.oauth1_handler = tweepy.OAuthHandler(
             self.client_id,
-            self.crypto.decrypt(self._client_secret),
+            decrypted_secret,
             callback_url
         )
         
@@ -28,6 +31,8 @@ class TwitterOAuth(OAuthBase):
             redirect_uri=callback_url,
             scope=['tweet.read', 'tweet.write', 'users.read']
         )
+        # Store decrypted secret for token exchange
+        self._decrypted_secret = decrypted_secret
     
     async def get_authorization_url(self, state: Optional[str] = None) -> Dict[str, str]:
         """
@@ -39,20 +44,25 @@ class TwitterOAuth(OAuthBase):
         Returns:
             Dictionary containing both OAuth 1.0a and 2.0 authorization URLs
         """
-        # Get OAuth 2.0 authorization URL
-        oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
-            'https://twitter.com/i/oauth2/authorize',
-            state=state
-        )
-        
-        # Get OAuth 1.0a authorization URL
-        oauth1_auth_url = self.oauth1_handler.get_authorization_url()
-        
-        return {
-            'oauth1_url': oauth1_auth_url,
-            'oauth2_url': oauth2_auth_url,
-            'state': oauth2_state
-        }
+        try:
+            # Get OAuth 2.0 authorization URL
+            oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
+                'https://twitter.com/i/oauth2/authorize',
+                state=state,
+                code_challenge_method='S256'  # Enable PKCE
+            )
+            
+            # Get OAuth 1.0a authorization URL
+            oauth1_auth_url = self.oauth1_handler.get_authorization_url()
+            
+            return {
+                'oauth1_url': oauth1_auth_url,
+                'oauth2_url': oauth2_auth_url,
+                'state': oauth2_state
+            }
+        except Exception as e:
+            logger.error(f"Error getting authorization URLs: {str(e)}")
+            raise
     
     async def get_access_token(self, 
                              oauth2_code: Optional[str] = None,
@@ -73,7 +83,7 @@ class TwitterOAuth(OAuthBase):
         if oauth2_code:
             token = self.oauth2_client.fetch_token(
                 'https://api.twitter.com/2/oauth2/token',
-                client_secret=self.crypto.decrypt(self._client_secret),
+                client_secret=self._decrypted_secret,
                 code=oauth2_code
             )
             tokens['oauth2'] = {
@@ -107,7 +117,7 @@ class TwitterOAuth(OAuthBase):
             'https://api.twitter.com/2/oauth2/token',
             refresh_token=refresh_token,
             client_id=self.client_id,
-            client_secret=self.crypto.decrypt(self._client_secret)
+            client_secret=self._decrypted_secret
         )
         
         return {
@@ -137,7 +147,7 @@ class TwitterOAuth(OAuthBase):
         
         auth = tweepy.OAuthHandler(
             self.client_id,
-            self.crypto.decrypt(self._client_secret)
+            self._decrypted_secret
         )
         auth.set_access_token(
             token_data['oauth1']['access_token'],
@@ -166,7 +176,7 @@ class TwitterOAuth(OAuthBase):
         client = tweepy.Client(
             bearer_token=None,
             consumer_key=self.client_id,
-            consumer_secret=self.crypto.decrypt(self._client_secret),
+            consumer_secret=self._decrypted_secret,
             access_token=token_data['oauth2']['access_token']
         )
         
