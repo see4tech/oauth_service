@@ -25,23 +25,39 @@ class TokenRefreshService:
             return
 
         try:
-            # Prepare platform-specific token data
-            token_info = {
-                "user_id": user_id,
-                "platform": platform,
-                "token_data": new_token_data
-            }
+            # Get existing API key from storage service
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{storage_url}/key/{user_id}/{platform}",
+                    headers={"x-api-key": api_key}
+                ) as response:
+                    if not response.ok:
+                        logger.error(f"Failed to get existing API key: {await response.text()}")
+                        return
+                    existing_data = await response.json()
+                    user_api_key = existing_data.get("api_key")
 
-            # Add token expiration based on platform
+            if not user_api_key:
+                logger.error(f"No existing API key found for user {user_id} on platform {platform}")
+                return
+
+            # Prepare token expiration based on platform
+            token_expiration = None
             if platform == "twitter" and "oauth2" in new_token_data:
-                token_info["token_expiration"] = new_token_data["oauth2"].get("expires_at")
+                token_expiration = new_token_data["oauth2"].get("expires_at")
             elif platform == "linkedin":
-                token_info["token_expiration"] = new_token_data.get("expires_at")
+                token_expiration = new_token_data.get("expires_at")
 
+            # Send refresh request with existing API key
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     f"{storage_url}/refresh",
-                    json=token_info,
+                    json={
+                        "user_id": user_id,
+                        "platform": platform,
+                        "api_key": user_api_key,
+                        "token_expiration": token_expiration
+                    },
                     headers={
                         "Content-Type": "application/json",
                         "x-api-key": api_key
