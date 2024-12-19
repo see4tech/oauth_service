@@ -85,7 +85,7 @@ async def initialize_oauth(
         # For Twitter, handle the case where OAuth 1.0a might fail
         if platform == "twitter":
             # Store code verifier in state for later use
-            if 'code_verifier' in auth_urls:
+            if isinstance(auth_urls, dict) and 'code_verifier' in auth_urls:
                 await store_code_verifier(state, auth_urls['code_verifier'])
                 
             return OAuthInitResponse(
@@ -98,9 +98,17 @@ async def initialize_oauth(
                 }
             )
         
-        # For other platforms
+        # For other platforms that return a string URL directly
+        if isinstance(auth_urls, str):
+            return OAuthInitResponse(
+                authorization_url=auth_urls,
+                state=state,
+                platform=platform
+            )
+            
+        # For other platforms that return a dictionary
         return OAuthInitResponse(
-            authorization_url=auth_urls['oauth2_url'] if isinstance(auth_urls, dict) else auth_urls,
+            authorization_url=auth_urls['oauth2_url'] if 'oauth2_url' in auth_urls else auth_urls['authorization_url'],
             state=auth_urls.get('state', state),
             platform=platform
         )
