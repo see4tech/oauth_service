@@ -86,25 +86,39 @@ class TwitterOAuth(OAuthBase):
         
         # Handle OAuth 2.0 token exchange
         if oauth2_code:
-            token = self.oauth2_client.fetch_token(
-                'https://api.twitter.com/2/oauth2/token',
-                client_secret=self._decrypted_secret,
-                code=oauth2_code
-            )
-            tokens['oauth2'] = {
-                'access_token': token['access_token'],
-                'refresh_token': token.get('refresh_token'),
-                'expires_in': token.get('expires_in', 7200),
-                'expires_at': token.get('expires_at')
-            }
+            try:
+                logger.debug("Exchanging OAuth 2.0 code for tokens")
+                token = self.oauth2_client.fetch_token(
+                    'https://api.twitter.com/2/oauth2/token',
+                    code=oauth2_code,
+                    client_id=self.client_id,
+                    client_secret=self._decrypted_secret,
+                    include_client_id=True
+                )
+                logger.debug("Successfully obtained OAuth 2.0 tokens")
+                tokens['oauth2'] = {
+                    'access_token': token['access_token'],
+                    'refresh_token': token.get('refresh_token'),
+                    'expires_in': token.get('expires_in', 7200),
+                    'expires_at': token.get('expires_at')
+                }
+            except Exception as e:
+                logger.error(f"Error exchanging OAuth 2.0 code: {str(e)}")
+                raise
         
         # Handle OAuth 1.0a token exchange
         if oauth1_verifier:
-            self.oauth1_handler.get_access_token(oauth1_verifier)
-            tokens['oauth1'] = {
-                'access_token': self.oauth1_handler.access_token,
-                'access_token_secret': self.oauth1_handler.access_token_secret
-            }
+            try:
+                logger.debug("Exchanging OAuth 1.0a verifier for tokens")
+                self.oauth1_handler.get_access_token(oauth1_verifier)
+                logger.debug("Successfully obtained OAuth 1.0a tokens")
+                tokens['oauth1'] = {
+                    'access_token': self.oauth1_handler.access_token,
+                    'access_token_secret': self.oauth1_handler.access_token_secret
+                }
+            except Exception as e:
+                logger.error(f"Error exchanging OAuth 1.0a verifier: {str(e)}")
+                raise
         
         return tokens
     
