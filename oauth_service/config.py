@@ -99,7 +99,7 @@ class Settings(BaseSettings):
             origins = self.ALLOWED_ORIGINS.split(",")
             required_origins = [
                 "https://33d10367-52d6-4ff5-99d8-1c6792f179e5.lovableproject.com",
-                "https://n8n.see4.tech/",
+                "https://n8n.see4.tech",
                 "https://dukat.see4.tech",
                 "http://localhost:3000",
                 "http://localhost:8000"
