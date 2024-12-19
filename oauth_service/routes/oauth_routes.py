@@ -84,6 +84,10 @@ async def initialize_oauth(
         
         # For Twitter, handle the case where OAuth 1.0a might fail
         if platform == "twitter":
+            # Store code verifier in state for later use
+            if 'code_verifier' in auth_urls:
+                await store_code_verifier(state, auth_urls['code_verifier'])
+                
             return OAuthInitResponse(
                 authorization_url=auth_urls['oauth2_url'],
                 state=auth_urls['state'],
@@ -104,6 +108,20 @@ async def initialize_oauth(
     except Exception as e:
         logger.error(f"Error initializing OAuth for {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+async def store_code_verifier(state: str, code_verifier: str):
+    """Store code verifier in Redis or another temporary storage."""
+    # TODO: Implement storage mechanism
+    # For now, we'll store it in memory (not suitable for production)
+    if not hasattr(store_code_verifier, 'verifiers'):
+        store_code_verifier.verifiers = {}
+    store_code_verifier.verifiers[state] = code_verifier
+
+async def get_code_verifier(state: str) -> Optional[str]:
+    """Retrieve code verifier from storage."""
+    if not hasattr(store_code_verifier, 'verifiers'):
+        return None
+    return store_code_verifier.verifiers.get(state)
 
 @router.post("/{platform}/token", response_model=TokenResponse)
 async def exchange_code(
@@ -141,8 +159,17 @@ async def exchange_code(
                 )
             # Otherwise, treat as OAuth 2.0
             else:
+                # Get code verifier from storage
+                code_verifier = await get_code_verifier(request.state)
+                if not code_verifier:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Code verifier not found"
+                    )
+                
                 token_data = await oauth_handler.get_access_token(
-                    oauth2_code=request.code
+                    oauth2_code=request.code,
+                    code_verifier=code_verifier
                 )
                 if not token_data or 'oauth2' not in token_data:
                     raise HTTPException(

@@ -52,9 +52,6 @@ class TwitterOAuth(OAuthBase):
             code_challenge_bytes = hashlib.sha256(code_verifier.encode('utf-8')).digest()
             code_challenge = urlsafe_b64encode(code_challenge_bytes).decode('utf-8').rstrip('=')
             
-            # Store code verifier for later use during token exchange
-            self.code_verifier = code_verifier
-            
             # Add PKCE and specific parameters
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
@@ -65,6 +62,7 @@ class TwitterOAuth(OAuthBase):
             logger.debug(f"Generated OAuth 2.0 URL: {oauth2_auth_url}")
             result['oauth2_url'] = oauth2_auth_url
             result['state'] = oauth2_state
+            result['code_verifier'] = code_verifier  # Include code verifier in result
             
             # Log URL components for debugging
             from urllib.parse import urlparse, parse_qs
@@ -98,7 +96,8 @@ class TwitterOAuth(OAuthBase):
     
     async def get_access_token(self, 
                              oauth2_code: Optional[str] = None,
-                             oauth1_verifier: Optional[str] = None) -> Dict:
+                             oauth1_verifier: Optional[str] = None,
+                             code_verifier: Optional[str] = None) -> Dict:
         """Exchange authorization codes for access tokens."""
         tokens = {}
         
@@ -109,7 +108,7 @@ class TwitterOAuth(OAuthBase):
                     'https://api.twitter.com/2/oauth2/token',
                     code=oauth2_code,
                     client_secret=self._decrypted_secret,
-                    code_verifier=getattr(self, 'code_verifier', None)
+                    code_verifier=code_verifier
                 )
                 tokens['oauth2'] = {
                     'access_token': token['access_token'],
