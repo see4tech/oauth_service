@@ -48,12 +48,11 @@ class TwitterOAuth(OAuthBase):
             # Get OAuth 2.0 authorization URL with PKCE
             oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
-                state=state,
-                code_challenge_method='S256',  # Enable PKCE
-                auth=(self.client_id, self._decrypted_secret)
+                state=state
             )
             
             # Get OAuth 1.0a authorization URL
+            # This internally handles the request token step
             oauth1_auth_url = self.oauth1_handler.get_authorization_url()
             
             logger.debug(f"Generated OAuth 2.0 URL: {oauth2_auth_url}")
@@ -89,8 +88,8 @@ class TwitterOAuth(OAuthBase):
                 logger.debug("Exchanging OAuth 2.0 code for tokens")
                 token = self.oauth2_client.fetch_token(
                     'https://api.twitter.com/2/oauth2/token',
+                    client_secret=self._decrypted_secret,
                     code=oauth2_code,
-                    auth=(self.client_id, self._decrypted_secret),
                     include_client_id=True
                 )
                 logger.debug("Successfully obtained OAuth 2.0 tokens")
@@ -108,6 +107,7 @@ class TwitterOAuth(OAuthBase):
         if oauth1_verifier:
             try:
                 logger.debug("Exchanging OAuth 1.0a verifier for tokens")
+                # This internally handles the access token exchange
                 self.oauth1_handler.get_access_token(oauth1_verifier)
                 logger.debug("Successfully obtained OAuth 1.0a tokens")
                 tokens['oauth1'] = {
