@@ -11,7 +11,7 @@ export class TwitterPopupHandler {
       body: JSON.stringify({
         user_id: userId,
         redirect_uri: redirectUri,
-        frontend_callback_url: `${window.location.origin}/oauth/twitter/callback`,
+        frontend_callback_url: window.location.origin,
         scopes: ['tweet.read', 'tweet.write', 'users.read']
       }),
     });
@@ -25,7 +25,8 @@ export class TwitterPopupHandler {
     const data = await response.json();
     console.log('Twitter auth response:', {
       oauth2_url: data.authorization_url,
-      oauth1_url: data.additional_params?.oauth1_url
+      oauth1_url: data.additional_params?.oauth1_url,
+      state: data.state
     });
     return data;
   }
@@ -35,7 +36,7 @@ export class TwitterPopupHandler {
     const height = 700;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
-    const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no`;
+    const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`;
     
     const authWindow = window.open(url, 'Twitter Auth', features);
     
