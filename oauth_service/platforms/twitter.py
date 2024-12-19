@@ -11,17 +11,22 @@ logger = get_logger(__name__)
 class TwitterOAuth(OAuthBase):
     """Twitter OAuth implementation supporting both OAuth 1.0a and OAuth 2.0."""
     
-    def __init__(self, client_id: str, client_secret: str, callback_url: str):
+    def __init__(self, client_id: str, client_secret: str, callback_url: str, consumer_key: str = None, consumer_secret: str = None):
         super().__init__(client_id, client_secret, callback_url)
         self.rate_limiter = RateLimiter(platform="twitter")
         
-        # Decrypt client secret once
-        self._decrypted_secret = self.crypto.decrypt(self._client_secret)
+        # Store OAuth 1.0a credentials separately
+        self._consumer_key = consumer_key or client_id
+        self._consumer_secret = consumer_secret or client_secret
+        
+        # Decrypt secrets once
+        self._decrypted_client_secret = self.crypto.decrypt(self._client_secret)
+        self._decrypted_consumer_secret = self.crypto.decrypt(self._consumer_secret) if consumer_secret else self._decrypted_client_secret
         
         # OAuth 1.0a setup
         self.oauth1_handler = tweepy.OAuthHandler(
-            self.client_id,
-            self._decrypted_secret,
+            self._consumer_key,
+            self._decrypted_consumer_secret,
             callback_url
         )
         
@@ -107,7 +112,7 @@ class TwitterOAuth(OAuthBase):
                 token = self.oauth2_client.fetch_token(
                     'https://api.twitter.com/2/oauth2/token',
                     code=oauth2_code,
-                    client_secret=self._decrypted_secret,
+                    client_secret=self._decrypted_client_secret,
                     code_verifier=code_verifier
                 )
                 tokens['oauth2'] = {
@@ -147,7 +152,7 @@ class TwitterOAuth(OAuthBase):
             'https://api.twitter.com/2/oauth2/token',
             refresh_token=refresh_token,
             client_id=self.client_id,
-            client_secret=self._decrypted_secret
+            client_secret=self._decrypted_client_secret
         )
         
         return {
@@ -177,7 +182,7 @@ class TwitterOAuth(OAuthBase):
         
         auth = tweepy.OAuthHandler(
             self.client_id,
-            self._decrypted_secret
+            self._decrypted_client_secret
         )
         auth.set_access_token(
             token_data['oauth1']['access_token'],
@@ -206,7 +211,7 @@ class TwitterOAuth(OAuthBase):
         client = tweepy.Client(
             bearer_token=None,
             consumer_key=self.client_id,
-            consumer_secret=self._decrypted_secret,
+            consumer_secret=self._decrypted_client_secret,
             access_token=token_data['oauth2']['access_token']
         )
         
