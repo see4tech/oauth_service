@@ -139,18 +139,11 @@ def create_html_response(
     if error:
         message_data["error"] = error
     
-    message_json = json.dumps(message_data)
-    
-    # Generate a nonce for CSP
-    nonce = secrets.token_urlsafe(16)
-    
     html_content = f"""
     <!DOCTYPE html>
     <html>
         <head>
             <title>OAuth Callback</title>
-            <meta http-equiv="Content-Security-Policy" 
-                  content="default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src *">
             <style>
                 body {{
                     font-family: Arial, sans-serif;
@@ -204,137 +197,43 @@ def create_html_response(
                 <button class="close-button" id="closeButton">Close Window</button>
             </div>
             
-            <script nonce="{nonce}">
-                console.log('Script started');
-                const messageData = {message_json};
-                let timeLeft = 5;
-                let countdownInterval;
-                let hasAttemptedClose = false;
-                
-                function forceClose() {{
-                    console.log('Attempting force close');
-                    try {{
-                        console.log('Trying window.close()');
-                        window.close();
-                    }} catch (e) {{
-                        console.error('window.close() failed:', e);
+            <script>
+                // Simple window close function without any restrictions
+                function closeWindow() {{
+                    if (window.opener) {{
+                        window.opener.postMessage({json.dumps(message_data)}, '*');
                     }}
-                    
-                    try {{
-                        console.log('Trying self.close()');
-                        self.close();
-                    }} catch (e) {{
-                        console.error('self.close() failed:', e);
-                    }}
-                    
-                    try {{
-                        console.log('Trying window.open().close()');
-                        window.open('', '_self').close();
-                    }} catch (e) {{
-                        console.error('window.open().close() failed:', e);
-                    }}
-                    
-                    // If still open, redirect
+                    window.close();
+                    // Fallback if window.close() fails
                     setTimeout(() => {{
                         if (!window.closed) {{
-                            console.log('Window still open, redirecting to about:blank');
                             window.location.href = 'about:blank';
                         }}
                     }}, 100);
                 }}
-                
-                function closeWindow(event) {{
-                    console.log('closeWindow called', event ? 'from event' : 'from timer');
-                    if (hasAttemptedClose) {{
-                        console.log('Already attempted close, skipping');
-                        return;
-                    }}
-                    
-                    hasAttemptedClose = true;
-                    console.log('Setting hasAttemptedClose to true');
-                    
-                    try {{
-                        if (window.opener) {{
-                            console.log('Found window.opener, posting message');
-                            window.opener.postMessage(messageData, '*');
-                            console.log('Message posted successfully');
-                        }} else {{
-                            console.log('No window.opener found');
-                        }}
-                        
-                        // Clear the interval if it exists
-                        if (countdownInterval) {{
-                            console.log('Clearing countdown interval');
-                            clearInterval(countdownInterval);
-                        }}
-                        
-                        console.log('Calling forceClose');
-                        forceClose();
-                    }} catch (e) {{
-                        console.error('Error in closeWindow:', e);
-                        forceClose();
-                    }}
-                }}
+
+                // Add click handler to button
+                document.getElementById('closeButton').onclick = closeWindow;
+
+                // Auto-close after 5 seconds
+                let timeLeft = 5;
+                const countdownElement = document.getElementById('countdown');
                 
                 function updateCountdown() {{
-                    const countdownElement = document.getElementById('countdown');
-                    if (!countdownElement) return;
-                    
                     if (timeLeft <= 0) {{
-                        console.log('Countdown reached zero');
-                        clearInterval(countdownInterval);
                         closeWindow();
                         return;
                     }}
-                    
                     countdownElement.textContent = `Window will close in ${{timeLeft}} seconds...`;
                     timeLeft--;
+                    setTimeout(updateCountdown, 1000);
                 }}
-                
-                // Add click event listener to close button
-                const closeButton = document.getElementById('closeButton');
-                if (closeButton) {{
-                    console.log('Adding click event listener to close button');
-                    closeButton.addEventListener('click', (e) => {{
-                        console.log('Close button clicked');
-                        e.preventDefault();
-                        closeWindow(e);
-                    }});
-                }} else {{
-                    console.error('Close button not found');
-                }}
-                
+
                 // Start countdown
-                console.log('Starting countdown');
                 updateCountdown();
-                countdownInterval = setInterval(updateCountdown, 1000);
-                
-                // Add window event listeners
-                window.addEventListener('load', () => console.log('Window loaded'));
-                window.addEventListener('unload', () => console.log('Window unloading'));
-                window.addEventListener('beforeunload', () => console.log('Window before unload'));
-                
-                // Attempt to close after delay
-                console.log('Setting final close timeout');
-                setTimeout(() => {{
-                    console.log('Final close timeout triggered');
-                    closeWindow();
-                }}, 5500);
-                
-                // Log initial state
-                console.log('Initial window state:', {{
-                    hasOpener: !!window.opener,
-                    location: window.location.href,
-                    timeLeft
-                }});
             </script>
         </body>
     </html>
     """
     
-    # Set response headers including CSP
-    headers = {
-        'Content-Security-Policy': f"default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src *"
-    }
-    
-    return HTMLResponse(content=html_content, headers=headers)
+    return HTMLResponse(content=html_content)
