@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile,
 from typing import Optional, Dict, List
 from pydantic import BaseModel, Field
 from ..core import TokenManager
+from ..core.db import SqliteDB
 from ..platforms import TwitterOAuth, LinkedInOAuth, InstagramOAuth, FacebookOAuth
 from ..models.oauth_models import (
     OAuthInitRequest, OAuthInitResponse, OAuthCallbackRequest,
@@ -12,6 +13,7 @@ from ..config import get_settings
 from fastapi.responses import RedirectResponse
 import json
 
+# Initialize logger with the module name
 logger = get_logger(__name__)
 router = APIRouter()
 settings = get_settings()
@@ -258,14 +260,14 @@ async def create_post(
     x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
     try:
-        logger.debug("=== POST Request Validation Start ===")
-        logger.debug(f"Platform: {platform}")
-        logger.debug(f"User ID from request: {request.user_id}")
-        logger.debug(f"x-api-key header value: {x_api_key}")
+        logger.info("=== POST Request Validation Start ===")
+        logger.info(f"Platform: {platform}")
+        logger.info(f"User ID from request: {request.user_id}")
+        logger.info(f"x-api-key header value: {x_api_key}")
         
         # Get settings for comparison
         settings = get_settings()
-        logger.debug(f"Settings API_KEY: {settings.API_KEY}")
+        logger.info(f"Settings API_KEY: {settings.API_KEY}")
         
         # First validate the global API key
         if x_api_key != settings.API_KEY:
@@ -277,12 +279,12 @@ async def create_post(
                 detail="Invalid API key"
             )
         
-        logger.debug("Global API key validation successful")
+        logger.info("Global API key validation successful")
         
         # Then validate user-specific API key
         db = SqliteDB()
         stored_api_key = db.get_user_api_key(request.user_id, platform)
-        logger.debug(f"Stored API key for user: {stored_api_key}")
+        logger.info(f"Stored API key for user: {stored_api_key}")
         
         if not stored_api_key:
             logger.error(f"No API key found for user {request.user_id} on platform {platform}")
@@ -291,8 +293,8 @@ async def create_post(
                 detail="No API key found for user"
             )
         
-        logger.debug("User API key validation successful")
-        logger.debug("=== POST Request Validation End ===")
+        logger.info("User API key validation successful")
+        logger.info("=== POST Request Validation End ===")
         
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
