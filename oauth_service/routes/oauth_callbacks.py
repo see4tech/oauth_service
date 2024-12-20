@@ -203,45 +203,80 @@ def create_html_response(
                 const messageData = {message_json};
                 let timeLeft = 5;
                 let countdownInterval;
+                let hasAttemptedClose = false;
+                
+                function forceClose() {{
+                    // Try multiple methods to close the window
+                    try {{
+                        window.close();
+                        self.close();
+                        window.open('', '_self').close();
+                    }} catch (e) {{
+                        console.error('Error in forceClose:', e);
+                    }}
+                    
+                    // If window is still open after all attempts, redirect
+                    setTimeout(() => {{
+                        if (!window.closed) {{
+                            window.location.href = 'about:blank';
+                        }}
+                    }}, 100);
+                }}
                 
                 function closeWindow() {{
+                    if (hasAttemptedClose) return;
+                    hasAttemptedClose = true;
+                    
                     try {{
+                        // First, try to post message to parent
                         if (window.opener) {{
-                            // Post message to parent window with wildcard origin
                             window.opener.postMessage(messageData, '*');
-                            
-                            // Close window after ensuring message is sent
-                            setTimeout(() => window.close(), 100);
                         }}
                         
-                        // Fallback: redirect to origin if window doesn't close
-                        setTimeout(() => {{
-                            if (!window.closed) {{
-                                window.location.href = window.location.origin;
-                            }}
-                        }}, 500);
+                        // Attempt to close immediately
+                        forceClose();
+                        
+                        // If still open, try again after a short delay
+                        setTimeout(forceClose, 100);
+                        
+                        // Final attempt after a longer delay
+                        setTimeout(forceClose, 500);
                     }} catch (e) {{
-                        console.error('Error closing window:', e);
-                        window.location.href = window.location.origin;
+                        console.error('Error in closeWindow:', e);
+                        forceClose();
                     }}
                 }}
                 
                 function updateCountdown() {{
                     const countdownElement = document.getElementById('countdown');
-                    if (countdownElement) {{
-                        countdownElement.textContent = `Window will close in ${{timeLeft}} seconds...`;
-                        
-                        if (timeLeft <= 0) {{
-                            clearInterval(countdownInterval);
-                            closeWindow();
-                        }}
-                        timeLeft--;
+                    if (!countdownElement) return;
+                    
+                    if (timeLeft <= 0) {{
+                        clearInterval(countdownInterval);
+                        closeWindow();
+                        return;
                     }}
+                    
+                    countdownElement.textContent = `Window will close in ${{timeLeft}} seconds...`;
+                    timeLeft--;
                 }}
                 
-                // Start countdown
-                countdownInterval = setInterval(updateCountdown, 1000);
+                // Start countdown immediately
                 updateCountdown();
+                countdownInterval = setInterval(updateCountdown, 1000);
+                
+                // Attempt to close when the page is hidden/unloaded
+                document.addEventListener('visibilitychange', () => {{
+                    if (document.visibilityState === 'hidden') {{
+                        closeWindow();
+                    }}
+                }});
+                
+                window.addEventListener('unload', closeWindow);
+                window.addEventListener('beforeunload', closeWindow);
+                
+                // Attempt to close after a short delay regardless of countdown
+                setTimeout(closeWindow, 5500);
             </script>
         </body>
     </html>
