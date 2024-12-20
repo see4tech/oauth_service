@@ -258,7 +258,7 @@ async def create_post(
     x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
     try:
-        logger.debug("=== API Key Validation Start ===")
+        logger.debug("=== POST Request Validation Start ===")
         logger.debug(f"Platform: {platform}")
         logger.debug(f"User ID from request: {request.user_id}")
         logger.debug(f"x-api-key header value: {x_api_key}")
@@ -269,9 +269,9 @@ async def create_post(
         
         # First validate the global API key
         if x_api_key != settings.API_KEY:
-            logger.error(f"Global API key validation failed")
-            logger.error(f"Received key: {x_api_key}")
-            logger.error(f"Expected key: {settings.API_KEY}")
+            logger.error("Global API key validation failed")
+            logger.error(f"Received key in header: {x_api_key}")
+            logger.error(f"Expected key from settings: {settings.API_KEY}")
             raise HTTPException(
                 status_code=401,
                 detail="Invalid API key"
@@ -292,7 +292,7 @@ async def create_post(
             )
         
         logger.debug("User API key validation successful")
-        logger.debug("=== API Key Validation End ===")
+        logger.debug("=== POST Request Validation End ===")
         
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
