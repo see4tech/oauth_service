@@ -130,16 +130,12 @@ def create_html_response(
     platform: Optional[str] = None
 ) -> HTMLResponse:
     """Create HTML response for OAuth callback"""
-    # Generate nonces for script and style
-    script_nonce = secrets.token_urlsafe(16)
-    style_nonce = secrets.token_urlsafe(16)
-    
     html_content = f"""
     <!DOCTYPE html>
     <html>
         <head>
             <title>{platform.title()} Auth Callback</title>
-            <style nonce="{style_nonce}">
+            <style>
                 body {{
                     font-family: Arial, sans-serif;
                     display: flex;
@@ -185,7 +181,7 @@ def create_html_response(
                 <div id="debugInfo" class="debug"></div>
             </div>
             
-            <script nonce="{script_nonce}">
+            <script>
                 function getQueryParam(param) {{
                     const urlParams = new URLSearchParams(window.location.search);
                     return urlParams.get(param);
@@ -228,14 +224,9 @@ def create_html_response(
     </html>
     """
     
-    # Set response headers with nonce-based CSP
+    # Set response headers
     headers = {
-        'Content-Security-Policy': (
-            f"default-src 'none'; "
-            f"script-src 'nonce-{script_nonce}'; "
-            f"style-src 'nonce-{style_nonce}'; "
-            "connect-src *"
-        )
+        'Content-Security-Policy': "default-src 'self' 'unsafe-inline'; connect-src *"
     }
     
     return HTMLResponse(content=html_content, headers=headers)

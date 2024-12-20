@@ -26,6 +26,17 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
+        
+        # Skip CSP for OAuth callback routes
+        if request.url.path.startswith('/oauth') and request.url.path.endswith('/callback'):
+            # Only set other security headers
+            response.headers["X-Frame-Options"] = "SAMEORIGIN"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-XSS-Protection"] = "1; mode=block"
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            return response
+            
+        # For all other routes, set default CSP
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
@@ -35,6 +46,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "frame-src 'self' https://www.linkedin.com https://api.linkedin.com; "
             "frame-ancestors 'self'"
         )
+        
+        # Set other security headers
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-XSS-Protection"] = "1; mode=block"
