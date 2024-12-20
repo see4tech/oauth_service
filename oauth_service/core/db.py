@@ -5,18 +5,9 @@ from typing import Optional, Dict, List
 import sys
 import traceback
 from datetime import datetime
+from ..utils.logger import get_logger
 
-# Lazy logger import to avoid circular dependencies
-def _get_logger():
-    try:
-        from ..utils.logger import get_logger
-        return get_logger(__name__)
-    except ImportError:
-        # Fallback to print if logger can't be imported
-        class FallbackLogger:
-            def info(self, msg): print(f"INFO: {msg}")
-            def error(self, msg): print(f"ERROR: {msg}")
-        return FallbackLogger()
+logger = get_logger(__name__)
 
 class SqliteDB:
     """Thread-safe SQLite database manager for OAuth tokens."""
@@ -39,7 +30,6 @@ class SqliteDB:
         """
         if not self._initialized:
             try:
-                logger = _get_logger()
                 logger.info("Initializing SqliteDB")
                 
                 # Ensure data directory exists
@@ -62,7 +52,6 @@ class SqliteDB:
                 logger.info("SqliteDB initialization complete")
             
             except Exception as e:
-                logger = _get_logger()
                 logger.error(f"Error initializing SqliteDB: {e}")
                 raise
     
@@ -169,7 +158,6 @@ class SqliteDB:
                 ''', (user_id, platform, token_data))
                 self.conn.commit()
         except sqlite3.Error as e:
-            logger = _get_logger()
             logger.error(f"Error storing token: {e}")
             raise
     
@@ -194,7 +182,6 @@ class SqliteDB:
                 result = cursor.fetchone()
                 return result[0] if result else None
         except sqlite3.Error as e:
-            logger = _get_logger()
             logger.error(f"Error retrieving token: {e}")
             raise
     
@@ -215,7 +202,6 @@ class SqliteDB:
                 ''', (user_id, platform))
                 self.conn.commit()
         except sqlite3.Error as e:
-            logger = _get_logger()
             logger.error(f"Error deleting token: {e}")
             raise
 
@@ -247,7 +233,6 @@ class SqliteDB:
                     for row in results
                 ]
         except sqlite3.Error as e:
-            logger = _get_logger()
             logger.error(f"Error retrieving user tokens: {e}")
             raise
 
@@ -269,7 +254,6 @@ class SqliteDB:
                 ''', (user_id, platform))
                 self.conn.commit()
         except sqlite3.Error as e:
-            logger = _get_logger()
             logger.error(f"Error updating token timestamp: {e}")
             raise
     
@@ -292,7 +276,6 @@ class SqliteDB:
                 ''', (user_id, platform, api_key))
                 self.conn.commit()
         except sqlite3.Error as e:
-            logger = _get_logger()
             logger.error(f"Error storing user API key: {e}")
             raise
             
@@ -317,7 +300,6 @@ class SqliteDB:
                 result = cursor.fetchone()
                 return result[0] if result else None
         except sqlite3.Error as e:
-            logger = _get_logger()
             logger.error(f"Error retrieving user API key: {e}")
             raise
             
@@ -345,7 +327,6 @@ class SqliteDB:
                 self.conn.commit()
                 return result[0] if result else None
         except sqlite3.Error as e:
-            logger = _get_logger()
             logger.error(f"Error validating user API key: {e}")
             raise
     
