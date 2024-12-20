@@ -173,19 +173,19 @@ class TokenManager:
         """
         try:
             tokens = {}
-            with self.db._lock:
-                cursor = self.db.conn.cursor()
-                cursor.execute('''
-                    SELECT user_id, platform, token_data
-                    FROM oauth_tokens
-                ''')
-                results = cursor.fetchall()
+            # Get all tokens from database using SqliteDB's methods
+            all_tokens = self.db.get_all_tokens()
+            
+            # Decrypt and organize tokens
+            for token_info in all_tokens:
+                platform = token_info['platform']
+                user_id = token_info['user_id']
+                encrypted_data = token_info['token_data']
                 
-                # Organize tokens by platform and user_id
-                for user_id, platform, encrypted_data in results:
-                    if platform not in tokens:
-                        tokens[platform] = {}
-                    tokens[platform][user_id] = self.decrypt_token_data(encrypted_data)
+                if platform not in tokens:
+                    tokens[platform] = {}
+                    
+                tokens[platform][user_id] = self.decrypt_token_data(encrypted_data)
             
             return tokens
             

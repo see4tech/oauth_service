@@ -356,6 +356,34 @@ class SqliteDB:
         if hasattr(self, 'conn'):
             self.conn.close()
 
+    def get_all_tokens(self) -> List[Dict]:
+        """
+        Retrieve all tokens from the database.
+        
+        Returns:
+            List[Dict]: List of dictionaries containing token information
+        """
+        try:
+            with self._lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT user_id, platform, token_data, updated_at
+                    FROM oauth_tokens
+                ''')
+                results = cursor.fetchall()
+                return [
+                    {
+                        'user_id': row[0],
+                        'platform': row[1],
+                        'token_data': row[2],
+                        'updated_at': row[3]
+                    }
+                    for row in results
+                ]
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving all tokens: {e}")
+            raise
+
 # Module-level function to get database instance
 def get_db():
     """
