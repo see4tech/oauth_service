@@ -27,8 +27,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         
+        # Check for any variation of CSP header
+        has_csp = any(
+            header.lower() == 'content-security-policy'
+            for header in response.headers.keys()
+        )
+        
         # Only set CSP if not already set
-        if "Content-Security-Policy" not in response.headers:
+        if not has_csp and not request.url.path.startswith('/oauth/'):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "

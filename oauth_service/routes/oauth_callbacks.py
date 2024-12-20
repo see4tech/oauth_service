@@ -238,7 +238,13 @@ def create_html_response(
     
     # Set response headers with permissive CSP for the callback page
     headers = {
-        'Content-Security-Policy': "default-src *; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src *",
+        'Content-Security-Policy': (
+            "default-src 'self' *; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "connect-src 'self' *; "
+            "frame-ancestors 'self'"
+        ),
         'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'no-store'
     }
