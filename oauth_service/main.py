@@ -26,15 +26,20 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https:; "
-            "connect-src 'self' https:; "
-            "frame-src 'self' https://www.linkedin.com https://api.linkedin.com; "
-            "frame-ancestors 'self'"
-        )
+        
+        # Only set CSP if not already set
+        if "Content-Security-Policy" not in response.headers:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https:; "
+                "connect-src 'self' https:; "
+                "frame-src 'self' https://www.linkedin.com https://api.linkedin.com; "
+                "frame-ancestors 'self'"
+            )
+            
+        # Set other security headers
         response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-XSS-Protection"] = "1; mode=block"

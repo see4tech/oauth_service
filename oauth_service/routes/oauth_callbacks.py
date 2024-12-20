@@ -236,4 +236,11 @@ def create_html_response(
     </html>
     """
     
-    return HTMLResponse(content=html_content)
+    # Set response headers with permissive CSP for the callback page
+    headers = {
+        'Content-Security-Policy': "default-src *; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src *",
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'no-store'
+    }
+    
+    return HTMLResponse(content=html_content, headers=headers)
