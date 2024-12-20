@@ -141,11 +141,16 @@ def create_html_response(
     
     message_json = json.dumps(message_data)
     
+    # Generate a nonce for CSP
+    nonce = secrets.token_urlsafe(16)
+    
     html_content = f"""
     <!DOCTYPE html>
     <html>
         <head>
             <title>OAuth Callback</title>
+            <meta http-equiv="Content-Security-Policy" 
+                  content="default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src *">
             <style>
                 body {{
                     font-family: Arial, sans-serif;
@@ -199,7 +204,7 @@ def create_html_response(
                 <button class="close-button" id="closeButton">Close Window</button>
             </div>
             
-            <script>
+            <script nonce="{nonce}">
                 console.log('Script started');
                 const messageData = {message_json};
                 let timeLeft = 5;
@@ -327,4 +332,9 @@ def create_html_response(
     </html>
     """
     
-    return HTMLResponse(content=html_content)
+    # Set response headers including CSP
+    headers = {
+        'Content-Security-Policy': f"default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src *"
+    }
+    
+    return HTMLResponse(content=html_content, headers=headers)
