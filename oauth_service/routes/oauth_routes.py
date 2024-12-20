@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile, Request, Query
+from fastapi.middleware.base import BaseHTTPMiddleware
 from typing import Optional, Dict, List
 from pydantic import BaseModel, Field
 from ..core import TokenManager
@@ -9,12 +10,40 @@ from ..models.oauth_models import (
 )
 from ..utils.logger import get_logger
 from ..config import get_settings
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 import json
 
 logger = get_logger(__name__)
 router = APIRouter()
 settings = get_settings()
+
+class APIKeyLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path.endswith("/post"):
+            logger.debug("=== Raw Request Debug Info ===")
+            logger.debug(f"Platform: {request.path_params.get('platform')}")
+            logger.debug(f"Headers: {dict(request.headers)}")
+            logger.debug(f"x-api-key header: {request.headers.get('x-api-key')}")
+            logger.debug(f"Settings API_KEY: {settings.API_KEY}")
+            
+            # Log request body
+            try:
+                body = await request.json()
+                logger.debug(f"Request body: {body}")
+                
+                # Get stored API key
+                if body.get('user_id'):
+                    db = SqliteDB()
+                    stored_api_key = db.get_user_api_key(body['user_id'], request.path_params.get('platform'))
+                    logger.debug(f"Stored API key for user: {stored_api_key}")
+            except:
+                logger.debug("Could not read request body")
+        
+        response = await call_next(request)
+        return response
+
+# Add middleware to router
+router.middleware("http")(APIKeyLoggingMiddleware())
 
 # Request models
 class PostContent(BaseModel):
