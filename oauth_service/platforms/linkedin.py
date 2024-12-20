@@ -230,7 +230,8 @@ class LinkedInOAuth(OAuthBase):
                 status_code=500,
                 detail=f"Error downloading image: {str(e)}"
             )
-    async def register_upload(self, token: str, member_id: str) -> Dict:
+    async def register_upload(self, token: str, image_url: str) -> Dict:
+        """Register an image upload with LinkedIn."""
         try:
             headers = {
                 "Authorization": f"Bearer {token}",
@@ -241,7 +242,7 @@ class LinkedInOAuth(OAuthBase):
             register_data = {
                 "registerUploadRequest": {
                     "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-                    "owner": f"urn:li:person:{member_id}",
+                    "owner": "urn:li:person:me",
                     "serviceRelationships": [{
                         "relationshipType": "OWNER",
                         "identifier": "urn:li:userGeneratedContent"
@@ -266,8 +267,7 @@ class LinkedInOAuth(OAuthBase):
                             detail=f"Failed to register upload: {response_text}"
                         )
                     
-                    data = json.loads(response_text)
-                    return data["value"]
+                    return json.loads(response_text)
                     
         except Exception as e:
             logger.error(f"Error registering upload: {str(e)}")
@@ -299,81 +299,93 @@ class LinkedInOAuth(OAuthBase):
                 detail=f"Error uploading image: {str(e)}"
             )
 
-    async def create_post(self, token: str, content: Dict) -> Dict:
+    async def create_post(self, token_data: Dict, content: Dict) -> Dict:
+        """
+        Create a LinkedIn post.
+        
+        Args:
+            token_data: Dictionary containing access token
+            content: Dictionary containing post content
+            
+        Returns:
+            Dictionary containing post ID and URL
+        """
         try:
-            member_id = await self.get_user_profile(token)
+            logger.debug("Starting LinkedIn post creation")
+            logger.debug(f"Content: {json.dumps(content)}")
             
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "X-Restli-Protocol-Version": "2.0.0"
-            }
+            # Get access token from token data
+            access_token = token_data.get("access_token")
+            if not access_token:
+                logger.error("No access token found in token data")
+                raise ValueError("No access token provided")
             
+            # Prepare post data
             post_data = {
-                "author": f"urn:li:person:{member_id}",
+                "author": "urn:li:person:me",
                 "lifecycleState": "PUBLISHED",
-                "visibility": {
-                    "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-                }
-            }
-
-            if image_url := content.get("image_url"):
-                image_data = await self.download_image(image_url)
-                register_data = await self.register_upload(token, member_id)
-                upload_url = register_data["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
-                asset_id = register_data["asset"]
-                
-                await self.upload_image(upload_url, image_data)
-                
-                post_data["specificContent"] = {
-                    "com.linkedin.ugc.ShareContent": {
-                        "shareCommentary": {
-                            "text": content.get("text", "")
-                        },
-                        "shareMediaCategory": "IMAGE",
-                        "media": [{
-                            "status": "READY",
-                            "media": asset_id
-                        }]
-                    }
-                }
-            else:
-                post_data["specificContent"] = {
+                "specificContent": {
                     "com.linkedin.ugc.ShareContent": {
                         "shareCommentary": {
                             "text": content.get("text", "")
                         },
                         "shareMediaCategory": "NONE"
                     }
+                },
+                "visibility": {
+                    "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
                 }
+            }
             
-            logger.debug(f"Creating LinkedIn post with data: {post_data}")
+            # Handle media if provided
+            if content.get("image_url"):
+                logger.debug(f"Processing image URL: {content['image_url']}")
+                media_asset = await self.register_upload(access_token, content["image_url"])
+                logger.debug(f"Media asset registered: {json.dumps(media_asset)}")
+                
+                post_data["specificContent"]["com.linkedin.ugc.ShareContent"].update({
+                    "shareMediaCategory": "IMAGE",
+                    "media": [{
+                        "status": "READY",
+                        "description": {
+                            "text": "Image"
+                        },
+                        "media": media_asset["value"]["asset"],
+                        "title": {
+                            "text": "Image"
+                        }
+                    }]
+                })
             
+            logger.debug(f"Prepared post data: {json.dumps(post_data)}")
+            
+            # Create the post
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     f"{self.api_url}/ugcPosts",
-                    headers=headers,
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "X-Restli-Protocol-Version": "2.0.0",
+                        "Content-Type": "application/json"
+                    },
                     json=post_data
                 ) as response:
                     response_text = await response.text()
+                    logger.debug(f"Post creation response status: {response.status}")
                     logger.debug(f"Post creation response: {response_text}")
                     
                     if not response.ok:
-                        raise HTTPException(
-                            status_code=response.status,
-                            detail=f"Failed to create post: {response_text}"
-                        )
+                        raise ValueError(f"Failed to create post: {response_text}")
                     
                     data = json.loads(response_text)
+                    post_id = data["id"]
+                    logger.debug(f"Post created successfully with ID: {post_id}")
+                    
                     return {
-                        "post_id": data["id"],
-                        "status": "published",
-                        "platform": "linkedin"
+                        "post_id": post_id,
+                        "url": f"https://www.linkedin.com/feed/update/{post_id}"
                     }
                     
         except Exception as e:
             logger.error(f"Error creating post: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error creating post: {str(e)}"
-            )
+            raise

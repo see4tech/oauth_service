@@ -83,36 +83,53 @@ class TokenManager:
             Dictionary containing valid token data or None if not found/invalid
         """
         try:
+            logger.debug(f"Attempting to get token for user {user_id} on platform {platform}")
             encrypted_data = self.db.get_token(user_id, platform)
             if not encrypted_data:
                 logger.debug(f"No token found for user {user_id} on platform {platform}")
                 return None
             
+            logger.debug("Decrypting token data")
             token_data = self.decrypt_token_data(encrypted_data)
+            logger.debug(f"Token data retrieved: {json.dumps({k: '***' if k in ['access_token', 'refresh_token'] else v for k, v in token_data.items()})}")
             
             # Check token expiration
             expires_at = token_data.get('expires_at')
-            if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
-                logger.debug(f"Token expired for user {user_id} on platform {platform}")
+            if expires_at:
+                current_time = datetime.utcnow()
+                expiration_time = datetime.fromtimestamp(expires_at)
+                time_until_expiry = expiration_time - current_time
+                logger.debug(f"Token expires at {expiration_time} (in {time_until_expiry})")
                 
-                # Attempt to refresh if refresh token exists
-                if token_data.get('refresh_token'):
-                    refreshed_token = await self.refresh_token(platform, user_id, token_data)
-                    if refreshed_token:
-                        return refreshed_token
-                return None
+                if expiration_time <= current_time:
+                    logger.debug(f"Token expired for user {user_id} on platform {platform}")
+                    
+                    # Attempt to refresh if refresh token exists
+                    if token_data.get('refresh_token'):
+                        logger.debug("Attempting to refresh token")
+                        refreshed_token = await self.refresh_token(platform, user_id, token_data)
+                        if refreshed_token:
+                            logger.debug("Successfully refreshed token")
+                            return refreshed_token
+                        logger.debug("Failed to refresh token")
+                    return None
+            else:
+                logger.debug("No expiration time found in token data")
             
             # Return token in format expected by platform handlers
-            return {
+            formatted_token = {
                 "access_token": token_data["access_token"],
                 "token_type": token_data.get("token_type", "Bearer"),
                 "expires_in": token_data.get("expires_in"),
                 "refresh_token": token_data.get("refresh_token"),
                 "scope": token_data.get("scope")
             }
+            logger.debug("Returning formatted token data")
+            return formatted_token
             
         except Exception as e:
             logger.error(f"Error retrieving token: {str(e)}")
+            logger.exception("Full traceback:")
             return None
     
     async def refresh_token(self, platform: str, user_id: str, token_data: Dict) -> Optional[Dict]:
