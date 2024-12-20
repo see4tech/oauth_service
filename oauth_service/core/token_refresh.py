@@ -7,7 +7,7 @@ from ..utils.logger import get_logger
 from .token_manager import TokenManager
 from ..platforms import TwitterOAuth, LinkedInOAuth
 from ..core.db import SqliteDB
-from ..config.settings import get_settings
+from ..config import get_settings
 
 logger = get_logger(__name__)
 
@@ -19,32 +19,20 @@ class TokenRefreshService:
 
     async def notify_storage_service(self, user_id: str, platform: str, new_token_data: Dict):
         """Notify the storage service about token refresh."""
-        storage_url = os.getenv("API_KEY_STORAGE")
-        api_key = os.getenv("API_KEY")
-        
-        if not storage_url or not api_key:
-            logger.error("API_KEY_STORAGE or API_KEY not configured")
-            return
-
         try:
-            # Get existing API key from storage service using query parameters
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{storage_url}/key",
-                    params={
-                        "user_id": user_id,
-                        "platform": platform
-                    },
-                    headers={"x-api-key": api_key}
-                ) as response:
-                    if not response.ok:
-                        logger.error(f"Failed to get existing API key: {await response.text()}")
-                        return
-                    existing_data = await response.json()
-                    user_api_key = existing_data.get("api_key")
+            settings = get_settings()
+            storage_url = settings.API_KEY_STORAGE
+            api_key = settings.API_KEY
+            
+            if not storage_url or not api_key:
+                logger.error("API_KEY_STORAGE or API_KEY not configured")
+                return
 
+            # Get user's API key
+            db = SqliteDB()
+            user_api_key = db.get_user_api_key(user_id, platform)
             if not user_api_key:
-                logger.error(f"No existing API key found for user {user_id} on platform {platform}")
+                logger.error(f"No API key found for user {user_id} on platform {platform}")
                 return
 
             # Prepare token expiration based on platform
