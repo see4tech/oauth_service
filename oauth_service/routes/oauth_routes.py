@@ -292,7 +292,6 @@ async def create_post(
     logger.debug(f"Platform: {platform}")
     logger.debug(f"User ID: {request.user_id}")
     logger.debug(f"x-api-key header: {x_api_key}")
-    logger.debug(f"Settings API_KEY: {settings.API_KEY}")
     
     # Get and log stored API key
     db = SqliteDB()
@@ -300,8 +299,8 @@ async def create_post(
     logger.debug(f"Stored API key for user: {stored_api_key}")
     
     try:
-        # Continue with validation
-        if x_api_key != settings.API_KEY:
+        # Validate against user's stored API key
+        if x_api_key != stored_api_key:
             logger.debug("API key validation failed")
             raise HTTPException(status_code=401, detail=f"Invalid API key: {x_api_key}")
             
