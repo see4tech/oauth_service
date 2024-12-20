@@ -12,7 +12,6 @@ import base64
 import secrets
 import aiohttp
 from datetime import datetime
-import hashlib
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
@@ -128,24 +127,44 @@ async def oauth_callback(
 
 def create_html_response(
     error: Optional[str] = None,
-    platform: Optional[str] = None,
-    code: Optional[str] = None,
-    state: Optional[str] = None
-) -> RedirectResponse:
-    """Create redirect response for OAuth callback"""
-    # Build query parameters
-    params = {
-        'type': f'{platform.upper()}_AUTH_CALLBACK',
-        'state': state
-    }
+    platform: Optional[str] = None
+) -> HTMLResponse:
+    """Create HTML response for OAuth callback"""
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+        <head>
+            <title>{platform.title()} Auth Callback</title>
+            <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline';">
+        </head>
+        <body>
+            <script>
+                function getQueryParam(param) {{
+                    const urlParams = new URLSearchParams(window.location.search);
+                    return urlParams.get(param);
+                }}
+
+                const code = getQueryParam('code');
+                const state = getQueryParam('state');
+                const error = getQueryParam('error');
+                const error_description = getQueryParam('error_description');
+
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: '{platform.upper()}_AUTH_CALLBACK',
+                        code,
+                        state,
+                        error: error_description || error || {json.dumps(error)}
+                    }}, '*');
+                    
+                    console.log('Message posted to opener window');
+                    window.close();
+                }} else {{
+                    console.error('No opener window found');
+                }}
+            </script>
+        </body>
+    </html>
+    """
     
-    if error:
-        params['error'] = error
-    if code:
-        params['code'] = code
-        
-    # Build the redirect URL with query parameters
-    query_string = '&'.join(f'{k}={v}' for k, v in params.items() if v is not None)
-    redirect_url = f'/oauth/{platform}/success?{query_string}'
-    
-    return RedirectResponse(url=redirect_url)
+    return HTMLResponse(content=html_content)
