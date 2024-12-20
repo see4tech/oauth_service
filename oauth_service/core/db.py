@@ -70,6 +70,8 @@ class SqliteDB:
         """Initialize database tables."""
         with self._lock:
             cursor = self.conn.cursor()
+            
+            # Create tables with new schema
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS oauth_tokens (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,8 +84,9 @@ class SqliteDB:
                 )
             ''')
             
+            # Create temporary table for migration
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS user_api_keys (
+                CREATE TABLE IF NOT EXISTS user_api_keys_new (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id TEXT NOT NULL,
                     platform TEXT NOT NULL,
@@ -93,6 +96,40 @@ class SqliteDB:
                     UNIQUE(user_id, platform)
                 )
             ''')
+            
+            # Check if old table exists and needs migration
+            cursor.execute('''
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='user_api_keys'
+            ''')
+            old_table_exists = cursor.fetchone() is not None
+            
+            if old_table_exists:
+                # Check if platform column exists
+                cursor.execute('''
+                    PRAGMA table_info(user_api_keys)
+                ''')
+                columns = [col[1] for col in cursor.fetchall()]
+                
+                if 'platform' not in columns:
+                    # Migrate data with default platform 'twitter' (or whatever is appropriate)
+                    cursor.execute('''
+                        INSERT INTO user_api_keys_new (user_id, platform, api_key, created_at, last_used_at)
+                        SELECT user_id, 'twitter', api_key, created_at, last_used_at
+                        FROM user_api_keys
+                    ''')
+                    
+                    # Drop old table
+                    cursor.execute('DROP TABLE user_api_keys')
+                    
+                    # Rename new table to original name
+                    cursor.execute('ALTER TABLE user_api_keys_new RENAME TO user_api_keys')
+                else:
+                    # If platform column exists, drop the temporary table
+                    cursor.execute('DROP TABLE IF EXISTS user_api_keys_new')
+            else:
+                # If no old table exists, rename the new table
+                cursor.execute('ALTER TABLE user_api_keys_new RENAME TO user_api_keys')
             
             # Add indexes if they don't exist
             cursor.execute('''
@@ -111,7 +148,8 @@ class SqliteDB:
             ''')
             
             self.conn.commit()
-            
+            logger.info("Database initialization completed successfully")
+    
     def store_token(self, user_id: str, platform: str, token_data: str) -> None:
         """
         Store encrypted token data.
