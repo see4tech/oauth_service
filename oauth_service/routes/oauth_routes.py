@@ -257,11 +257,18 @@ async def create_post(
     x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
     try:
+        logger.info("=== API Key Validation Start ===")
+        logger.info(f"Platform: {platform}")
+        logger.info(f"User ID from request: {request.user_id}")
+        logger.info(f"x-api-key header value: {x_api_key}")
+        
         # Validate user API key from header
         db = SqliteDB()
         user_id = db.validate_user_api_key(x_api_key, platform)
+        logger.info(f"User ID from database: {user_id}")
         
         if not user_id:
+            logger.error(f"Invalid API key. No user found for key: {x_api_key} and platform: {platform}")
             raise HTTPException(
                 status_code=401,
                 detail="Invalid API key"
@@ -269,10 +276,14 @@ async def create_post(
         
         # Verify user_id matches the one in the request
         if user_id != request.user_id:
+            logger.error(f"User ID mismatch. Request: {request.user_id}, Database: {user_id}")
             raise HTTPException(
                 status_code=403,
                 detail="API key does not match user_id"
             )
+        
+        logger.info("API key validation successful")
+        logger.info("=== API Key Validation End ===")
         
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()

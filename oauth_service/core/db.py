@@ -310,8 +310,25 @@ class SqliteDB:
             Optional[str]: The user_id associated with the API key or None if invalid
         """
         try:
+            logger.info("=== Database API Key Validation ===")
+            logger.info(f"Platform: {platform}")
+            logger.info(f"API key to validate: {api_key}")
+            
             with self._lock:
                 cursor = self.conn.cursor()
+                
+                # First, check if the API key exists for any user
+                cursor.execute('''
+                    SELECT user_id, api_key 
+                    FROM user_api_keys
+                    WHERE platform = ?
+                ''', (platform,))
+                rows = cursor.fetchall()
+                logger.info(f"Found {len(rows)} API keys for platform {platform}")
+                for row in rows:
+                    logger.info(f"Stored record - user_id: {row[0]}, api_key: {row[1]}")
+                
+                # Then try to validate the specific API key
                 cursor.execute('''
                     UPDATE user_api_keys 
                     SET last_used_at = CURRENT_TIMESTAMP
@@ -320,9 +337,18 @@ class SqliteDB:
                 ''', (api_key, platform))
                 result = cursor.fetchone()
                 self.conn.commit()
+                
+                if result:
+                    logger.info(f"API key validated successfully for user: {result[0]}")
+                else:
+                    logger.error(f"No matching API key found for platform: {platform}")
+                    logger.error(f"Provided API key: {api_key}")
+                
+                logger.info("=== Database API Key Validation End ===")
                 return result[0] if result else None
+            
         except sqlite3.Error as e:
-            logger.error(f"Error validating user API key: {e}")
+            logger.error(f"Database error validating user API key: {e}")
             raise
     
     @classmethod
