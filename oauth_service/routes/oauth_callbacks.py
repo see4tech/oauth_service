@@ -130,12 +130,16 @@ def create_html_response(
     platform: Optional[str] = None
 ) -> HTMLResponse:
     """Create HTML response for OAuth callback"""
+    # Generate nonces for script and style
+    script_nonce = secrets.token_urlsafe(16)
+    style_nonce = secrets.token_urlsafe(16)
+    
     html_content = f"""
     <!DOCTYPE html>
     <html>
         <head>
             <title>{platform.title()} Auth Callback</title>
-            <style>
+            <style nonce="{style_nonce}">
                 body {{
                     font-family: Arial, sans-serif;
                     display: flex;
@@ -172,9 +176,12 @@ def create_html_response(
                 <p class="message">
                     {error or 'You can close this window now.'}
                 </p>
+                <p class="message">
+                    <small>Debug info: code={'{code}'}, state={'{state}'}</small>
+                </p>
             </div>
             
-            <script>
+            <script nonce="{script_nonce}">
                 function getQueryParam(param) {{
                     const urlParams = new URLSearchParams(window.location.search);
                     return urlParams.get(param);
@@ -185,16 +192,22 @@ def create_html_response(
                 const error = getQueryParam('error');
                 const error_description = getQueryParam('error_description');
 
+                const message = {{
+                    type: '{platform.upper()}_AUTH_CALLBACK',
+                    code,
+                    state,
+                    error: error_description || error || {json.dumps(error)}
+                }};
+
+                console.log('Sending message to opener:', message);
+
                 if (window.opener) {{
-                    window.opener.postMessage({{
-                        type: '{platform.upper()}_AUTH_CALLBACK',
-                        code,
-                        state,
-                        error: error_description || error || {json.dumps(error)}
-                    }}, '*');
-                    
+                    window.opener.postMessage(message, '*');
                     console.log('Message posted to opener window');
-                    setTimeout(() => window.close(), 2000);
+                    setTimeout(() => {{
+                        console.log('Closing window...');
+                        window.close();
+                    }}, 2000);
                 }} else {{
                     console.error('No opener window found');
                 }}
@@ -203,12 +216,12 @@ def create_html_response(
     </html>
     """
     
-    # Set response headers with correct CSP
+    # Set response headers with nonce-based CSP
     headers = {
         'Content-Security-Policy': (
-            "default-src 'none'; "
-            "script-src 'unsafe-inline'; "
-            "style-src 'unsafe-inline'; "
+            f"default-src 'none'; "
+            f"script-src 'nonce-{script_nonce}'; "
+            f"style-src 'nonce-{style_nonce}'; "
             "connect-src *"
         )
     }
