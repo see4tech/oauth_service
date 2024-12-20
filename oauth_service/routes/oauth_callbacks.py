@@ -36,11 +36,11 @@ async def oauth_callback(
         if error:
             error_msg = error_description or error
             logger.error(f"OAuth error for {platform}: {error_msg}")
-            return create_html_response(error=error_msg)
+            return create_html_response(error=error_msg, platform=platform)
 
         if not code or not state:
             logger.error("Missing code or state parameter")
-            return create_html_response(error="Missing code or state parameter")
+            return create_html_response(error="Missing code or state parameter", platform=platform)
 
         oauth_handler = await get_oauth_handler(platform)
         
@@ -51,16 +51,14 @@ async def oauth_callback(
         
         if not state_data:
             logger.error(f"Invalid state parameter. Received state: {state}")
-            return create_html_response(error="Invalid state parameter")
+            return create_html_response(error="Invalid state parameter", platform=platform)
 
         logger.info(f"State verification successful. State data: {state_data}")
-
         user_id = state_data['user_id']
         frontend_callback_url = state_data['frontend_callback_url']
         logger.info(f"Processing callback for user_id: {user_id}")
         
         token_manager = TokenManager()
-        db = SqliteDB()
         
         # Handle Twitter OAuth 2.0 with PKCE
         if platform == "twitter":
@@ -68,7 +66,7 @@ async def oauth_callback(
             code_verifier = await get_code_verifier(state)
             if not code_verifier:
                 logger.error("Code verifier not found for Twitter OAuth")
-                return create_html_response(error="Code verifier not found")
+                return create_html_response(error="Code verifier not found", platform=platform)
                 
             token_data = await oauth_handler.get_access_token(
                 oauth2_code=code,
@@ -79,24 +77,12 @@ async def oauth_callback(
             
         await token_manager.store_token(platform, user_id, token_data)
         
-        # Generate or retrieve user API key
-        api_key = db.get_user_api_key(user_id)
-        if not api_key:
-            api_key = generate_api_key()
-            db.store_user_api_key(user_id, api_key)
-            logger.info(f"Generated new API key for user {user_id}")
-        else:
-            logger.info(f"Retrieved existing API key for user {user_id}")
-
-        # Return HTML that will post a message to the opener window
-        return create_html_response(
-            error=None,
-            platform=platform
-        )
+        # Return success response
+        return create_html_response(platform=platform)
 
     except Exception as e:
         logger.error(f"Error handling OAuth callback for {platform}: {str(e)}")
-        return create_html_response(error=str(e))
+        return create_html_response(error=str(e), platform=platform)
 
 def create_html_response(
     error: Optional[str] = None,
