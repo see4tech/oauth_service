@@ -135,7 +135,7 @@ def create_html_response(
     <html>
         <head>
             <title>{platform.title()} Auth Callback</title>
-            <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline';">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src *">
         </head>
         <body>
             <script>
@@ -167,4 +167,9 @@ def create_html_response(
     </html>
     """
     
-    return HTMLResponse(content=html_content)
+    # Set response headers with correct CSP
+    headers = {
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src *"
+    }
+    
+    return HTMLResponse(content=html_content, headers=headers)
