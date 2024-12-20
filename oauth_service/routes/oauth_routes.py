@@ -286,20 +286,20 @@ async def create_post(
     request: SimplePostRequest,
     x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
-    # Log API key information before any validation or try/catch
-    logger.debug("=== API Key Debug Info ===")
-    logger.debug(f"Platform: {platform}")
-    logger.debug(f"User ID: {request.user_id}")
-    logger.debug(f"x-api-key from header: {x_api_key}")
-    logger.debug(f"Expected API key from settings: {settings.API_KEY}")
+    # Log API key information immediately at INFO level
+    logger.info("=== API Key Debug Info ===")
+    logger.info(f"Platform: {platform}")
+    logger.info(f"User ID: {request.user_id}")
+    logger.info(f"x-api-key from header: {x_api_key}")
+    logger.info(f"Expected API key from settings: {settings.API_KEY}")
     
     # Get and log stored API key
     db = SqliteDB()
     stored_api_key = db.get_user_api_key(request.user_id, platform)
-    logger.debug(f"Stored API key for user: {stored_api_key}")
+    logger.info(f"Stored API key for user: {stored_api_key}")
     
     try:
-        # Validate API keys
+        # Continue with validation
         await validate_api_keys(request.user_id, platform, x_api_key)
         
         oauth_handler = await get_oauth_handler(platform)
