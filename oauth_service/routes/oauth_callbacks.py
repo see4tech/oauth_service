@@ -139,16 +139,13 @@ def create_html_response(
     if error:
         message_data["error"] = error
     
-    # Generate nonces for script and style
-    script_nonce = secrets.token_urlsafe(16)
-    style_nonce = secrets.token_urlsafe(16)
-    
     html_content = f"""
     <!DOCTYPE html>
     <html>
         <head>
             <title>OAuth Callback</title>
-            <style nonce="{style_nonce}">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+            <style>
                 body {{
                     font-family: Arial, sans-serif;
                     display: flex;
@@ -201,14 +198,15 @@ def create_html_response(
                 <button class="close-button" id="closeButton">Close Window</button>
             </div>
             
-            <script nonce="{script_nonce}">
-                // Simple window close function without any restrictions
+            <script>
+                window.oauthData = {json.dumps(message_data)};
+            </script>
+            <script>
                 function closeWindow() {{
                     if (window.opener) {{
-                        window.opener.postMessage({json.dumps(message_data)}, '*');
+                        window.opener.postMessage(window.oauthData, '*');
                     }}
                     window.close();
-                    // Fallback if window.close() fails
                     setTimeout(() => {{
                         if (!window.closed) {{
                             window.location.href = 'about:blank';
@@ -216,10 +214,8 @@ def create_html_response(
                     }}, 100);
                 }}
 
-                // Add click handler to button
                 document.getElementById('closeButton').onclick = closeWindow;
 
-                // Auto-close after 5 seconds
                 let timeLeft = 5;
                 const countdownElement = document.getElementById('countdown');
                 
@@ -233,23 +229,10 @@ def create_html_response(
                     setTimeout(updateCountdown, 1000);
                 }}
 
-                // Start countdown
                 updateCountdown();
             </script>
         </body>
     </html>
     """
     
-    # Set response headers with nonce-based CSP
-    headers = {
-        'Content-Security-Policy': (
-            f"default-src 'none'; "
-            f"script-src 'nonce-{script_nonce}'; "
-            f"style-src 'nonce-{style_nonce}'; "
-            "connect-src *"
-        ),
-        'X-Content-Type-Options': 'nosniff',
-        'Cache-Control': 'no-store'
-    }
-    
-    return HTMLResponse(content=html_content, headers=headers)
+    return HTMLResponse(content=html_content)
