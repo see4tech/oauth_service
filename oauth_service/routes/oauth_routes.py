@@ -259,7 +259,7 @@ async def create_post(
     try:
         # Validate user API key
         db = SqliteDB()
-        user_id = db.validate_user_api_key(request.api_key)
+        user_id = db.validate_user_api_key(request.api_key, platform)
         if not user_id:
             raise HTTPException(
                 status_code=401,
@@ -322,7 +322,7 @@ async def upload_media(
     try:
         # Validate user API key
         db = SqliteDB()
-        user_id = db.validate_user_api_key(x_api_key)
+        user_id = db.validate_user_api_key(x_api_key, platform)
         if not user_id:
             raise HTTPException(
                 status_code=401,

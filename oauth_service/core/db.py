@@ -86,10 +86,11 @@ class SqliteDB:
                 CREATE TABLE IF NOT EXISTS user_api_keys (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id TEXT NOT NULL,
+                    platform TEXT NOT NULL,
                     api_key TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_used_at TIMESTAMP,
-                    UNIQUE(user_id)
+                    UNIQUE(user_id, platform)
                 )
             ''')
             
@@ -100,8 +101,8 @@ class SqliteDB:
             ''')
             
             cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_user_api_keys_user 
-                ON user_api_keys(user_id)
+                CREATE INDEX IF NOT EXISTS idx_user_api_keys_user_platform 
+                ON user_api_keys(user_id, platform)
             ''')
             
             cursor.execute('''
@@ -234,12 +235,13 @@ class SqliteDB:
             logger.error(f"Error updating token timestamp: {e}")
             raise
     
-    def store_user_api_key(self, user_id: str, api_key: str) -> None:
+    def store_user_api_key(self, user_id: str, platform: str, api_key: str) -> None:
         """
         Store or update a user's API key.
         
         Args:
             user_id (str): Unique identifier for the user
+            platform (str): Platform identifier (e.g., 'twitter', 'linkedin')
             api_key (str): Generated API key
         """
         try:
@@ -247,21 +249,22 @@ class SqliteDB:
                 cursor = self.conn.cursor()
                 cursor.execute('''
                     INSERT OR REPLACE INTO user_api_keys 
-                    (user_id, api_key)
-                    VALUES (?, ?)
-                ''', (user_id, api_key))
+                    (user_id, platform, api_key)
+                    VALUES (?, ?, ?)
+                ''', (user_id, platform, api_key))
                 self.conn.commit()
         except sqlite3.Error as e:
             logger = _get_logger()
             logger.error(f"Error storing user API key: {e}")
             raise
             
-    def get_user_api_key(self, user_id: str) -> Optional[str]:
+    def get_user_api_key(self, user_id: str, platform: str) -> Optional[str]:
         """
         Retrieve a user's API key.
         
         Args:
             user_id (str): Unique identifier for the user
+            platform (str): Platform identifier (e.g., 'twitter', 'linkedin')
             
         Returns:
             Optional[str]: The user's API key or None if not found
@@ -271,8 +274,8 @@ class SqliteDB:
                 cursor = self.conn.cursor()
                 cursor.execute('''
                     SELECT api_key FROM user_api_keys
-                    WHERE user_id = ?
-                ''', (user_id,))
+                    WHERE user_id = ? AND platform = ?
+                ''', (user_id, platform))
                 result = cursor.fetchone()
                 return result[0] if result else None
         except sqlite3.Error as e:
@@ -280,12 +283,13 @@ class SqliteDB:
             logger.error(f"Error retrieving user API key: {e}")
             raise
             
-    def validate_user_api_key(self, api_key: str) -> Optional[str]:
+    def validate_user_api_key(self, api_key: str, platform: str) -> Optional[str]:
         """
         Validate an API key and return the associated user_id.
         
         Args:
             api_key (str): API key to validate
+            platform (str): Platform to validate against
             
         Returns:
             Optional[str]: The user_id associated with the API key or None if invalid
@@ -296,9 +300,9 @@ class SqliteDB:
                 cursor.execute('''
                     UPDATE user_api_keys 
                     SET last_used_at = CURRENT_TIMESTAMP
-                    WHERE api_key = ?
+                    WHERE api_key = ? AND platform = ?
                     RETURNING user_id
-                ''', (api_key,))
+                ''', (api_key, platform))
                 result = cursor.fetchone()
                 self.conn.commit()
                 return result[0] if result else None
