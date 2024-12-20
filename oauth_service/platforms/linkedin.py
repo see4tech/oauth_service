@@ -236,6 +236,10 @@ class LinkedInOAuth(OAuthBase):
             # First download the image
             image_data = await self.download_image(image_url)
             
+            # Get member ID for ownership
+            member_id = await self.get_user_profile(token)
+            logger.debug(f"Got member ID for upload: {member_id}")
+            
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
@@ -245,7 +249,7 @@ class LinkedInOAuth(OAuthBase):
             register_data = {
                 "registerUploadRequest": {
                     "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-                    "owner": "urn:li:person:me",
+                    "owner": f"urn:li:person:{member_id}",
                     "serviceRelationships": [{
                         "relationshipType": "OWNER",
                         "identifier": "urn:li:userGeneratedContent"
