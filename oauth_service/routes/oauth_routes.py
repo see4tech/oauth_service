@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile, Request
+from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile, Request, Query
 from typing import Optional, Dict, List
 from pydantic import BaseModel, Field
 from ..core import TokenManager
@@ -316,21 +316,29 @@ async def create_post(
 async def upload_media(
     platform: str,
     file: UploadFile = File(...),
-    request: MediaUploadRequest = None,
+    user_id: str = Query(..., description="User ID"),
+    api_key: str = Query(..., description="User's API key"),
     x_api_key: str = Header(..., alias="X-Api-Key")
 ) -> MediaUploadResponse:
     try:
-        # Validate user API key
-        db = SqliteDB()
-        user_id = db.validate_user_api_key(x_api_key, platform)
-        if not user_id:
+        # First validate the global API key from header
+        if x_api_key != settings.API_KEY:
             raise HTTPException(
                 status_code=401,
-                detail="Invalid API key"
+                detail="Invalid API key in header"
             )
         
-        # Verify user_id matches the one in the request
-        if user_id != request.user_id:
+        # Then validate the user-specific API key
+        db = SqliteDB()
+        validated_user_id = db.validate_user_api_key(api_key, platform)
+        if not validated_user_id:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid user API key"
+            )
+        
+        # Verify user_id matches the validated one
+        if validated_user_id != user_id:
             raise HTTPException(
                 status_code=403,
                 detail="API key does not match user_id"
@@ -339,7 +347,7 @@ async def upload_media(
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
-        token_data = await token_manager.get_valid_token(platform, request.user_id)
+        token_data = await token_manager.get_valid_token(platform, user_id)
         if not token_data:
             raise HTTPException(
                 status_code=401,
