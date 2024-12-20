@@ -135,9 +135,45 @@ def create_html_response(
     <html>
         <head>
             <title>{platform.title()} Auth Callback</title>
-            <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src *">
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                    background-color: #f5f5f5;
+                }}
+                .container {{
+                    text-align: center;
+                    padding: 2rem;
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    max-width: 80%;
+                }}
+                .success {{
+                    color: #4CAF50;
+                }}
+                .error {{
+                    color: #f44336;
+                }}
+                .message {{
+                    margin-bottom: 1rem;
+                }}
+            </style>
         </head>
         <body>
+            <div class="container">
+                <h2 class="{error and 'error' or 'success'}">
+                    {error and 'Authentication Error' or 'Authentication Successful'}
+                </h2>
+                <p class="message">
+                    {error or 'You can close this window now.'}
+                </p>
+            </div>
+            
             <script>
                 function getQueryParam(param) {{
                     const urlParams = new URLSearchParams(window.location.search);
@@ -158,7 +194,7 @@ def create_html_response(
                     }}, '*');
                     
                     console.log('Message posted to opener window');
-                    window.close();
+                    setTimeout(() => window.close(), 2000);
                 }} else {{
                     console.error('No opener window found');
                 }}
@@ -169,7 +205,12 @@ def create_html_response(
     
     # Set response headers with correct CSP
     headers = {
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src *"
+        'Content-Security-Policy': (
+            "default-src 'none'; "
+            "script-src 'unsafe-inline'; "
+            "style-src 'unsafe-inline'; "
+            "connect-src *"
+        )
     }
     
     return HTMLResponse(content=html_content, headers=headers)
