@@ -104,60 +104,58 @@ async def lifespan(app: FastAPI):
 
 async def get_api_key(api_key_header: str = Security(api_key_header), request: Request = None):
     """Validate API key from request header."""
-    print("\n=== API Key Validation Start ===")
-    print(f"Received x-api-key header: {api_key_header}")
+    logger.debug("=== API Key Validation Start ===")
     
     try:
         # Extract user_id and platform from request body for POST requests
         if request and request.method == "POST":
             try:
-                print(f"Request path: {request.url.path}")
-                print(f"Request method: {request.method}")
+                logger.debug(f"Request path: {request.url.path}")
+                logger.debug(f"Request method: {request.method}")
                 
                 body = await request.json()
-                print(f"Request body: {body}")
+                logger.debug("Request body received")
                 
                 user_id = body.get("user_id")
                 path_parts = request.url.path.split("/")
                 platform = path_parts[2] if len(path_parts) > 2 else None
                 
-                print(f"Extracted user_id: {user_id}")
-                print(f"Extracted platform: {platform}")
+                logger.debug(f"Extracted user_id: {user_id}")
+                logger.debug(f"Extracted platform: {platform}")
                 
                 if user_id and platform:
                     # Get stored API key for this user and platform
                     db = SqliteDB()
                     stored_api_key = db.get_user_api_key(user_id, platform)
-                    print(f"Stored API key for user: {stored_api_key}")
                     
                     if stored_api_key and stored_api_key == api_key_header:
-                        print("API key validation successful")
+                        logger.debug("API key validation successful")
                         return api_key_header
-                    print("API key mismatch")
+                    logger.debug("API key mismatch")
             except Exception as e:
-                print(f"Error parsing request body: {str(e)}")
+                logger.error(f"Error parsing request body: {str(e)}")
     
     except Exception as e:
-        print(f"Error during API key validation: {str(e)}")
-    
-    print("=== Falling back to global API key validation ===")
+        logger.error(f"Error during API key validation: {str(e)}")
+
+    logger.debug("=== Falling back to global API key validation ===")
     # Fallback to global API key validation
     if not settings.API_KEY:
-        print("No API key configured in settings")
+        logger.debug("No API key configured in settings")
         return None
     if not api_key_header:
-        print("No API key provided in request")
+        logger.debug("No API key provided in request")
         raise HTTPException(
             status_code=HTTP_403_FORBIDDEN,
             detail="No API key provided"
         )
     if api_key_header != settings.API_KEY:
-        print("API key mismatch with global key")
+        logger.debug("API key validation failed")
         raise HTTPException(
             status_code=HTTP_403_FORBIDDEN,
             detail="Invalid API key"
         )
-    print("API key validation successful (global)")
+    logger.debug("API key validation successful (global)")
     return api_key_header
 
 # Initialize FastAPI app

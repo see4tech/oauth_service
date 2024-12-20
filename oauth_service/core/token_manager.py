@@ -91,7 +91,10 @@ class TokenManager:
             
             logger.debug("Decrypting token data")
             token_data = self.decrypt_token_data(encrypted_data)
-            logger.debug(f"Token data retrieved: {json.dumps({k: '***' if k in ['access_token', 'refresh_token'] else v for k, v in token_data.items()})}")
+            
+            # Log non-sensitive token information
+            logger.debug("Token data retrieved with fields: " + 
+                        ", ".join([k for k in token_data.keys() if k not in ['access_token', 'refresh_token']]))
             
             # Check token expiration
             expires_at = token_data.get('expires_at')
@@ -190,36 +193,22 @@ class TokenManager:
         """
         try:
             tokens = {}
-            logger.debug("Attempting to retrieve all tokens from database")
-            
-            # Get all tokens from database using SqliteDB's methods
-            all_tokens = self.db.get_all_tokens()
-            logger.debug(f"Retrieved {len(all_tokens)} tokens from database")
-            
-            # Decrypt and organize tokens
-            for token_info in all_tokens:
-                try:
-                    platform = token_info['platform']
-                    user_id = token_info['user_id']
-                    encrypted_data = token_info['token_data']
-                    
-                    logger.debug(f"Processing token for platform: {platform}, user_id: {user_id}")
-                    
+            with self.db._lock:
+                cursor = self.db.conn.cursor()
+                cursor.execute('''
+                    SELECT user_id, platform, token_data
+                    FROM oauth_tokens
+                ''')
+                results = cursor.fetchall()
+                
+                # Organize tokens by platform and user_id
+                for user_id, platform, encrypted_data in results:
                     if platform not in tokens:
                         tokens[platform] = {}
-                        
-                    decrypted_data = self.decrypt_token_data(encrypted_data)
-                    tokens[platform][user_id] = decrypted_data
-                    logger.debug(f"Successfully processed token for {platform}, user {user_id}")
-                    
-                except Exception as token_error:
-                    logger.error(f"Error processing individual token: {str(token_error)}")
-                    logger.error(f"Token info: {token_info}")
-                    continue
+                    tokens[platform][user_id] = self.decrypt_token_data(encrypted_data)
             
             return tokens
             
         except Exception as e:
             logger.error(f"Error retrieving all tokens: {str(e)}")
-            logger.exception("Full traceback:")
             return {}

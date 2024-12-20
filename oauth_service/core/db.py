@@ -274,7 +274,7 @@ class SqliteDB:
                 result = cursor.fetchone()
                 
                 if result:
-                    print(f"Successfully retrieved API key: {result[0]}")
+                    print(f"Successfully retrieved API key")
                     return result[0]
                 else:
                     print(f"Failed to retrieve API key for user {user_id}")
