@@ -37,13 +37,13 @@ async def oauth_callback(
         
         # Handle OAuth errors
         if error:
-            error_msg = error_description or error
-            logger.error(f"OAuth error for {platform}: {error_msg}")
-            return create_html_response(error=error_msg, platform=platform)
+            logger.error(f"OAuth error: {error}")
+            logger.error(f"Error description: {error_description}")
+            return create_html_response(error=error_description or error, platform=platform)
 
         if not code or not state:
-            logger.error("Missing code or state parameter")
-            return create_html_response(error="Missing code or state parameter", platform=platform)
+            logger.error("Missing code or state")
+            return create_html_response(error="Missing required parameters", platform=platform)
 
         oauth_handler = await get_oauth_handler(platform)
         
@@ -53,8 +53,8 @@ async def oauth_callback(
         state_data = oauth_handler.verify_state(state)
         
         if not state_data:
-            logger.error(f"Invalid state parameter. Received state: {state}")
-            return create_html_response(error="Invalid state parameter", platform=platform)
+            logger.error("Invalid state")
+            return create_html_response(error="Invalid state", platform=platform)
 
         logger.info(f"State verification successful. State data: {state_data}")
         user_id = state_data['user_id']
