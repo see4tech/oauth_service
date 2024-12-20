@@ -11,6 +11,7 @@ import base64
 import secrets
 import aiohttp
 from datetime import datetime
+from ..core.settings import get_settings
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
@@ -127,141 +128,122 @@ def create_html_response(
     error: Optional[str] = None,
     platform: Optional[str] = None
 ) -> HTMLResponse:
-    """Create HTML response that posts message to opener window."""
+    """Create HTML response for OAuth callback"""
+    # Prepare message data
+    message_data = {
+        "type": f"{platform.upper()}_AUTH_CALLBACK" if platform else "AUTH_CALLBACK",
+        "success": error is None,
+    }
     
     if error:
-        message_data = {
-            "type": "OAUTH_CALLBACK",
-            "error": error,
-            "platform": platform,
-            "status": "error"
-        }
-    else:
-        message_data = {
-            "type": "OAUTH_CALLBACK",
-            "platform": platform,
-            "status": "success"
-        }
-
-    # Convert message_data to JSON string
+        message_data["error"] = error
+    
     message_json = json.dumps(message_data)
-
-    # Create a nonce
-    nonce = base64.b64encode(os.urandom(16)).decode('utf-8')
-
+    
     html_content = f"""
-        <!DOCTYPE html>
-        <html>
+    <!DOCTYPE html>
+    <html>
         <head>
-            <title>Authentication Status</title>
-            <meta http-equiv="Content-Security-Policy" 
-                  content="default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'; style-src 'unsafe-inline'">
+            <title>OAuth Callback</title>
             <style>
                 body {{
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                    font-family: Arial, sans-serif;
                     display: flex;
-                    flex-direction: column;
-                    align-items: center;
                     justify-content: center;
+                    align-items: center;
                     height: 100vh;
                     margin: 0;
-                    background-color: #f8f9fa;
-                    color: #212529;
+                    background-color: #f5f5f5;
                 }}
                 .container {{
                     text-align: center;
                     padding: 2rem;
-                    background: white;
+                    background-color: white;
                     border-radius: 8px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    max-width: 400px;
-                    width: 90%;
-                }}
-                .icon {{
-                    font-size: 48px;
-                    margin-bottom: 1rem;
-                }}
-                .message {{
-                    margin-bottom: 1rem;
-                }}
-                .timer {{
-                    color: #6c757d;
-                    font-size: 0.9rem;
-                    margin-bottom: 1rem;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    max-width: 80%;
                 }}
                 .success {{
-                    color: #28a745;
+                    color: #4CAF50;
                 }}
                 .error {{
-                    color: #dc3545;
+                    color: #f44336;
+                }}
+                .countdown {{
+                    margin-top: 1rem;
+                    font-size: 0.9em;
+                    color: #666;
                 }}
                 .close-button {{
-                    background-color: #6c757d;
+                    margin-top: 1rem;
+                    padding: 8px 16px;
+                    background-color: #4CAF50;
                     color: white;
                     border: none;
-                    padding: 0.5rem 1rem;
                     border-radius: 4px;
                     cursor: pointer;
-                    font-size: 0.9rem;
-                    transition: background-color 0.2s;
                 }}
                 .close-button:hover {{
-                    background-color: #5a6268;
+                    background-color: #45a049;
                 }}
             </style>
-            <script nonce="{nonce}">
+        </head>
+        <body>
+            <div class="container">
+                <h2 class="{error and 'error' or 'success'}">
+                    {error and 'Authentication Error' or 'Authentication Successful'}
+                </h2>
+                <p>{error or 'You can close this window now.'}</p>
+                <div class="countdown" id="countdown"></div>
+                <button class="close-button" onclick="closeWindow()">Close Window</button>
+            </div>
+            
+            <script>
                 const messageData = {message_json};
                 let timeLeft = 5;
                 let countdownInterval;
                 
                 function closeWindow() {{
-                    if (window.opener) {{
-                        window.opener.postMessage(messageData, window.location.origin);
-                        window.close();
-                    }} else {{
+                    try {{
+                        if (window.opener) {{
+                            // Post message to parent window with wildcard origin
+                            window.opener.postMessage(messageData, '*');
+                            
+                            // Close window after ensuring message is sent
+                            setTimeout(() => window.close(), 100);
+                        }}
+                        
+                        // Fallback: redirect to origin if window doesn't close
+                        setTimeout(() => {{
+                            if (!window.closed) {{
+                                window.location.href = window.location.origin;
+                            }}
+                        }}, 500);
+                    }} catch (e) {{
+                        console.error('Error closing window:', e);
                         window.location.href = window.location.origin;
                     }}
                 }}
                 
-                function startCountdown() {{
-                    const timerElement = document.getElementById('timer');
-                    
-                    function updateTimer() {{
-                        if (timerElement) {{
-                            timerElement.textContent = `Window will close in ${{timeLeft}} seconds...`;
-                        }}
+                function updateCountdown() {{
+                    const countdownElement = document.getElementById('countdown');
+                    if (countdownElement) {{
+                        countdownElement.textContent = `Window will close in ${{timeLeft}} seconds...`;
                         
                         if (timeLeft <= 0) {{
                             clearInterval(countdownInterval);
                             closeWindow();
-                            return;
                         }}
-                        
                         timeLeft--;
                     }}
-                    
-                    countdownInterval = setInterval(updateTimer, 1000);
-                    updateTimer();
                 }}
-
-                window.onload = startCountdown;
+                
+                // Start countdown
+                countdownInterval = setInterval(updateCountdown, 1000);
+                updateCountdown();
             </script>
-        </head>
-        <body>
-            <div class="container">
-                {'<div class="icon error">❌</div>' if error else '<div class="icon success">✅</div>'}
-                <h2 class="message {'error' if error else 'success'}">
-                    {error if error else f'Successfully authenticated with {platform.title()}!'}
-                </h2>
-                <p id="timer" class="timer">Window will close in 5 seconds...</p>
-                <button onclick="closeWindow()" class="close-button">Close Window</button>
-            </div>
         </body>
-        </html>
+    </html>
     """
     
-    headers = {
-        'Content-Security-Policy': f"default-src 'self'; script-src 'nonce-{nonce}' 'unsafe-inline'; style-src 'unsafe-inline'"
-    }
-    
-    return HTMLResponse(content=html_content, headers=headers)
+    return HTMLResponse(content=html_content)
