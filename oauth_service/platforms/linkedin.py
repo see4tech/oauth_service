@@ -187,17 +187,15 @@ class LinkedInOAuth(OAuthBase):
                     "https://api.linkedin.com/v2/userinfo",
                     headers=headers
                 ) as response:
-                    response_text = await response.text()
-                    logger.debug(f"Profile response status: {response.status}")
-                    logger.debug(f"Profile response: {response_text}")
+                    logger.debug(f"Profile request status: {response.status}")
                     
                     if not response.ok:
                         raise HTTPException(
                             status_code=response.status,
-                            detail=f"Failed to get user profile: {response_text}"
+                            detail="Failed to get user profile"
                         )
                     
-                    data = json.loads(response_text)
+                    data = json.loads(await response.text())
                     member_id = data.get('sub')
                     if not member_id:
                         raise HTTPException(
@@ -238,7 +236,7 @@ class LinkedInOAuth(OAuthBase):
             
             # Get member ID for ownership
             member_id = await self.get_user_profile(token)
-            logger.debug(f"Got member ID for upload: {member_id}")
+            logger.debug("Retrieved member ID for upload")
             
             headers = {
                 "Authorization": f"Bearer {token}",
@@ -257,7 +255,7 @@ class LinkedInOAuth(OAuthBase):
                 }
             }
             
-            logger.debug(f"Registering upload with data: {register_data}")
+            logger.debug("Registering upload")
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -265,16 +263,14 @@ class LinkedInOAuth(OAuthBase):
                     headers=headers,
                     json=register_data
                 ) as response:
-                    response_text = await response.text()
-                    logger.debug(f"Register upload response: {response_text}")
-                    
                     if not response.ok:
                         raise HTTPException(
                             status_code=response.status,
-                            detail=f"Failed to register upload: {response_text}"
+                            detail="Failed to register upload"
                         )
                     
-                    data = json.loads(response_text)
+                    data = json.loads(await response.text())
+                    logger.debug("Upload registered successfully")
                     
                     # Get upload URL and asset ID
                     upload_url = data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
@@ -332,7 +328,6 @@ class LinkedInOAuth(OAuthBase):
         """
         try:
             logger.debug("Starting LinkedIn post creation")
-            logger.debug(f"Content: {json.dumps(content)}")
             
             # Get access token from token data
             access_token = token_data.get("access_token")
@@ -362,9 +357,9 @@ class LinkedInOAuth(OAuthBase):
             
             # Handle media if provided
             if content.get("image_url"):
-                logger.debug(f"Processing image URL: {content['image_url']}")
+                logger.debug("Processing image upload")
                 media_asset = await self.register_upload(access_token, content["image_url"])
-                logger.debug(f"Media asset registered: {json.dumps(media_asset)}")
+                logger.debug("Media upload completed")
                 
                 post_data["specificContent"]["com.linkedin.ugc.ShareContent"].update({
                     "shareMediaCategory": "IMAGE",
@@ -380,7 +375,7 @@ class LinkedInOAuth(OAuthBase):
                     }]
                 })
             
-            logger.debug(f"Prepared post data: {json.dumps(post_data)}")
+            logger.debug("Creating post")
             
             # Create the post
             async with aiohttp.ClientSession() as session:
@@ -393,16 +388,12 @@ class LinkedInOAuth(OAuthBase):
                     },
                     json=post_data
                 ) as response:
-                    response_text = await response.text()
-                    logger.debug(f"Post creation response status: {response.status}")
-                    logger.debug(f"Post creation response: {response_text}")
-                    
                     if not response.ok:
-                        raise ValueError(f"Failed to create post: {response_text}")
+                        raise ValueError("Failed to create post")
                     
-                    data = json.loads(response_text)
+                    data = json.loads(await response.text())
                     post_id = data["id"]
-                    logger.debug(f"Post created successfully with ID: {post_id}")
+                    logger.debug("Post created successfully")
                     
                     return {
                         "post_id": post_id,
