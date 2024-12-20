@@ -196,51 +196,75 @@ def create_html_response(
                 </h2>
                 <p>{error or 'You can close this window now.'}</p>
                 <div class="countdown" id="countdown"></div>
-                <button class="close-button" onclick="closeWindow()">Close Window</button>
+                <button class="close-button" id="closeButton">Close Window</button>
             </div>
             
             <script>
+                console.log('Script started');
                 const messageData = {message_json};
                 let timeLeft = 5;
                 let countdownInterval;
                 let hasAttemptedClose = false;
                 
                 function forceClose() {{
-                    // Try multiple methods to close the window
+                    console.log('Attempting force close');
                     try {{
+                        console.log('Trying window.close()');
                         window.close();
-                        self.close();
-                        window.open('', '_self').close();
                     }} catch (e) {{
-                        console.error('Error in forceClose:', e);
+                        console.error('window.close() failed:', e);
                     }}
                     
-                    // If window is still open after all attempts, redirect
+                    try {{
+                        console.log('Trying self.close()');
+                        self.close();
+                    }} catch (e) {{
+                        console.error('self.close() failed:', e);
+                    }}
+                    
+                    try {{
+                        console.log('Trying window.open().close()');
+                        window.open('', '_self').close();
+                    }} catch (e) {{
+                        console.error('window.open().close() failed:', e);
+                    }}
+                    
+                    // If still open, redirect
                     setTimeout(() => {{
                         if (!window.closed) {{
+                            console.log('Window still open, redirecting to about:blank');
                             window.location.href = 'about:blank';
                         }}
                     }}, 100);
                 }}
                 
-                function closeWindow() {{
-                    if (hasAttemptedClose) return;
+                function closeWindow(event) {{
+                    console.log('closeWindow called', event ? 'from event' : 'from timer');
+                    if (hasAttemptedClose) {{
+                        console.log('Already attempted close, skipping');
+                        return;
+                    }}
+                    
                     hasAttemptedClose = true;
+                    console.log('Setting hasAttemptedClose to true');
                     
                     try {{
-                        // First, try to post message to parent
                         if (window.opener) {{
+                            console.log('Found window.opener, posting message');
                             window.opener.postMessage(messageData, '*');
+                            console.log('Message posted successfully');
+                        }} else {{
+                            console.log('No window.opener found');
                         }}
                         
-                        // Attempt to close immediately
+                        // Clear the interval if it exists
+                        if (countdownInterval) {{
+                            console.log('Clearing countdown interval');
+                            clearInterval(countdownInterval);
+                        }}
+                        
+                        console.log('Calling forceClose');
                         forceClose();
-                        
-                        // If still open, try again after a short delay
-                        setTimeout(forceClose, 100);
-                        
-                        // Final attempt after a longer delay
-                        setTimeout(forceClose, 500);
                     }} catch (e) {{
                         console.error('Error in closeWindow:', e);
                         forceClose();
@@ -252,6 +276,7 @@ def create_html_response(
                     if (!countdownElement) return;
                     
                     if (timeLeft <= 0) {{
+                        console.log('Countdown reached zero');
                         clearInterval(countdownInterval);
                         closeWindow();
                         return;
@@ -261,22 +286,42 @@ def create_html_response(
                     timeLeft--;
                 }}
                 
-                // Start countdown immediately
+                // Add click event listener to close button
+                const closeButton = document.getElementById('closeButton');
+                if (closeButton) {{
+                    console.log('Adding click event listener to close button');
+                    closeButton.addEventListener('click', (e) => {{
+                        console.log('Close button clicked');
+                        e.preventDefault();
+                        closeWindow(e);
+                    }});
+                }} else {{
+                    console.error('Close button not found');
+                }}
+                
+                // Start countdown
+                console.log('Starting countdown');
                 updateCountdown();
                 countdownInterval = setInterval(updateCountdown, 1000);
                 
-                // Attempt to close when the page is hidden/unloaded
-                document.addEventListener('visibilitychange', () => {{
-                    if (document.visibilityState === 'hidden') {{
-                        closeWindow();
-                    }}
+                // Add window event listeners
+                window.addEventListener('load', () => console.log('Window loaded'));
+                window.addEventListener('unload', () => console.log('Window unloading'));
+                window.addEventListener('beforeunload', () => console.log('Window before unload'));
+                
+                // Attempt to close after delay
+                console.log('Setting final close timeout');
+                setTimeout(() => {{
+                    console.log('Final close timeout triggered');
+                    closeWindow();
+                }}, 5500);
+                
+                // Log initial state
+                console.log('Initial window state:', {{
+                    hasOpener: !!window.opener,
+                    location: window.location.href,
+                    timeLeft
                 }});
-                
-                window.addEventListener('unload', closeWindow);
-                window.addEventListener('beforeunload', closeWindow);
-                
-                // Attempt to close after a short delay regardless of countdown
-                setTimeout(closeWindow, 5500);
             </script>
         </body>
     </html>
