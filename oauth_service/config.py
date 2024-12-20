@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_HOURS: int = 24
     API_KEY: Optional[str] = None
+    API_KEY_STORAGE: str  # URL for API key storage service
     
     # Database
     DATABASE_PATH: str = "data/oauth.db"
