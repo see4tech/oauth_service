@@ -135,98 +135,43 @@ def create_html_response(
     <html>
         <head>
             <title>{platform.title()} Auth Callback</title>
+            <script>
+                // Store data that will be used by the main script
+                window.oauthData = {{
+                    code: new URLSearchParams(window.location.search).get('code'),
+                    state: new URLSearchParams(window.location.search).get('state'),
+                    error: new URLSearchParams(window.location.search).get('error'),
+                    error_description: new URLSearchParams(window.location.search).get('error_description'),
+                    platform: '{platform.upper()}'
+                }};
+
+                // Send message to opener and close window
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: window.oauthData.platform + '_AUTH_CALLBACK',
+                        code: window.oauthData.code,
+                        state: window.oauthData.state,
+                        error: window.oauthData.error_description || window.oauthData.error || {json.dumps(error)}
+                    }}, '*');
+                    
+                    setTimeout(function() {{
+                        window.close();
+                    }}, 2000);
+                }}
+            </script>
             <style>
-                body {{
-                    font-family: Arial, sans-serif;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    margin: 0;
-                    background-color: #f5f5f5;
-                }}
-                .container {{
-                    text-align: center;
-                    padding: 2rem;
-                    background-color: white;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                    max-width: 80%;
-                }}
-                .success {{
-                    color: #4CAF50;
-                }}
-                .error {{
-                    color: #f44336;
-                }}
-                .message {{
-                    margin-bottom: 1rem;
-                }}
-                .debug {{
-                    font-family: monospace;
-                    font-size: 0.8em;
-                    color: #666;
-                    word-break: break-all;
-                }}
+                body {{ font-family: Arial; text-align: center; padding-top: 50px; }}
+                .success {{ color: green; }}
+                .error {{ color: red; }}
             </style>
         </head>
         <body>
-            <div class="container">
-                <h2 class="{error and 'error' or 'success'}">
-                    {error and 'Authentication Error' or 'Authentication Successful'}
-                </h2>
-                <p class="message">
-                    {error or 'You can close this window now.'}
-                </p>
-                <div id="debugInfo" class="debug"></div>
-            </div>
-            
-            <script>
-                function getQueryParam(param) {{
-                    const urlParams = new URLSearchParams(window.location.search);
-                    return urlParams.get(param);
-                }}
-
-                const code = getQueryParam('code');
-                const state = getQueryParam('state');
-                const error = getQueryParam('error');
-                const error_description = getQueryParam('error_description');
-
-                // Update debug info
-                document.getElementById('debugInfo').innerHTML = `
-                    <div>code: ${{code || 'none'}}</div>
-                    <div>state: ${{state || 'none'}}</div>
-                    <div>error: ${{error || 'none'}}</div>
-                    <div>error_description: ${{error_description || 'none'}}</div>
-                `;
-
-                const message = {{
-                    type: '{platform.upper()}_AUTH_CALLBACK',
-                    code,
-                    state,
-                    error: error_description || error || {json.dumps(error)}
-                }};
-
-                console.log('Sending message to opener:', message);
-
-                if (window.opener) {{
-                    window.opener.postMessage(message, '*');
-                    console.log('Message posted to opener window');
-                    setTimeout(() => {{
-                        console.log('Closing window...');
-                        window.close();
-                    }}, 2000);
-                }} else {{
-                    console.error('No opener window found');
-                }}
-            </script>
+            <h2 class="{error and 'error' or 'success'}">
+                {error and 'Authentication Error' or 'Authentication Successful'}
+            </h2>
+            <p>{error or 'You can close this window now.'}</p>
         </body>
     </html>
     """
     
-    # Set response headers
-    headers = {
-        'Content-Security-Policy': "default-src 'self' 'unsafe-inline'; connect-src *"
-    }
-    
-    return HTMLResponse(content=html_content, headers=headers)
+    return HTMLResponse(content=html_content)
