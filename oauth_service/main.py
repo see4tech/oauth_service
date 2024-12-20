@@ -56,6 +56,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 async def get_api_key(api_key_header: str = Security(api_key_header)):
     """Validate API key from request header."""
+    print("\n=== API Key Validation Debug ===")
+    print(f"Received API key header: {api_key_header}")
+    print(f"Settings API key: {settings.API_KEY}")
+    print("===============================\n")
+    
     if not settings.API_KEY:
         return None
     if not api_key_header:
