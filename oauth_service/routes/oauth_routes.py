@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile,
 from typing import Optional, Dict, List
 from pydantic import BaseModel, Field
 from ..core import TokenManager
-from ..core.db import SqliteDB
 from ..platforms import TwitterOAuth, LinkedInOAuth, InstagramOAuth, FacebookOAuth
 from ..models.oauth_models import (
     OAuthInitRequest, OAuthInitResponse, OAuthCallbackRequest,
@@ -13,7 +12,6 @@ from ..config import get_settings
 from fastapi.responses import RedirectResponse
 import json
 
-# Initialize logger with the module name
 logger = get_logger(__name__)
 router = APIRouter()
 settings = get_settings()
@@ -256,45 +254,24 @@ async def refresh_token(
 @router.post("/{platform}/post", response_model=PostResponse)
 async def create_post(
     platform: str,
-    request: SimplePostRequest,
-    x_api_key: str = Header(..., alias="x-api-key")
+    request: SimplePostRequest
 ) -> PostResponse:
     try:
-        logger.info("=== POST Request Validation Start ===")
-        logger.info(f"Platform: {platform}")
-        logger.info(f"User ID from request: {request.user_id}")
-        logger.info(f"x-api-key header value: {x_api_key}")
-        
-        # Get settings for comparison
-        settings = get_settings()
-        logger.info(f"Settings API_KEY: {settings.API_KEY}")
-        
-        # First validate the global API key
-        if x_api_key != settings.API_KEY:
-            logger.error("Global API key validation failed")
-            logger.error(f"Received key in header: {x_api_key}")
-            logger.error(f"Expected key from settings: {settings.API_KEY}")
+        # Validate user API key
+        db = SqliteDB()
+        user_id = db.validate_user_api_key(request.api_key, platform)
+        if not user_id:
             raise HTTPException(
                 status_code=401,
                 detail="Invalid API key"
             )
         
-        logger.info("Global API key validation successful")
-        
-        # Then validate user-specific API key
-        db = SqliteDB()
-        stored_api_key = db.get_user_api_key(request.user_id, platform)
-        logger.info(f"Stored API key for user: {stored_api_key}")
-        
-        if not stored_api_key:
-            logger.error(f"No API key found for user {request.user_id} on platform {platform}")
+        # Verify user_id matches the one in the request
+        if user_id != request.user_id:
             raise HTTPException(
-                status_code=401,
-                detail="No API key found for user"
+                status_code=403,
+                detail="API key does not match user_id"
             )
-        
-        logger.info("User API key validation successful")
-        logger.info("=== POST Request Validation End ===")
         
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
@@ -341,31 +318,11 @@ async def upload_media(
     file: UploadFile = File(...),
     user_id: str = Query(..., description="User ID"),
     api_key: str = Query(..., description="User's API key"),
-    x_api_key: str = Header(..., alias="X-Api-Key")
+    x_api_key: str = Header(..., alias="x-api-key")
 ) -> MediaUploadResponse:
     try:
-        # First validate the global API key from header
-        if x_api_key != settings.API_KEY:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid API key in header"
-            )
-        
-        # Then validate the user-specific API key
-        db = SqliteDB()
-        validated_user_id = db.validate_user_api_key(api_key, platform)
-        if not validated_user_id:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid user API key"
-            )
-        
-        # Verify user_id matches the validated one
-        if validated_user_id != user_id:
-            raise HTTPException(
-                status_code=403,
-                detail="API key does not match user_id"
-            )
+        # Validate API keys
+        await validate_api_keys(user_id, platform, x_api_key)
         
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
