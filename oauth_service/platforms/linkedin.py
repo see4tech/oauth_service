@@ -233,6 +233,9 @@ class LinkedInOAuth(OAuthBase):
     async def register_upload(self, token: str, image_url: str) -> Dict:
         """Register an image upload with LinkedIn."""
         try:
+            # First download the image
+            image_data = await self.download_image(image_url)
+            
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
@@ -267,7 +270,20 @@ class LinkedInOAuth(OAuthBase):
                             detail=f"Failed to register upload: {response_text}"
                         )
                     
-                    return json.loads(response_text)
+                    data = json.loads(response_text)
+                    
+                    # Get upload URL and asset ID
+                    upload_url = data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
+                    asset = data["value"]["asset"]
+                    
+                    # Upload the image
+                    await self.upload_image(upload_url, image_data)
+                    
+                    return {
+                        "value": {
+                            "asset": asset
+                        }
+                    }
                     
         except Exception as e:
             logger.error(f"Error registering upload: {str(e)}")
@@ -320,9 +336,12 @@ class LinkedInOAuth(OAuthBase):
                 logger.error("No access token found in token data")
                 raise ValueError("No access token provided")
             
+            # Get member ID for the post
+            member_id = await self.get_user_profile(access_token)
+            
             # Prepare post data
             post_data = {
-                "author": "urn:li:person:me",
+                "author": f"urn:li:person:{member_id}",
                 "lifecycleState": "PUBLISHED",
                 "specificContent": {
                     "com.linkedin.ugc.ShareContent": {
