@@ -56,11 +56,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 async def get_api_key(api_key_header: str = Security(api_key_header)):
     """Validate API key from request header."""
-    print("\n=== API Key Validation Debug ===")
-    print(f"Received API key header: {api_key_header}")
-    print(f"Settings API key: {settings.API_KEY}")
-    print("===============================\n")
-    
     if not settings.API_KEY:
         return None
     if not api_key_header:
@@ -190,29 +185,13 @@ async def test_oauth_service():
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle HTTP exceptions."""
-    if exc.status_code == 401 and "Invalid API key" in str(exc.detail):
-        # Log API key validation details
-        logger.debug("=== API Key Validation Error ===")
-        logger.debug(f"Path: {request.url.path}")
-        logger.debug(f"Headers: {dict(request.headers)}")
-        logger.debug(f"x-api-key header: {request.headers.get('x-api-key')}")
-        logger.debug(f"Settings API_KEY: {settings.API_KEY}")
-        
-        # If this is a POST request, try to get the user_id from the body
-        if request.method == "POST":
-            try:
-                body = await request.json()
-                user_id = body.get("user_id")
-                if user_id:
-                    logger.debug(f"User ID from request: {user_id}")
-                    # Get stored API key
-                    platform = request.path_params.get("platform")
-                    if platform:
-                        db = SqliteDB()
-                        stored_api_key = db.get_user_api_key(user_id, platform)
-                        logger.debug(f"Stored API key for user: {stored_api_key}")
-            except:
-                pass
+    print("\n=== HTTP Exception Debug ===")
+    print(f"Status Code: {exc.status_code}")
+    print(f"Error Detail: {exc.detail}")
+    print(f"Request Headers: {dict(request.headers)}")
+    print(f"API Key from header: {request.headers.get('x-api-key')}")
+    print(f"Settings API Key: {settings.API_KEY}")
+    print("==========================\n")
     
     logger.error(f"HTTP error occurred: {exc.detail}")
     return JSONResponse(
