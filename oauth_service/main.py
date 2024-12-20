@@ -104,23 +104,27 @@ async def lifespan(app: FastAPI):
 
 async def get_api_key(api_key_header: str = Security(api_key_header), request: Request = None):
     """Validate API key from request header."""
-    print("\n=== API Key Validation ===")
+    print("\n=== API Key Validation Start ===")
     print(f"Received x-api-key header: {api_key_header}")
     
     try:
         # Extract user_id and platform from request body for POST requests
         if request and request.method == "POST":
             try:
+                print(f"Request path: {request.url.path}")
+                print(f"Request method: {request.method}")
+                
                 body = await request.json()
+                print(f"Request body: {body}")
+                
                 user_id = body.get("user_id")
-                # Extract platform from URL path (e.g., /oauth/linkedin/post -> linkedin)
                 path_parts = request.url.path.split("/")
                 platform = path_parts[2] if len(path_parts) > 2 else None
                 
+                print(f"Extracted user_id: {user_id}")
+                print(f"Extracted platform: {platform}")
+                
                 if user_id and platform:
-                    print(f"User ID: {user_id}")
-                    print(f"Platform: {platform}")
-                    
                     # Get stored API key for this user and platform
                     db = SqliteDB()
                     stored_api_key = db.get_user_api_key(user_id, platform)
@@ -136,6 +140,7 @@ async def get_api_key(api_key_header: str = Security(api_key_header), request: R
     except Exception as e:
         print(f"Error during API key validation: {str(e)}")
     
+    print("=== Falling back to global API key validation ===")
     # Fallback to global API key validation
     if not settings.API_KEY:
         print("No API key configured in settings")
