@@ -23,7 +23,6 @@ class PostContent(BaseModel):
 
 class SimplePostRequest(BaseModel):
     user_id: str
-    api_key: str
     content: PostContent
 
 class MediaUploadRequest(BaseModel):
@@ -251,27 +250,45 @@ async def refresh_token(
         logger.error(f"Error refreshing token for {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool:
+    """Validate both global and user-specific API keys."""
+    try:
+        logger.info(f"Validating API key for user {user_id} on platform {platform}")
+        logger.info(f"Received x-api-key: {x_api_key}")
+        
+        # First validate global API key
+        if x_api_key != settings.API_KEY:
+            logger.error(f"Global API key validation failed. Expected: {settings.API_KEY}, Received: {x_api_key}")
+            raise HTTPException(status_code=401, detail="Invalid API key")
+            
+        logger.info("Global API key validation successful")
+        
+        # Then validate user-specific API key
+        db = SqliteDB()
+        stored_api_key = db.get_user_api_key(user_id, platform)
+        
+        if not stored_api_key:
+            logger.error(f"No API key found for user {user_id} on platform {platform}")
+            raise HTTPException(status_code=401, detail="No API key found for user")
+            
+        logger.info(f"Found stored API key for user {user_id}")
+        return True
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during API key validation: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error during validation")
+
 @router.post("/{platform}/post", response_model=PostResponse)
 async def create_post(
     platform: str,
-    request: SimplePostRequest
+    request: SimplePostRequest,
+    x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
     try:
-        # Validate user API key
-        db = SqliteDB()
-        user_id = db.validate_user_api_key(request.api_key, platform)
-        if not user_id:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid API key"
-            )
-        
-        # Verify user_id matches the one in the request
-        if user_id != request.user_id:
-            raise HTTPException(
-                status_code=403,
-                detail="API key does not match user_id"
-            )
+        # Validate API keys
+        await validate_api_keys(request.user_id, platform, x_api_key)
         
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
