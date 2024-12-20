@@ -173,22 +173,36 @@ class TokenManager:
         """
         try:
             tokens = {}
+            logger.debug("Attempting to retrieve all tokens from database")
+            
             # Get all tokens from database using SqliteDB's methods
             all_tokens = self.db.get_all_tokens()
+            logger.debug(f"Retrieved {len(all_tokens)} tokens from database")
             
             # Decrypt and organize tokens
             for token_info in all_tokens:
-                platform = token_info['platform']
-                user_id = token_info['user_id']
-                encrypted_data = token_info['token_data']
-                
-                if platform not in tokens:
-                    tokens[platform] = {}
+                try:
+                    platform = token_info['platform']
+                    user_id = token_info['user_id']
+                    encrypted_data = token_info['token_data']
                     
-                tokens[platform][user_id] = self.decrypt_token_data(encrypted_data)
+                    logger.debug(f"Processing token for platform: {platform}, user_id: {user_id}")
+                    
+                    if platform not in tokens:
+                        tokens[platform] = {}
+                        
+                    decrypted_data = self.decrypt_token_data(encrypted_data)
+                    tokens[platform][user_id] = decrypted_data
+                    logger.debug(f"Successfully processed token for {platform}, user {user_id}")
+                    
+                except Exception as token_error:
+                    logger.error(f"Error processing individual token: {str(token_error)}")
+                    logger.error(f"Token info: {token_info}")
+                    continue
             
             return tokens
             
         except Exception as e:
             logger.error(f"Error retrieving all tokens: {str(e)}")
+            logger.exception("Full traceback:")
             return {}
