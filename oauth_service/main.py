@@ -54,26 +54,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
 
-async def get_api_key(api_key_header: str = Security(api_key_header)):
-    """Validate API key from request header."""
-    if not settings.API_KEY:
-        return None
-    if not api_key_header:
-        raise HTTPException(
-            status_code=HTTP_403_FORBIDDEN, 
-            detail="No API key provided"
-        )
-    if api_key_header != settings.API_KEY:
-        raise HTTPException(
-            status_code=HTTP_403_FORBIDDEN, 
-            detail="Invalid API key"
-        )
-    return api_key_header
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
+    print("\n=== OAuth Service Startup ===")
+    print(f"Environment: {settings.ENVIRONMENT}")
+    print(f"API Key configured: {bool(settings.API_KEY)}")
+    print(f"API Key value: {settings.API_KEY}")
+    print("===========================\n")
+    
     logger.info(f"Starting OAuth Service in {settings.ENVIRONMENT} environment")
     logger.info(f"Debug mode: {settings.DEBUG}")
     logger.info(f"API documentation available at: {'/docs' if settings.ENVIRONMENT != 'production' else 'Disabled'}")
@@ -93,10 +83,48 @@ async def lifespan(app: FastAPI):
         logger.debug(f"- Client ID configured: {'Yes' if creds.get('client_id') else 'No'}")
         logger.debug(f"- Callback URL: {creds.get('callback_url')}")
     
+    try:
+        # Start token refresh service in the background
+        asyncio.create_task(start_refresh_service())
+        logger.info("Token refresh service started")
+    except Exception as e:
+        logger.error(f"Error starting token refresh service: {str(e)}")
+    
     yield
     
     # Shutdown
+    try:
+        await stop_refresh_service()
+        logger.info("Token refresh service stopped")
+    except Exception as e:
+        logger.error(f"Error stopping token refresh service: {str(e)}")
+    
     logger.info("Shutting down OAuth Service")
+
+async def get_api_key(api_key_header: str = Security(api_key_header)):
+    """Validate API key from request header."""
+    print("\n=== API Key Validation ===")
+    print(f"Received header: {api_key_header}")
+    print(f"Settings API key: {settings.API_KEY}")
+    print("========================\n")
+    
+    if not settings.API_KEY:
+        print("No API key configured in settings")
+        return None
+    if not api_key_header:
+        print("No API key provided in request")
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN, 
+            detail="No API key provided"
+        )
+    if api_key_header != settings.API_KEY:
+        print("API key mismatch")
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN, 
+            detail="Invalid API key"
+        )
+    print("API key validation successful")
+    return api_key_header
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -185,14 +213,6 @@ async def test_oauth_service():
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle HTTP exceptions."""
-    print("\n=== HTTP Exception Debug ===")
-    print(f"Status Code: {exc.status_code}")
-    print(f"Error Detail: {exc.detail}")
-    print(f"Request Headers: {dict(request.headers)}")
-    print(f"API Key from header: {request.headers.get('x-api-key')}")
-    print(f"Settings API Key: {settings.API_KEY}")
-    print("==========================\n")
-    
     logger.error(f"HTTP error occurred: {exc.detail}")
     return JSONResponse(
         status_code=exc.status_code,
@@ -207,25 +227,6 @@ async def general_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": "Internal server error"}
     )
-
-@app.on_event("startup")
-async def startup_event():
-    """Start background tasks on application startup."""
-    try:
-        # Start token refresh service in the background
-        asyncio.create_task(start_refresh_service())
-        logger.info("Token refresh service started")
-    except Exception as e:
-        logger.error(f"Error starting token refresh service: {str(e)}")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Stop background tasks on application shutdown."""
-    try:
-        await stop_refresh_service()
-        logger.info("Token refresh service stopped")
-    except Exception as e:
-        logger.error(f"Error stopping token refresh service: {str(e)}")
 
 # Run the application
 if __name__ == "__main__":
