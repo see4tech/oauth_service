@@ -166,6 +166,12 @@ def create_html_response(
                 .message {{
                     margin-bottom: 1rem;
                 }}
+                .debug {{
+                    font-family: monospace;
+                    font-size: 0.8em;
+                    color: #666;
+                    word-break: break-all;
+                }}
             </style>
         </head>
         <body>
@@ -176,9 +182,7 @@ def create_html_response(
                 <p class="message">
                     {error or 'You can close this window now.'}
                 </p>
-                <p class="message">
-                    <small>Debug info: code={'{code}'}, state={'{state}'}</small>
-                </p>
+                <div id="debugInfo" class="debug"></div>
             </div>
             
             <script nonce="{script_nonce}">
@@ -191,6 +195,14 @@ def create_html_response(
                 const state = getQueryParam('state');
                 const error = getQueryParam('error');
                 const error_description = getQueryParam('error_description');
+
+                // Update debug info
+                document.getElementById('debugInfo').innerHTML = `
+                    <div>code: ${{code || 'none'}}</div>
+                    <div>state: ${{state || 'none'}}</div>
+                    <div>error: ${{error || 'none'}}</div>
+                    <div>error_description: ${{error_description || 'none'}}</div>
+                `;
 
                 const message = {{
                     type: '{platform.upper()}_AUTH_CALLBACK',
