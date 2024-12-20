@@ -17,34 +17,6 @@ logger = get_logger(__name__)
 router = APIRouter()
 settings = get_settings()
 
-class APIKeyLoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        if request.url.path.endswith("/post"):
-            logger.debug("=== Raw Request Debug Info ===")
-            logger.debug(f"Platform: {request.path_params.get('platform')}")
-            logger.debug(f"Headers: {dict(request.headers)}")
-            logger.debug(f"x-api-key header: {request.headers.get('x-api-key')}")
-            logger.debug(f"Settings API_KEY: {settings.API_KEY}")
-            
-            # Log request body
-            try:
-                body = await request.json()
-                logger.debug(f"Request body: {body}")
-                
-                # Get stored API key
-                if body.get('user_id'):
-                    db = SqliteDB()
-                    stored_api_key = db.get_user_api_key(body['user_id'], request.path_params.get('platform'))
-                    logger.debug(f"Stored API key for user: {stored_api_key}")
-            except:
-                logger.debug("Could not read request body")
-        
-        response = await call_next(request)
-        return response
-
-# Add middleware to router
-router.middleware("http")(APIKeyLoggingMiddleware())
-
 # Request models
 class PostContent(BaseModel):
     text: str
@@ -315,7 +287,7 @@ async def create_post(
     request: SimplePostRequest,
     x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
-    # Log API key information immediately
+    # Log API key information before any validation
     logger.debug("=== API Key Debug Info ===")
     logger.debug(f"Platform: {platform}")
     logger.debug(f"User ID: {request.user_id}")
@@ -331,7 +303,7 @@ async def create_post(
         # Continue with validation
         if x_api_key != settings.API_KEY:
             logger.debug("API key validation failed")
-            raise HTTPException(status_code=401, detail="Invalid API key")
+            raise HTTPException(status_code=401, detail=f"Invalid API key: {x_api_key}")
             
         if not stored_api_key:
             logger.debug("No stored API key found")
