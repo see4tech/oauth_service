@@ -253,25 +253,26 @@ async def refresh_token(
 async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool:
     """Validate both global and user-specific API keys."""
     try:
-        logger.info(f"Validating API key for user {user_id} on platform {platform}")
-        logger.info(f"Received x-api-key: {x_api_key}")
-        
-        # First validate global API key
+        if platform == "linkedin":
+            logger.debug("=== LinkedIn API Key Validation ===")
+            logger.debug(f"Received x-api-key header: {x_api_key}")
+            
+            # Get user's stored API key
+            db = SqliteDB()
+            stored_api_key = db.get_user_api_key(user_id, platform)
+            logger.debug(f"Stored API key for user {user_id}: {stored_api_key}")
+            
+        # Rest of the validation logic
         if x_api_key != settings.API_KEY:
-            logger.error(f"Global API key validation failed. Expected: {settings.API_KEY}, Received: {x_api_key}")
             raise HTTPException(status_code=401, detail="Invalid API key")
             
-        logger.info("Global API key validation successful")
-        
         # Then validate user-specific API key
         db = SqliteDB()
         stored_api_key = db.get_user_api_key(user_id, platform)
         
         if not stored_api_key:
-            logger.error(f"No API key found for user {user_id} on platform {platform}")
             raise HTTPException(status_code=401, detail="No API key found for user")
             
-        logger.info(f"Found stored API key for user {user_id}")
         return True
         
     except HTTPException:
