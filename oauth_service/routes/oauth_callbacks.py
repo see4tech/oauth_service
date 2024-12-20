@@ -12,6 +12,7 @@ import base64
 import secrets
 import aiohttp
 from datetime import datetime
+import hashlib
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
@@ -130,106 +131,38 @@ def create_html_response(
     platform: Optional[str] = None
 ) -> HTMLResponse:
     """Create HTML response for OAuth callback"""
-    # Prepare message data
-    message_data = {
-        "type": f"{platform.upper()}_AUTH_CALLBACK" if platform else "AUTH_CALLBACK",
-        "success": error is None,
-    }
-    
-    if error:
-        message_data["error"] = error
-    
     html_content = f"""
     <!DOCTYPE html>
     <html>
         <head>
-            <title>OAuth Callback</title>
-            <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
-            <style>
-                body {{
-                    font-family: Arial, sans-serif;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    margin: 0;
-                    background-color: #f5f5f5;
-                }}
-                .container {{
-                    text-align: center;
-                    padding: 2rem;
-                    background-color: white;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                    max-width: 80%;
-                }}
-                .success {{
-                    color: #4CAF50;
-                }}
-                .error {{
-                    color: #f44336;
-                }}
-                .countdown {{
-                    margin-top: 1rem;
-                    font-size: 0.9em;
-                    color: #666;
-                }}
-                .close-button {{
-                    margin-top: 1rem;
-                    padding: 8px 16px;
-                    background-color: #4CAF50;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                }}
-                .close-button:hover {{
-                    background-color: #45a049;
-                }}
-            </style>
+            <title>{platform.title()} Auth Callback</title>
+            <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self';">
         </head>
         <body>
-            <div class="container">
-                <h2 class="{error and 'error' or 'success'}">
-                    {error and 'Authentication Error' or 'Authentication Successful'}
-                </h2>
-                <p>{error or 'You can close this window now.'}</p>
-                <div class="countdown" id="countdown"></div>
-                <button class="close-button" id="closeButton">Close Window</button>
-            </div>
-            
             <script>
-                window.oauthData = {json.dumps(message_data)};
-            </script>
-            <script>
-                function closeWindow() {{
-                    if (window.opener) {{
-                        window.opener.postMessage(window.oauthData, '*');
-                    }}
+                function getQueryParam(param) {{
+                    const urlParams = new URLSearchParams(window.location.search);
+                    return urlParams.get(param);
+                }}
+
+                const code = getQueryParam('code');
+                const state = getQueryParam('state');
+                const error = getQueryParam('error');
+                const error_description = getQueryParam('error_description');
+
+                if (window.opener) {{
+                    window.opener.postMessage({{
+                        type: '{platform.upper()}_AUTH_CALLBACK',
+                        code,
+                        state,
+                        error: error_description || error
+                    }}, window.location.origin);
+                    
+                    console.log('Message posted to opener window');
                     window.close();
-                    setTimeout(() => {{
-                        if (!window.closed) {{
-                            window.location.href = 'about:blank';
-                        }}
-                    }}, 100);
+                }} else {{
+                    console.error('No opener window found');
                 }}
-
-                document.getElementById('closeButton').onclick = closeWindow;
-
-                let timeLeft = 5;
-                const countdownElement = document.getElementById('countdown');
-                
-                function updateCountdown() {{
-                    if (timeLeft <= 0) {{
-                        closeWindow();
-                        return;
-                    }}
-                    countdownElement.textContent = `Window will close in ${{timeLeft}} seconds...`;
-                    timeLeft--;
-                    setTimeout(updateCountdown, 1000);
-                }}
-
-                updateCountdown();
             </script>
         </body>
     </html>
