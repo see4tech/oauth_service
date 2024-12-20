@@ -5,13 +5,13 @@ from ..core import TokenManager
 from ..utils.logger import get_logger
 from .oauth_routes import get_oauth_handler, get_code_verifier
 from ..core.db import SqliteDB
+from ..config import get_settings
 import json
 import os
 import base64
 import secrets
 import aiohttp
 from datetime import datetime
-from ..core.settings import get_settings
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
@@ -81,8 +81,9 @@ async def oauth_callback(
         await token_manager.store_token(platform, user_id, token_data)
         
         # Store API key in external storage service
-        storage_url = os.getenv("API_KEY_STORAGE")
-        api_key = os.getenv("API_KEY")
+        settings = get_settings()
+        storage_url = settings.API_KEY_STORAGE
+        api_key = settings.API_KEY
         
         if storage_url and api_key:
             try:
