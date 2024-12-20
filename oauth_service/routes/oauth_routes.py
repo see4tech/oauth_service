@@ -23,6 +23,7 @@ class PostContent(BaseModel):
 
 class SimplePostRequest(BaseModel):
     user_id: str
+    api_key: str
     content: PostContent
 
 class MediaUploadRequest(BaseModel):
@@ -257,33 +258,41 @@ async def create_post(
     x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
     try:
-        logger.info("=== API Key Validation Start ===")
-        logger.info(f"Platform: {platform}")
-        logger.info(f"User ID from request: {request.user_id}")
-        logger.info(f"x-api-key header value: {x_api_key}")
+        logger.debug("=== API Key Validation Start ===")
+        logger.debug(f"Platform: {platform}")
+        logger.debug(f"User ID from request: {request.user_id}")
+        logger.debug(f"x-api-key header value: {x_api_key}")
         
-        # Validate user API key from header
-        db = SqliteDB()
-        user_id = db.validate_user_api_key(x_api_key, platform)
-        logger.info(f"User ID from database: {user_id}")
+        # Get settings for comparison
+        settings = get_settings()
+        logger.debug(f"Settings API_KEY: {settings.API_KEY}")
         
-        if not user_id:
-            logger.error(f"Invalid API key. No user found for key: {x_api_key} and platform: {platform}")
+        # First validate the global API key
+        if x_api_key != settings.API_KEY:
+            logger.error(f"Global API key validation failed")
+            logger.error(f"Received key: {x_api_key}")
+            logger.error(f"Expected key: {settings.API_KEY}")
             raise HTTPException(
                 status_code=401,
                 detail="Invalid API key"
             )
         
-        # Verify user_id matches the one in the request
-        if user_id != request.user_id:
-            logger.error(f"User ID mismatch. Request: {request.user_id}, Database: {user_id}")
+        logger.debug("Global API key validation successful")
+        
+        # Then validate user-specific API key
+        db = SqliteDB()
+        stored_api_key = db.get_user_api_key(request.user_id, platform)
+        logger.debug(f"Stored API key for user: {stored_api_key}")
+        
+        if not stored_api_key:
+            logger.error(f"No API key found for user {request.user_id} on platform {platform}")
             raise HTTPException(
-                status_code=403,
-                detail="API key does not match user_id"
+                status_code=401,
+                detail="No API key found for user"
             )
         
-        logger.info("API key validation successful")
-        logger.info("=== API Key Validation End ===")
+        logger.debug("User API key validation successful")
+        logger.debug("=== API Key Validation End ===")
         
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
@@ -330,7 +339,7 @@ async def upload_media(
     file: UploadFile = File(...),
     user_id: str = Query(..., description="User ID"),
     api_key: str = Query(..., description="User's API key"),
-    x_api_key: str = Header(..., alias="x-api-key")
+    x_api_key: str = Header(..., alias="X-Api-Key")
 ) -> MediaUploadResponse:
     try:
         # First validate the global API key from header

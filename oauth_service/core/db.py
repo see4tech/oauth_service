@@ -282,20 +282,40 @@ class SqliteDB:
     def get_user_api_key(self, user_id: str, platform: str) -> Optional[str]:
         """Get the stored API key for a user and platform."""
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT api_key
-                    FROM user_api_keys
+            logger.debug(f"Getting API key for user {user_id} on platform {platform}")
+            with self._lock:
+                cursor = self.conn.cursor()
+                
+                # First check if the user exists
+                cursor.execute('''
+                    SELECT COUNT(*) 
+                    FROM user_api_keys 
                     WHERE user_id = ? AND platform = ?
-                    """,
-                    (user_id, platform)
-                )
+                ''', (user_id, platform))
+                count = cursor.fetchone()[0]
+                logger.debug(f"Found {count} records for user {user_id} on platform {platform}")
+                
+                if count == 0:
+                    logger.error(f"No API key record found for user {user_id} on platform {platform}")
+                    return None
+                
+                # Get the API key
+                cursor.execute('''
+                    SELECT api_key 
+                    FROM user_api_keys 
+                    WHERE user_id = ? AND platform = ?
+                ''', (user_id, platform))
                 result = cursor.fetchone()
-                return result[0] if result else None
+                
+                if result:
+                    logger.debug(f"Successfully retrieved API key for user {user_id}")
+                    return result[0]
+                else:
+                    logger.error(f"Failed to retrieve API key for user {user_id}")
+                    return None
+                
         except Exception as e:
-            logger.error(f"Error getting API key: {str(e)}")
+            logger.error(f"Database error getting API key: {str(e)}")
             return None
     
     def validate_user_api_key(self, api_key: str, platform: str) -> Optional[str]:
