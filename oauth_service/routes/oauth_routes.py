@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile, Request, Query
-from fastapi.middleware.base import BaseHTTPMiddleware
 from typing import Optional, Dict, List
 from pydantic import BaseModel, Field
 from ..core import TokenManager
+from ..core.db import SqliteDB
 from ..platforms import TwitterOAuth, LinkedInOAuth, InstagramOAuth, FacebookOAuth
 from ..models.oauth_models import (
     OAuthInitRequest, OAuthInitResponse, OAuthCallbackRequest,
@@ -312,43 +312,42 @@ async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool
 @router.post("/{platform}/post", response_model=PostResponse)
 async def create_post(
     platform: str,
-    request: Request,  # Use raw request to log before validation
-    x_api_key: Optional[str] = Header(None, alias="x-api-key")  # Make header optional for logging
-):
-    # Log raw request information before any validation
-    logger.debug("=== Raw Request Debug Info ===")
+    request: SimplePostRequest,
+    x_api_key: str = Header(..., alias="x-api-key")
+) -> PostResponse:
+    # Log API key information immediately
+    logger.debug("=== API Key Debug Info ===")
     logger.debug(f"Platform: {platform}")
-    logger.debug(f"Headers: {dict(request.headers)}")
+    logger.debug(f"User ID: {request.user_id}")
     logger.debug(f"x-api-key header: {x_api_key}")
     logger.debug(f"Settings API_KEY: {settings.API_KEY}")
     
-    # Now parse the request body
-    body = await request.json()
-    logger.debug(f"Request body: {body}")
-    
-    # Continue with normal validation
-    request_model = SimplePostRequest(**body)
-    
     # Get and log stored API key
     db = SqliteDB()
-    stored_api_key = db.get_user_api_key(request_model.user_id, platform)
+    stored_api_key = db.get_user_api_key(request.user_id, platform)
     logger.debug(f"Stored API key for user: {stored_api_key}")
     
     try:
         # Continue with validation
-        await validate_api_keys(request_model.user_id, platform, x_api_key)
+        if x_api_key != settings.API_KEY:
+            logger.debug("API key validation failed")
+            raise HTTPException(status_code=401, detail="Invalid API key")
+            
+        if not stored_api_key:
+            logger.debug("No stored API key found")
+            raise HTTPException(status_code=401, detail="No API key found for user")
         
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
-        token_data = await token_manager.get_valid_token(platform, request_model.user_id)
+        token_data = await token_manager.get_valid_token(platform, request.user_id)
         if not token_data:
             raise HTTPException(
                 status_code=401,
                 detail="No valid token found for this user"
             )
         
-        content_dict = request_model.content.dict(exclude_none=True)
+        content_dict = request.content.dict(exclude_none=True)
         
         # Special handling for Twitter with media
         if platform == "twitter" and content_dict.get("image_url"):
