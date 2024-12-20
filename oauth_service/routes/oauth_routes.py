@@ -254,17 +254,24 @@ async def refresh_token(
 async def create_post(
     platform: str,
     request: SimplePostRequest,
-    x_api_key: str = Header(..., alias="X-Api-Key")
+    x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
     try:
-        # Validate user API key from header against stored key for user and platform
+        # Validate user API key from header
         db = SqliteDB()
-        stored_api_key = db.get_user_api_key(request.user_id, platform)
+        user_id = db.validate_user_api_key(x_api_key, platform)
         
-        if not stored_api_key or x_api_key != stored_api_key:
+        if not user_id:
             raise HTTPException(
                 status_code=401,
                 detail="Invalid API key"
+            )
+        
+        # Verify user_id matches the one in the request
+        if user_id != request.user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="API key does not match user_id"
             )
         
         oauth_handler = await get_oauth_handler(platform)
@@ -312,7 +319,7 @@ async def upload_media(
     file: UploadFile = File(...),
     user_id: str = Query(..., description="User ID"),
     api_key: str = Query(..., description="User's API key"),
-    x_api_key: str = Header(..., alias="X-Api-Key")
+    x_api_key: str = Header(..., alias="x-api-key")
 ) -> MediaUploadResponse:
     try:
         # First validate the global API key from header
