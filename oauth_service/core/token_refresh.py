@@ -25,10 +25,14 @@ class TokenRefreshService:
             return
 
         try:
-            # Get existing API key from storage service
+            # Get existing API key from storage service using query parameters
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    f"{storage_url}/key/{user_id}/{platform}",
+                    f"{storage_url}/key",
+                    params={
+                        "user_id": user_id,
+                        "platform": platform
+                    },
                     headers={"x-api-key": api_key}
                 ) as response:
                     if not response.ok:
@@ -44,9 +48,13 @@ class TokenRefreshService:
             # Prepare token expiration based on platform
             token_expiration = None
             if platform == "twitter" and "oauth2" in new_token_data:
-                token_expiration = new_token_data["oauth2"].get("expires_at")
+                expires_at = new_token_data["oauth2"].get("expires_at")
+                if expires_at:
+                    token_expiration = datetime.fromtimestamp(expires_at).strftime("%Y-%m-%d %H:%M")
             elif platform == "linkedin":
-                token_expiration = new_token_data.get("expires_at")
+                expires_at = new_token_data.get("expires_at")
+                if expires_at:
+                    token_expiration = datetime.fromtimestamp(expires_at).strftime("%Y-%m-%d %H:%M")
 
             # Send refresh request with existing API key
             async with aiohttp.ClientSession() as session:

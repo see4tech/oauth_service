@@ -1,6 +1,4 @@
 export class TwitterTokenExchange {
-  private static readonly TOKEN_EXPIRY_BUFFER = 300; // 5 minutes buffer before expiry
-
   static async exchangeCodeForToken(
     code: string, 
     state: string, 
@@ -9,7 +7,6 @@ export class TwitterTokenExchange {
     oauth1Verifier?: string
   ) {
     if (!isOAuth1) {
-      // OAuth 2.0 flow
       const savedState = sessionStorage.getItem('twitter_auth_state');
       console.log('Comparing states:', { received: state, saved: savedState });
       
@@ -44,10 +41,12 @@ export class TwitterTokenExchange {
     }
 
     const data = await response.json();
-    await this.storeTokens(data);
-    console.log('Twitter tokens stored in localStorage');
-    
-    return data;
+    if (data.success) {
+      console.log('Twitter authentication successful');
+      return { success: true };
+    } else {
+      throw new Error('Authentication failed');
+    }
   }
 
   static async refreshToken(refreshToken: string) {
