@@ -280,29 +280,24 @@ class SqliteDB:
             raise
             
     def get_user_api_key(self, user_id: str, platform: str) -> Optional[str]:
-        """
-        Retrieve a user's API key.
-        
-        Args:
-            user_id (str): Unique identifier for the user
-            platform (str): Platform identifier (e.g., 'twitter', 'linkedin')
-            
-        Returns:
-            Optional[str]: The user's API key or None if not found
-        """
+        """Get the stored API key for a user and platform."""
         try:
-            with self._lock:
-                cursor = self.conn.cursor()
-                cursor.execute('''
-                    SELECT api_key FROM user_api_keys
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT api_key
+                    FROM user_api_keys
                     WHERE user_id = ? AND platform = ?
-                ''', (user_id, platform))
+                    """,
+                    (user_id, platform)
+                )
                 result = cursor.fetchone()
                 return result[0] if result else None
-        except sqlite3.Error as e:
-            logger.error(f"Error retrieving user API key: {e}")
-            raise
-            
+        except Exception as e:
+            logger.error(f"Error getting API key: {str(e)}")
+            return None
+    
     def validate_user_api_key(self, api_key: str, platform: str) -> Optional[str]:
         """
         Validate an API key and return the associated user_id.

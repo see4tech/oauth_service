@@ -23,7 +23,6 @@ class PostContent(BaseModel):
 
 class SimplePostRequest(BaseModel):
     user_id: str
-    api_key: str
     content: PostContent
 
 class MediaUploadRequest(BaseModel):
@@ -254,23 +253,18 @@ async def refresh_token(
 @router.post("/{platform}/post", response_model=PostResponse)
 async def create_post(
     platform: str,
-    request: SimplePostRequest
+    request: SimplePostRequest,
+    x_api_key: str = Header(..., alias="X-Api-Key")
 ) -> PostResponse:
     try:
-        # Validate user API key
+        # Validate user API key from header against stored key for user and platform
         db = SqliteDB()
-        user_id = db.validate_user_api_key(request.api_key, platform)
-        if not user_id:
+        stored_api_key = db.get_user_api_key(request.user_id, platform)
+        
+        if not stored_api_key or x_api_key != stored_api_key:
             raise HTTPException(
                 status_code=401,
                 detail="Invalid API key"
-            )
-        
-        # Verify user_id matches the one in the request
-        if user_id != request.user_id:
-            raise HTTPException(
-                status_code=403,
-                detail="API key does not match user_id"
             )
         
         oauth_handler = await get_oauth_handler(platform)
