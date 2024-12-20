@@ -253,18 +253,15 @@ async def refresh_token(
 
 async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool:
     """Validate both global and user-specific API keys."""
-    # Log keys first, before any validation
-    logger.debug("=== API Key Debug Info ===")
+    # Log non-sensitive information
+    logger.debug("=== API Key Validation ===")
     logger.debug(f"Platform: {platform}")
     logger.debug(f"User ID: {user_id}")
-    logger.debug(f"x-api-key from header: {x_api_key}")
-    logger.debug(f"Expected API key from settings: {settings.API_KEY}")
     
     try:
-        # Get user's stored API key first for logging
+        # Get user's stored API key
         db = SqliteDB()
         stored_api_key = db.get_user_api_key(user_id, platform)
-        logger.debug(f"Stored API key for user: {stored_api_key}")
         
         # Now do the validation
         if x_api_key != settings.API_KEY:
@@ -287,22 +284,20 @@ async def create_post(
     request: SimplePostRequest,
     x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
-    # Log API key information before any validation
-    logger.debug("=== API Key Debug Info ===")
+    # Log non-sensitive information
+    logger.debug("=== Processing Post Request ===")
     logger.debug(f"Platform: {platform}")
     logger.debug(f"User ID: {request.user_id}")
-    logger.debug(f"x-api-key header: {x_api_key}")
     
-    # Get and log stored API key
+    # Get stored API key
     db = SqliteDB()
     stored_api_key = db.get_user_api_key(request.user_id, platform)
-    logger.debug(f"Stored API key for user: {stored_api_key}")
     
     try:
         # Validate against user's stored API key
         if x_api_key != stored_api_key:
             logger.debug("API key validation failed")
-            raise HTTPException(status_code=401, detail=f"Invalid API key: {x_api_key}")
+            raise HTTPException(status_code=401, detail="Invalid API key")
             
         if not stored_api_key:
             logger.debug("No stored API key found")
