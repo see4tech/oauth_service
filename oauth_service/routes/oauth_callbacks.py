@@ -139,12 +139,16 @@ def create_html_response(
     if error:
         message_data["error"] = error
     
+    # Generate nonces for script and style
+    script_nonce = secrets.token_urlsafe(16)
+    style_nonce = secrets.token_urlsafe(16)
+    
     html_content = f"""
     <!DOCTYPE html>
     <html>
         <head>
             <title>OAuth Callback</title>
-            <style>
+            <style nonce="{style_nonce}">
                 body {{
                     font-family: Arial, sans-serif;
                     display: flex;
@@ -197,7 +201,7 @@ def create_html_response(
                 <button class="close-button" id="closeButton">Close Window</button>
             </div>
             
-            <script>
+            <script nonce="{script_nonce}">
                 // Simple window close function without any restrictions
                 function closeWindow() {{
                     if (window.opener) {{
@@ -236,14 +240,13 @@ def create_html_response(
     </html>
     """
     
-    # Set response headers with permissive CSP for the callback page
+    # Set response headers with nonce-based CSP
     headers = {
         'Content-Security-Policy': (
-            "default-src 'self' *; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "connect-src 'self' *; "
-            "frame-ancestors 'self'"
+            f"default-src 'none'; "
+            f"script-src 'nonce-{script_nonce}'; "
+            f"style-src 'nonce-{style_nonce}'; "
+            "connect-src *"
         ),
         'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'no-store'
