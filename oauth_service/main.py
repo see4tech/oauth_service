@@ -13,6 +13,7 @@ from datetime import datetime
 from .utils.logger import get_logger
 from .core.token_refresh import start_refresh_service, stop_refresh_service
 import asyncio
+from .db.sqlite_db import SqliteDB
 
 # Initialize settings and logger
 settings = get_settings()
@@ -104,26 +105,60 @@ async def lifespan(app: FastAPI):
 async def get_api_key(api_key_header: str = Security(api_key_header)):
     """Validate API key from request header."""
     print("\n=== API Key Validation ===")
-    print(f"Received header: {api_key_header}")
-    print(f"Settings API key: {settings.API_KEY}")
-    print("========================\n")
+    print(f"Received x-api-key header: {api_key_header}")
     
+    # Get request from context
+    request = Request(scope={"type": "http"})  # Get current request
+    
+    try:
+        # Extract user_id and platform from request body for POST requests
+        if request.method == "POST":
+            body = await request.json()
+            user_id = body.get("user_id")
+            platform = request.url.path.split("/")[2]  # Extract platform from URL path
+            
+            if user_id and platform:
+                print(f"User ID: {user_id}")
+                print(f"Platform: {platform}")
+                
+                # Get stored API key for this user and platform
+                db = SqliteDB()
+                stored_api_key = db.get_user_api_key(user_id, platform)
+                print(f"Stored API key for user: {stored_api_key}")
+                
+                if stored_api_key != api_key_header:
+                    print("API key mismatch")
+                    raise HTTPException(
+                        status_code=HTTP_403_FORBIDDEN,
+                        detail="Invalid API key"
+                    )
+                print("API key validation successful")
+                return api_key_header
+    
+    except Exception as e:
+        print(f"Error during API key validation: {str(e)}")
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN,
+            detail="Invalid API key"
+        )
+    
+    # Fallback to global API key validation
     if not settings.API_KEY:
         print("No API key configured in settings")
         return None
     if not api_key_header:
         print("No API key provided in request")
         raise HTTPException(
-            status_code=HTTP_403_FORBIDDEN, 
+            status_code=HTTP_403_FORBIDDEN,
             detail="No API key provided"
         )
     if api_key_header != settings.API_KEY:
-        print("API key mismatch")
+        print("API key mismatch with global key")
         raise HTTPException(
-            status_code=HTTP_403_FORBIDDEN, 
+            status_code=HTTP_403_FORBIDDEN,
             detail="Invalid API key"
         )
-    print("API key validation successful")
+    print("API key validation successful (global)")
     return api_key_header
 
 # Initialize FastAPI app
