@@ -83,56 +83,36 @@ class TokenManager:
             Dictionary containing valid token data or None if not found/invalid
         """
         try:
-            logger.debug(f"Attempting to get token for user {user_id} on platform {platform}")
             encrypted_data = self.db.get_token(user_id, platform)
             if not encrypted_data:
                 logger.debug(f"No token found for user {user_id} on platform {platform}")
                 return None
             
-            logger.debug("Decrypting token data")
             token_data = self.decrypt_token_data(encrypted_data)
-            
-            # Log non-sensitive token information
-            logger.debug("Token data retrieved with fields: " + 
-                        ", ".join([k for k in token_data.keys() if k not in ['access_token', 'refresh_token']]))
             
             # Check token expiration
             expires_at = token_data.get('expires_at')
-            if expires_at:
-                current_time = datetime.utcnow()
-                expiration_time = datetime.fromtimestamp(expires_at)
-                time_until_expiry = expiration_time - current_time
-                logger.debug(f"Token expires at {expiration_time} (in {time_until_expiry})")
+            if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
+                logger.debug(f"Token expired for user {user_id} on platform {platform}")
                 
-                if expiration_time <= current_time:
-                    logger.debug(f"Token expired for user {user_id} on platform {platform}")
-                    
-                    # Attempt to refresh if refresh token exists
-                    if token_data.get('refresh_token'):
-                        logger.debug("Attempting to refresh token")
-                        refreshed_token = await self.refresh_token(platform, user_id, token_data)
-                        if refreshed_token:
-                            logger.debug("Successfully refreshed token")
-                            return refreshed_token
-                        logger.debug("Failed to refresh token")
-                    return None
-            else:
-                logger.debug("No expiration time found in token data")
+                # Attempt to refresh if refresh token exists
+                if token_data.get('refresh_token'):
+                    refreshed_token = await self.refresh_token(platform, user_id, token_data)
+                    if refreshed_token:
+                        return refreshed_token
+                return None
             
             # Return token in format expected by platform handlers
-            formatted_token = {
+            return {
                 "access_token": token_data["access_token"],
                 "token_type": token_data.get("token_type", "Bearer"),
                 "expires_in": token_data.get("expires_in"),
                 "refresh_token": token_data.get("refresh_token"),
                 "scope": token_data.get("scope")
             }
-            logger.debug("Returning formatted token data")
-            return formatted_token
             
         except Exception as e:
             logger.error(f"Error retrieving token: {str(e)}")
-            logger.exception("Full traceback:")
             return None
     
     async def refresh_token(self, platform: str, user_id: str, token_data: Dict) -> Optional[Dict]:
@@ -203,12 +183,20 @@ class TokenManager:
                 
                 # Organize tokens by platform and user_id
                 for user_id, platform, encrypted_data in results:
-                    if platform not in tokens:
-                        tokens[platform] = {}
-                    tokens[platform][user_id] = self.decrypt_token_data(encrypted_data)
+                    try:
+                        if platform not in tokens:
+                            tokens[platform] = {}
+                        decrypted_data = self.decrypt_token_data(encrypted_data)
+                        tokens[platform][user_id] = decrypted_data
+                    except Exception as decrypt_error:
+                        # Log once and continue with other tokens
+                        logger.warning(f"Could not decrypt token for user {user_id} on platform {platform}")
+                        continue
             
             return tokens
             
         except Exception as e:
-            logger.error(f"Error retrieving all tokens: {str(e)}")
+            # Log only if it's not a common "no such table" error during initialization
+            if "no such table" not in str(e).lower():
+                logger.warning("Could not retrieve tokens from database")
             return {}
