@@ -283,36 +283,43 @@ async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool
 @router.post("/{platform}/post", response_model=PostResponse)
 async def create_post(
     platform: str,
-    request: SimplePostRequest,
-    x_api_key: str = Header(..., alias="x-api-key")
-) -> PostResponse:
-    # Log API key information immediately at INFO level
-    logger.info("=== API Key Debug Info ===")
-    logger.info(f"Platform: {platform}")
-    logger.info(f"User ID: {request.user_id}")
-    logger.info(f"x-api-key from header: {x_api_key}")
-    logger.info(f"Expected API key from settings: {settings.API_KEY}")
+    request: Request,  # Use raw request to log before validation
+    x_api_key: Optional[str] = Header(None, alias="x-api-key")  # Make header optional for logging
+):
+    # Log raw request information before any validation
+    logger.debug("=== Raw Request Debug Info ===")
+    logger.debug(f"Platform: {platform}")
+    logger.debug(f"Headers: {dict(request.headers)}")
+    logger.debug(f"x-api-key header: {x_api_key}")
+    logger.debug(f"Settings API_KEY: {settings.API_KEY}")
+    
+    # Now parse the request body
+    body = await request.json()
+    logger.debug(f"Request body: {body}")
+    
+    # Continue with normal validation
+    request_model = SimplePostRequest(**body)
     
     # Get and log stored API key
     db = SqliteDB()
-    stored_api_key = db.get_user_api_key(request.user_id, platform)
-    logger.info(f"Stored API key for user: {stored_api_key}")
+    stored_api_key = db.get_user_api_key(request_model.user_id, platform)
+    logger.debug(f"Stored API key for user: {stored_api_key}")
     
     try:
         # Continue with validation
-        await validate_api_keys(request.user_id, platform, x_api_key)
+        await validate_api_keys(request_model.user_id, platform, x_api_key)
         
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
-        token_data = await token_manager.get_valid_token(platform, request.user_id)
+        token_data = await token_manager.get_valid_token(platform, request_model.user_id)
         if not token_data:
             raise HTTPException(
                 status_code=401,
                 detail="No valid token found for this user"
             )
         
-        content_dict = request.content.dict(exclude_none=True)
+        content_dict = request_model.content.dict(exclude_none=True)
         
         # Special handling for Twitter with media
         if platform == "twitter" and content_dict.get("image_url"):
