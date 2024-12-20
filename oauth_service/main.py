@@ -185,6 +185,30 @@ async def test_oauth_service():
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle HTTP exceptions."""
+    if exc.status_code == 401 and "Invalid API key" in str(exc.detail):
+        # Log API key validation details
+        logger.debug("=== API Key Validation Error ===")
+        logger.debug(f"Path: {request.url.path}")
+        logger.debug(f"Headers: {dict(request.headers)}")
+        logger.debug(f"x-api-key header: {request.headers.get('x-api-key')}")
+        logger.debug(f"Settings API_KEY: {settings.API_KEY}")
+        
+        # If this is a POST request, try to get the user_id from the body
+        if request.method == "POST":
+            try:
+                body = await request.json()
+                user_id = body.get("user_id")
+                if user_id:
+                    logger.debug(f"User ID from request: {user_id}")
+                    # Get stored API key
+                    platform = request.path_params.get("platform")
+                    if platform:
+                        db = SqliteDB()
+                        stored_api_key = db.get_user_api_key(user_id, platform)
+                        logger.debug(f"Stored API key for user: {stored_api_key}")
+            except:
+                pass
+    
     logger.error(f"HTTP error occurred: {exc.detail}")
     return JSONResponse(
         status_code=exc.status_code,
