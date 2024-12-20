@@ -60,7 +60,7 @@ class SqliteDB:
         with self._lock:
             cursor = self.conn.cursor()
             
-            # Create tables with new schema
+            # Create oauth_tokens table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS oauth_tokens (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,9 +73,9 @@ class SqliteDB:
                 )
             ''')
             
-            # Create temporary table for migration
+            # Create user_api_keys table
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS user_api_keys_new (
+                CREATE TABLE IF NOT EXISTS user_api_keys (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id TEXT NOT NULL,
                     platform TEXT NOT NULL,
@@ -86,41 +86,7 @@ class SqliteDB:
                 )
             ''')
             
-            # Check if old table exists and needs migration
-            cursor.execute('''
-                SELECT name FROM sqlite_master 
-                WHERE type='table' AND name='user_api_keys'
-            ''')
-            old_table_exists = cursor.fetchone() is not None
-            
-            if old_table_exists:
-                # Check if platform column exists
-                cursor.execute('''
-                    PRAGMA table_info(user_api_keys)
-                ''')
-                columns = [col[1] for col in cursor.fetchall()]
-                
-                if 'platform' not in columns:
-                    # Migrate data with default platform 'twitter' (or whatever is appropriate)
-                    cursor.execute('''
-                        INSERT INTO user_api_keys_new (user_id, platform, api_key, created_at, last_used_at)
-                        SELECT user_id, 'twitter', api_key, created_at, last_used_at
-                        FROM user_api_keys
-                    ''')
-                    
-                    # Drop old table
-                    cursor.execute('DROP TABLE user_api_keys')
-                    
-                    # Rename new table to original name
-                    cursor.execute('ALTER TABLE user_api_keys_new RENAME TO user_api_keys')
-                else:
-                    # If platform column exists, drop the temporary table
-                    cursor.execute('DROP TABLE IF EXISTS user_api_keys_new')
-            else:
-                # If no old table exists, rename the new table
-                cursor.execute('ALTER TABLE user_api_keys_new RENAME TO user_api_keys')
-            
-            # Add indexes if they don't exist
+            # Add indexes
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user_platform 
                 ON oauth_tokens(user_id, platform)
@@ -282,7 +248,7 @@ class SqliteDB:
     def get_user_api_key(self, user_id: str, platform: str) -> Optional[str]:
         """Get the stored API key for a user and platform."""
         try:
-            logger.debug(f"Getting API key for user {user_id} on platform {platform}")
+            print(f"\n=== Getting API key for user {user_id} on platform {platform} ===")
             with self._lock:
                 cursor = self.conn.cursor()
                 
@@ -293,10 +259,10 @@ class SqliteDB:
                     WHERE user_id = ? AND platform = ?
                 ''', (user_id, platform))
                 count = cursor.fetchone()[0]
-                logger.debug(f"Found {count} records for user {user_id} on platform {platform}")
+                print(f"Found {count} records for user {user_id} on platform {platform}")
                 
                 if count == 0:
-                    logger.error(f"No API key record found for user {user_id} on platform {platform}")
+                    print(f"No API key record found for user {user_id} on platform {platform}")
                     return None
                 
                 # Get the API key
@@ -308,14 +274,14 @@ class SqliteDB:
                 result = cursor.fetchone()
                 
                 if result:
-                    logger.debug(f"Successfully retrieved API key for user {user_id}")
+                    print(f"Successfully retrieved API key: {result[0]}")
                     return result[0]
                 else:
-                    logger.error(f"Failed to retrieve API key for user {user_id}")
+                    print(f"Failed to retrieve API key for user {user_id}")
                     return None
                 
         except Exception as e:
-            logger.error(f"Database error getting API key: {str(e)}")
+            print(f"Database error getting API key: {str(e)}")
             return None
     
     def validate_user_api_key(self, api_key: str, platform: str) -> Optional[str]:
@@ -330,25 +296,29 @@ class SqliteDB:
             Optional[str]: The user_id associated with the API key or None if invalid
         """
         try:
-            logger.info("=== Database API Key Validation ===")
-            logger.info(f"Platform: {platform}")
-            logger.info(f"API key to validate: {api_key}")
+            print("\n=== Database API Key Validation ===")
+            print(f"Platform: {platform}")
+            print(f"API key to validate: {api_key}")
             
             with self._lock:
                 cursor = self.conn.cursor()
                 
-                # First, check if the API key exists for any user
+                # Show all API keys for debugging
                 cursor.execute('''
-                    SELECT user_id, api_key 
+                    SELECT user_id, api_key, created_at, last_used_at
                     FROM user_api_keys
                     WHERE platform = ?
                 ''', (platform,))
                 rows = cursor.fetchall()
-                logger.info(f"Found {len(rows)} API keys for platform {platform}")
+                print(f"\nFound {len(rows)} API keys for platform {platform}:")
                 for row in rows:
-                    logger.info(f"Stored record - user_id: {row[0]}, api_key: {row[1]}")
+                    print(f"- User ID: {row[0]}")
+                    print(f"  API Key: {row[1]}")
+                    print(f"  Created: {row[2]}")
+                    print(f"  Last Used: {row[3]}")
+                print()
                 
-                # Then try to validate the specific API key
+                # Validate the specific API key
                 cursor.execute('''
                     UPDATE user_api_keys 
                     SET last_used_at = CURRENT_TIMESTAMP
@@ -359,16 +329,16 @@ class SqliteDB:
                 self.conn.commit()
                 
                 if result:
-                    logger.info(f"API key validated successfully for user: {result[0]}")
+                    print(f"API key validated successfully for user: {result[0]}")
                 else:
-                    logger.error(f"No matching API key found for platform: {platform}")
-                    logger.error(f"Provided API key: {api_key}")
+                    print("No matching API key found")
+                    print(f"Provided API key: {api_key}")
                 
-                logger.info("=== Database API Key Validation End ===")
+                print("=== Database API Key Validation End ===\n")
                 return result[0] if result else None
             
         except sqlite3.Error as e:
-            logger.error(f"Database error validating user API key: {e}")
+            print(f"Database error validating user API key: {e}")
             raise
     
     @classmethod
