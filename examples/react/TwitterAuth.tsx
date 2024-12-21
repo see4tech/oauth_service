@@ -45,16 +45,21 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         sessionStorage.setItem('twitter_oauth1_url', tokens.oauth1_url);
         
         // Add a longer delay before opening the OAuth 1.0a window
+        console.log('[Parent] Waiting before opening OAuth 1.0a window...');
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Open the window directly with the OAuth 1.0a URL
+        console.log('[Parent] Opening OAuth 1.0a window...');
         const features = 'width=600,height=700,scrollbars=yes,toolbar=no,menubar=no,location=yes,status=yes';
-        const oauth1Window = window.open(tokens.oauth1_url, 'Twitter Auth OAuth1', features);
+        const oauth1Window = window.open(tokens.oauth1_url, '_blank', features);
         
         if (!oauth1Window) {
-          toast.error('Please allow popups and try again');
-          throw new Error('Could not open OAuth 1.0a window - popup blocked');
+          console.error('[Parent] Failed to open OAuth 1.0a window');
+          toast.error('Could not open OAuth 1.0a window. Please try again.');
+          throw new Error('Could not open OAuth 1.0a window');
         }
+        
+        console.log('[Parent] OAuth 1.0a window opened successfully');
         
         // Store the window reference
         setAuthWindow(oauth1Window);
@@ -69,6 +74,8 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
             toast.error('OAuth 1.0a window closed too quickly. Please try again.');
             setOauth1Pending(false);
             setIsLoading(false);
+          } else {
+            console.log('[Parent] OAuth 1.0a window still open after timeout check');
           }
         }, 1000);
         

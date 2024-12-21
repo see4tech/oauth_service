@@ -36,11 +36,8 @@ export class TwitterPopupHandler {
     const top = window.screenY + (window.outerHeight - height) / 2;
     const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=yes,status=yes,scrollbars=yes`;
     
-    // Use different window names for OAuth 1.0a and OAuth 2.0 to prevent conflicts
-    const windowName = isOAuth1 ? 'Twitter Auth OAuth1' : 'Twitter Auth OAuth2';
-    
     try {
-      // For OAuth 1.0a, always open a new window
+      // For OAuth 1.0a, always open a new window with _blank target
       if (isOAuth1) {
         console.log(`[Parent] Opening new OAuth 1.0a window with URL:`, url);
         const authWindow = window.open(url, '_blank', features);
@@ -76,21 +73,13 @@ export class TwitterPopupHandler {
         return authWindow;
       }
       
-      // For OAuth 2.0, try to focus existing window first
-      const existingWindow = window.open('', windowName);
-      if (existingWindow && !existingWindow.closed) {
-        console.log(`[Parent] Found existing ${windowName} window, updating URL`);
-        existingWindow.location.href = url;
-        existingWindow.focus();
-        return existingWindow;
-      }
-      
-      // Open new OAuth 2.0 window
-      console.log(`[Parent] Opening new ${windowName} window`);
+      // For OAuth 2.0, use a named window
+      const windowName = 'Twitter Auth OAuth2';
+      console.log(`[Parent] Opening OAuth 2.0 window with name:`, windowName);
       const authWindow = window.open(url, windowName, features);
       
       if (!authWindow) {
-        console.error('[Parent] Failed to open auth window');
+        console.error('[Parent] Failed to open OAuth 2.0 window');
         return null;
       }
 
@@ -119,7 +108,7 @@ export class TwitterPopupHandler {
       
       return authWindow;
     } catch (error) {
-      console.error(`[Parent] Error opening ${windowName} window:`, error);
+      console.error(`[Parent] Error opening auth window:`, error);
       return null;
     }
   }

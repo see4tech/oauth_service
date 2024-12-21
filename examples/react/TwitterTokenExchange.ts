@@ -59,6 +59,20 @@ export class TwitterTokenExchange {
       if (!isOAuth1) {
         localStorage.setItem('twitter_access_token', JSON.stringify(data));
         console.log('[Parent] Twitter OAuth 2.0 tokens stored');
+        
+        // If we have an OAuth 1.0a URL, open it in a new window
+        if (data.oauth1_url) {
+          console.log('[Parent] Opening OAuth 1.0a window with URL:', data.oauth1_url);
+          const features = 'width=600,height=700,scrollbars=yes,toolbar=no,menubar=no,location=yes,status=yes';
+          const oauth1Window = window.open(data.oauth1_url, '_blank', features);
+          
+          if (!oauth1Window) {
+            console.error('[Parent] Failed to open OAuth 1.0a window');
+            throw new Error('Could not open OAuth 1.0a window');
+          }
+          
+          oauth1Window.focus();
+        }
       } else {
         console.log('[Parent] Twitter OAuth 1.0a tokens received');
       }
