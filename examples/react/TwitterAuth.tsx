@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "./ui/button";
 import { Loader2, Twitter, RefreshCw } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
@@ -13,7 +13,6 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [authWindow, setAuthWindow] = useState<Window | null>(null);
-  const [countdown, setCountdown] = useState<number | null>(null);
   const [localIsConnected, setLocalIsConnected] = useState(isConnected);
   const [oauth1Pending, setOauth1Pending] = useState(false);
   
@@ -37,40 +36,58 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
       });
       
       // If we received OAuth 1.0a URL in the response and we're not already in OAuth 1.0a flow
-      if (!isOAuth1 && tokens.oauth1_url) {
+      if (!isOAuth1 && tokens.oauth1_url && authWindow && !authWindow.closed) {
         console.log('[Parent] Initiating OAuth 1.0a flow with URL:', tokens.oauth1_url);
         setOauth1Pending(true);
         
         // Store the OAuth 1.0a URL in case we need to retry
         sessionStorage.setItem('twitter_oauth1_url', tokens.oauth1_url);
         
-        // Add a longer delay before opening the OAuth 1.0a window
-        console.log('[Parent] Waiting before opening OAuth 1.0a window...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Open a new window for OAuth 1.0a
-        console.log('[Parent] Opening OAuth 1.0a window...');
-        const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
-        
-        if (!oauth1Window) {
-          console.error('[Parent] Failed to open OAuth 1.0a window');
-          toast.error('Could not open OAuth 1.0a window. Please try again.');
-          throw new Error('Could not open OAuth 1.0a window');
+        // Display a message in the window
+        try {
+          authWindow.document.body.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: system-ui, -apple-system, sans-serif;">
+              <h2 style="margin-bottom: 20px;">OAuth 2.0 Authorization Complete</h2>
+              <p style="margin-bottom: 20px;">Please click the button below to complete Twitter OAuth 1.0a authorization.</p>
+              <a href="${tokens.oauth1_url}" 
+                 style="background-color: #1da1f2; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 500;">
+                Continue with Twitter OAuth 1.0a
+              </a>
+            </div>
+          `;
+        } catch (error) {
+          // If we can't modify the window content (e.g., due to CORS), navigate directly
+          console.log('[Parent] Redirecting to OAuth 1.0a URL');
+          authWindow.location.href = tokens.oauth1_url;
         }
-        
-        console.log('[Parent] OAuth 1.0a window opened successfully');
-        setAuthWindow(oauth1Window);
         
         return;
       }
       
-      // Only call onSuccess and close window after both flows are complete
+      // Only call onSuccess and update UI after both flows are complete
       if (isOAuth1 || !tokens.oauth1_url) {
         console.log('[Parent] Both OAuth flows complete, calling onSuccess');
         onSuccess(tokens);
         setLocalIsConnected(true);
-        setCountdown(5);
-        toast.success('Twitter autorización exitosa. La ventana se cerrará en 5 segundos.');
+        
+        // Display success message in the window
+        if (authWindow && !authWindow.closed) {
+          try {
+            authWindow.document.body.innerHTML = `
+              <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: system-ui, -apple-system, sans-serif;">
+                <h2 style="margin-bottom: 20px; color: #10b981;">✓ Twitter Connected Successfully</h2>
+                <p style="margin-bottom: 20px;">You can now close this window.</p>
+                <button onclick="window.close()" 
+                        style="background-color: #6b7280; color: white; padding: 12px 24px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500;">
+                  Close Window
+                </button>
+              </div>
+            `;
+          } catch (error) {
+            // If we can't modify the window content, just show a toast
+            toast.success('Twitter connected successfully. You can close the popup window.');
+          }
+        }
       }
 
     } catch (error) {
@@ -91,7 +108,7 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         setOauth1Pending(false);
       }
     }
-  }, [onSuccess, onError, redirectUri]);
+  }, [onSuccess, onError, redirectUri, authWindow]);
 
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
@@ -152,22 +169,6 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
 
     return () => clearInterval(checkWindow);
   }, [authWindow]);
-
-  useEffect(() => {
-    if (countdown === null) return;
-    
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    } else {
-      if (authWindow && !authWindow.closed) {
-        authWindow.close();
-      }
-      setAuthWindow(null);
-      setIsLoading(false);
-      setCountdown(null);
-    }
-  }, [countdown, authWindow]);
 
   const handleLogin = async () => {
     const userString = localStorage.getItem('user');
@@ -231,7 +232,7 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         {isLoading ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            {countdown !== null ? `Cerrando en ${countdown}s...` : oauth1Pending ? 'Completando OAuth 1.0a...' : 'Conectando...'}
+            {oauth1Pending ? 'Completando OAuth 1.0a...' : 'Conectando...'}
           </>
         ) : (
           <>
