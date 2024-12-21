@@ -40,6 +40,9 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         console.log('[Parent] Initiating OAuth 1.0a flow with URL:', tokens.oauth1_url);
         setOauth1Pending(true);
         
+        // Add a small delay before opening the OAuth 1.0a window
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         // Don't call onSuccess yet, wait for OAuth 1.0a to complete
         const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
         console.log('[Parent] OAuth 1.0a window opened:', { 
@@ -48,7 +51,10 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         });
         
         if (!oauth1Window) {
-          throw new Error('Could not open OAuth 1.0a window');
+          // If popup is blocked, store the URL and show a message
+          sessionStorage.setItem('twitter_oauth1_url', tokens.oauth1_url);
+          toast.error('Please allow popups and try again');
+          throw new Error('Could not open OAuth 1.0a window - popup blocked');
         }
         setAuthWindow(oauth1Window);
         return;

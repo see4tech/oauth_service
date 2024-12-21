@@ -34,10 +34,20 @@ export class TwitterPopupHandler {
     const height = 700;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
-    const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=yes`;
+    const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=yes,status=yes`;
     
     // Use different window names for OAuth 1.0a and OAuth 2.0 to prevent conflicts
     const windowName = isOAuth1 ? 'Twitter Auth OAuth1' : 'Twitter Auth OAuth2';
+    
+    // Try to focus existing window first
+    const existingWindow = window.open('', windowName);
+    if (existingWindow && !existingWindow.closed) {
+      existingWindow.location.href = url;
+      existingWindow.focus();
+      return existingWindow;
+    }
+    
+    // Open new window
     const authWindow = window.open(url, windowName, features);
     
     if (!authWindow) {

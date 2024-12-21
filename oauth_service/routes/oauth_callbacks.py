@@ -165,36 +165,104 @@ def create_html_response(
                 window.oauthData = {{
                     code: new URLSearchParams(window.location.search).get('code'),
                     state: new URLSearchParams(window.location.search).get('state'),
+                    oauth_verifier: new URLSearchParams(window.location.search).get('oauth_verifier'),
+                    oauth_token: new URLSearchParams(window.location.search).get('oauth_token'),
                     error: new URLSearchParams(window.location.search).get('error'),
                     error_description: new URLSearchParams(window.location.search).get('error_description'),
                     platform: '{platform.upper()}'
                 }};
 
-                // Send message to opener and close window
-                if (window.opener) {{
-                    window.opener.postMessage({{
-                        type: window.oauthData.platform + '_AUTH_CALLBACK',
-                        code: window.oauthData.code,
-                        state: window.oauthData.state,
-                        error: window.oauthData.error_description || window.oauthData.error || {json.dumps(error)}
-                    }}, '*');
-                    
-                    setTimeout(function() {{
-                        window.close();
-                    }}, 2000);
+                function closeWindow() {{
+                    // Send message to opener and close window
+                    if (window.opener) {{
+                        window.opener.postMessage({{
+                            type: window.oauthData.platform + '_AUTH_CALLBACK',
+                            success: !{json.dumps(bool(error))},
+                            code: window.oauthData.code,
+                            state: window.oauthData.state,
+                            oauth_verifier: window.oauthData.oauth_verifier,
+                            oauth_token: window.oauthData.oauth_token,
+                            error: window.oauthData.error_description || window.oauthData.error || {json.dumps(error)}
+                        }}, '*');
+                        
+                        // Add a delay before closing
+                        setTimeout(() => window.close(), 1000);
+                    }}
                 }}
+
+                // Start countdown
+                let timeLeft = 10;
+                function updateCountdown() {{
+                    const countdownElement = document.getElementById('countdown');
+                    if (countdownElement) {{
+                        countdownElement.textContent = timeLeft;
+                        if (timeLeft > 0) {{
+                            timeLeft--;
+                            setTimeout(updateCountdown, 1000);
+                        }} else {{
+                            closeWindow();
+                        }}
+                    }}
+                }}
+
+                // Initialize when page loads
+                window.onload = function() {{
+                    // Send message immediately
+                    if (window.opener) {{
+                        window.opener.postMessage({{
+                            type: window.oauthData.platform + '_AUTH_CALLBACK',
+                            success: !{json.dumps(bool(error))},
+                            code: window.oauthData.code,
+                            state: window.oauthData.state,
+                            oauth_verifier: window.oauthData.oauth_verifier,
+                            oauth_token: window.oauthData.oauth_token,
+                            error: window.oauthData.error_description || window.oauthData.error || {json.dumps(error)}
+                        }}, '*');
+                    }}
+                    // Start countdown after message is sent
+                    updateCountdown();
+                }};
             </script>
             <style>
-                body {{ font-family: Arial; text-align: center; padding-top: 50px; }}
-                .success {{ color: green; }}
-                .error {{ color: red; }}
+                body {{ 
+                    font-family: Arial; 
+                    text-align: center; 
+                    padding-top: 50px;
+                    background-color: #f5f5f5;
+                }}
+                .container {{
+                    max-width: 400px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }}
+                .success {{ color: #10B981; }}
+                .error {{ color: #EF4444; }}
+                .button {{
+                    background-color: #3B82F6;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    margin-top: 16px;
+                }}
+                .button:hover {{
+                    background-color: #2563EB;
+                }}
             </style>
         </head>
         <body>
-            <h2 class="{error and 'error' or 'success'}">
-                {error and 'Authentication Error' or 'Authentication Successful'}
-            </h2>
-            <p>{error or 'You can close this window now.'}</p>
+            <div class="container">
+                <h2 class="{error and 'error' or 'success'}">
+                    {error and 'Authentication Error' or 'Authentication Successful'}
+                </h2>
+                <p>{error or 'Authorization successful! You can close this window.'}</p>
+                <p>This window will close in <span id="countdown">10</span> seconds</p>
+                <button class="button" onclick="closeWindow()">Close Window Now</button>
+            </div>
         </body>
     </html>
     """
