@@ -174,20 +174,28 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
       setIsLoading(true);
       const twitterCallbackUrl = redirectUri.replace('/linkedin/', '/twitter/');
       const authData = await TwitterPopupHandler.initializeAuth(userId, twitterCallbackUrl);
-      console.log('Auth initialization successful:', authData);
+      console.log('[Parent] Auth initialization successful:', authData);
       
       if (authData.authorization_url) {
         sessionStorage.setItem('twitter_auth_state', authData.state);
+        
+        // Store OAuth 1.0a URL for later use
+        if (authData.additional_params?.oauth1_url) {
+          sessionStorage.setItem('twitter_oauth1_url', authData.additional_params.oauth1_url);
+        }
+        
         const newWindow = TwitterPopupHandler.openAuthWindow(authData.authorization_url);
         if (!newWindow) {
           throw new Error('Could not open authentication window');
         }
         setAuthWindow(newWindow);
+        
+        // Don't set success state here - wait for the callback
       } else {
         throw new Error('No authorization URL received');
       }
     } catch (error) {
-      console.error('Twitter auth error:', error);
+      console.error('[Parent] Twitter auth error:', error);
       onError(error as Error);
       toast.error((error as Error).message);
       setIsLoading(false);
