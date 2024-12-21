@@ -47,8 +47,10 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         // Add a longer delay before opening the OAuth 1.0a window
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Create a new window with a blank page first
-        const oauth1Window = window.open('about:blank', 'Twitter Auth OAuth1', 'width=600,height=700');
+        // Open the window directly with the OAuth 1.0a URL
+        const features = 'width=600,height=700,scrollbars=yes,toolbar=no,menubar=no,location=yes,status=yes';
+        const oauth1Window = window.open(tokens.oauth1_url, 'Twitter Auth OAuth1', features);
+        
         if (!oauth1Window) {
           toast.error('Please allow popups and try again');
           throw new Error('Could not open OAuth 1.0a window - popup blocked');
@@ -56,23 +58,6 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         
         // Store the window reference
         setAuthWindow(oauth1Window);
-        
-        // Add event listeners before navigating
-        oauth1Window.onbeforeunload = () => {
-          console.log('[Parent] OAuth 1.0a window is about to unload');
-        };
-        
-        oauth1Window.onunload = () => {
-          console.log('[Parent] OAuth 1.0a window unloaded');
-        };
-        
-        oauth1Window.onerror = (event) => {
-          console.error('[Parent] Error in OAuth 1.0a window:', event);
-        };
-        
-        // Navigate to the OAuth 1.0a URL
-        console.log('[Parent] Navigating OAuth 1.0a window to:', tokens.oauth1_url);
-        oauth1Window.location.href = tokens.oauth1_url;
         
         // Focus the window
         oauth1Window.focus();

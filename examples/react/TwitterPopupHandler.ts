@@ -40,7 +40,43 @@ export class TwitterPopupHandler {
     const windowName = isOAuth1 ? 'Twitter Auth OAuth1' : 'Twitter Auth OAuth2';
     
     try {
-      // Try to focus existing window first
+      // For OAuth 1.0a, always open a new window
+      if (isOAuth1) {
+        console.log(`[Parent] Opening new OAuth 1.0a window with URL:`, url);
+        const authWindow = window.open(url, '_blank', features);
+        
+        if (!authWindow) {
+          console.error('[Parent] Failed to open OAuth 1.0a window');
+          return null;
+        }
+        
+        // Add message listener for OAuth 1.0a callback
+        const messageHandler = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) {
+            console.warn('[Parent] Received message from unauthorized origin:', event.origin);
+            return;
+          }
+          
+          console.log('[Parent] Received message in OAuth 1.0a handler:', event.data);
+          
+          if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
+            // Forward the message with OAuth type information
+            window.postMessage({ ...event.data, isOAuth1: true }, window.location.origin);
+            
+            // Clean up
+            window.removeEventListener('message', messageHandler);
+          }
+        };
+        
+        window.addEventListener('message', messageHandler);
+        
+        // Focus the window
+        authWindow.focus();
+        
+        return authWindow;
+      }
+      
+      // For OAuth 2.0, try to focus existing window first
       const existingWindow = window.open('', windowName);
       if (existingWindow && !existingWindow.closed) {
         console.log(`[Parent] Found existing ${windowName} window, updating URL`);
@@ -49,54 +85,34 @@ export class TwitterPopupHandler {
         return existingWindow;
       }
       
-      // Open new window
+      // Open new OAuth 2.0 window
       console.log(`[Parent] Opening new ${windowName} window`);
       const authWindow = window.open(url, windowName, features);
       
       if (!authWindow) {
-        console.error('[Parent] Failed to open auth window - popup blocked');
+        console.error('[Parent] Failed to open auth window');
         return null;
       }
 
-      // Add event listener for this specific window
+      // Add message listener for OAuth 2.0 callback
       const messageHandler = (event: MessageEvent) => {
         if (event.origin !== window.location.origin) {
           console.warn('[Parent] Received message from unauthorized origin:', event.origin);
           return;
         }
         
-        console.log('[Parent] Received message in popup handler:', event.data);
+        console.log('[Parent] Received message in OAuth 2.0 handler:', event.data);
         
         if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
           // Forward the message with OAuth type information
-          window.postMessage({ ...event.data, isOAuth1 }, window.location.origin);
+          window.postMessage({ ...event.data, isOAuth1: false }, window.location.origin);
           
-          // Clean up the event listener
+          // Clean up
           window.removeEventListener('message', messageHandler);
         }
       };
 
       window.addEventListener('message', messageHandler);
-      
-      // Add load event listener to the window
-      authWindow.onload = () => {
-        console.log(`[Parent] ${windowName} window loaded:`, {
-          url: authWindow.location.href,
-          readyState: authWindow.document.readyState
-        });
-      };
-      
-      // Add error event listener
-      authWindow.onerror = (event) => {
-        console.error(`[Parent] Error in ${windowName} window:`, event);
-      };
-      
-      // Add unload handler to detect if window is closed
-      authWindow.onunload = () => {
-        console.log(`[Parent] ${windowName} window unloaded`);
-        // Remove the message handler when the window is closed
-        window.removeEventListener('message', messageHandler);
-      };
       
       // Focus the window
       authWindow.focus();
