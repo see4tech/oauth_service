@@ -1,4 +1,4 @@
-import { Button } from "./ui/button";
+import { Button } from "@/components/ui/button";
 import { Loader2, Twitter, RefreshCw } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
@@ -45,6 +45,19 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         
         // Display a message in the window
         try {
+          // Prevent the window from closing
+          authWindow.onbeforeunload = (e) => {
+            e.preventDefault();
+            e.returnValue = '';
+          };
+          
+          authWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>Twitter OAuth</title>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
           authWindow.document.body.innerHTML = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: system-ui, -apple-system, sans-serif;">
               <h2 style="margin-bottom: 20px;">OAuth 2.0 Authorization Complete</h2>
