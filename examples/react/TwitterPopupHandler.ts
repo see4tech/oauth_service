@@ -34,59 +34,77 @@ export class TwitterPopupHandler {
     const height = 700;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
-    const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=yes,status=yes`;
+    const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=yes,status=yes,scrollbars=yes`;
     
     // Use different window names for OAuth 1.0a and OAuth 2.0 to prevent conflicts
     const windowName = isOAuth1 ? 'Twitter Auth OAuth1' : 'Twitter Auth OAuth2';
     
-    // Try to focus existing window first
-    const existingWindow = window.open('', windowName);
-    if (existingWindow && !existingWindow.closed) {
-      console.log(`[Parent] Found existing ${windowName} window, updating URL`);
-      existingWindow.location.href = url;
-      existingWindow.focus();
-      return existingWindow;
-    }
-    
-    // Open new window
-    console.log(`[Parent] Opening new ${windowName} window`);
-    const authWindow = window.open(url, windowName, features);
-    
-    if (!authWindow) {
-      console.error('[Parent] Failed to open auth window - popup blocked');
+    try {
+      // Try to focus existing window first
+      const existingWindow = window.open('', windowName);
+      if (existingWindow && !existingWindow.closed) {
+        console.log(`[Parent] Found existing ${windowName} window, updating URL`);
+        existingWindow.location.href = url;
+        existingWindow.focus();
+        return existingWindow;
+      }
+      
+      // Open new window
+      console.log(`[Parent] Opening new ${windowName} window`);
+      const authWindow = window.open(url, windowName, features);
+      
+      if (!authWindow) {
+        console.error('[Parent] Failed to open auth window - popup blocked');
+        return null;
+      }
+
+      // Add event listener for this specific window
+      const messageHandler = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) {
+          console.warn('[Parent] Received message from unauthorized origin:', event.origin);
+          return;
+        }
+        
+        console.log('[Parent] Received message in popup handler:', event.data);
+        
+        if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
+          // Forward the message with OAuth type information
+          window.postMessage({ ...event.data, isOAuth1 }, window.location.origin);
+          
+          // Clean up the event listener
+          window.removeEventListener('message', messageHandler);
+        }
+      };
+
+      window.addEventListener('message', messageHandler);
+      
+      // Add load event listener to the window
+      authWindow.onload = () => {
+        console.log(`[Parent] ${windowName} window loaded:`, {
+          url: authWindow.location.href,
+          readyState: authWindow.document.readyState
+        });
+      };
+      
+      // Add error event listener
+      authWindow.onerror = (event) => {
+        console.error(`[Parent] Error in ${windowName} window:`, event);
+      };
+      
+      // Add unload handler to detect if window is closed
+      authWindow.onunload = () => {
+        console.log(`[Parent] ${windowName} window unloaded`);
+        // Remove the message handler when the window is closed
+        window.removeEventListener('message', messageHandler);
+      };
+      
+      // Focus the window
+      authWindow.focus();
+      
+      return authWindow;
+    } catch (error) {
+      console.error(`[Parent] Error opening ${windowName} window:`, error);
       return null;
     }
-
-    // Add event listener for this specific window
-    const messageHandler = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) {
-        console.warn('[Parent] Received message from unauthorized origin:', event.origin);
-        return;
-      }
-      
-      console.log('[Parent] Received message in popup handler:', event.data);
-      
-      if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
-        // Forward the message with OAuth type information
-        window.postMessage({ ...event.data, isOAuth1 }, window.location.origin);
-        
-        // Clean up the event listener
-        window.removeEventListener('message', messageHandler);
-      }
-    };
-
-    window.addEventListener('message', messageHandler);
-    
-    // Focus the window
-    authWindow.focus();
-    
-    // Add unload handler to detect if window is closed
-    authWindow.onunload = () => {
-      console.log(`[Parent] ${windowName} window unloaded`);
-      // Remove the message handler when the window is closed
-      window.removeEventListener('message', messageHandler);
-    };
-    
-    return authWindow;
   }
 }
