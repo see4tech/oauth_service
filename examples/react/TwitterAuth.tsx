@@ -24,16 +24,25 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
   const handleCallback = useCallback(async (code: string, state: string, isOAuth1: boolean = false, oauth1Verifier?: string) => {
     try {
       setIsLoading(true);
-      console.log('Starting token exchange:', { isOAuth1, code: code.slice(0, 10) + '...' });
+      console.log('Starting token exchange:', { isOAuth1, code: code.slice(0, 10) + '...', hasVerifier: !!oauth1Verifier });
       
       const tokens = await TwitterTokenExchange.exchangeCodeForToken(code, state, redirectUri, isOAuth1, oauth1Verifier);
-      console.log('Twitter tokens received:', { type: isOAuth1 ? 'OAuth1.0a' : 'OAuth2.0' });
+      console.log('Twitter tokens received:', { 
+        type: isOAuth1 ? 'OAuth1.0a' : 'OAuth2.0', 
+        hasOAuth1Url: !!tokens.oauth1_url,
+        tokenKeys: Object.keys(tokens),
+        tokens 
+      });
       
       // If we received OAuth 1.0a URL in the response and we're not already in OAuth 1.0a flow
       if (!isOAuth1 && tokens.oauth1_url) {
-        console.log('Initiating OAuth 1.0a flow');
+        console.log('Initiating OAuth 1.0a flow with URL:', tokens.oauth1_url);
         setOauth1Pending(true);
         const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
+        console.log('OAuth 1.0a window opened:', { 
+          windowOpened: !!oauth1Window,
+          url: tokens.oauth1_url 
+        });
         if (!oauth1Window) {
           throw new Error('Could not open OAuth 1.0a window');
         }
@@ -74,16 +83,25 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         return;
       }
 
-      console.log('Received postMessage:', event.data);
+      console.log('Received postMessage:', {
+        type: event.data.type,
+        hasCode: !!event.data.code,
+        hasState: !!event.data.state,
+        hasVerifier: !!event.data.oauth_verifier,
+        hasToken: !!event.data.oauth_token,
+        data: event.data
+      });
       
       if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
         if (event.data.success) {
           console.log('Twitter OAuth successful, proceeding with token exchange');
           if (event.data.oauth_verifier) {
             // Handle OAuth 1.0a callback
+            console.log('Processing OAuth 1.0a callback');
             handleCallback(event.data.oauth_token, '', true, event.data.oauth_verifier);
           } else if (event.data.code && event.data.state) {
             // Handle OAuth 2.0 callback
+            console.log('Processing OAuth 2.0 callback');
             handleCallback(event.data.code, event.data.state);
           }
         } else {
