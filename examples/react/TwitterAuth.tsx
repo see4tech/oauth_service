@@ -1,4 +1,4 @@
-import { Button } from "../components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Loader2, Twitter, RefreshCw } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [localIsConnected, setLocalIsConnected] = useState(isConnected);
   const [oauth1Pending, setOauth1Pending] = useState(false);
+  
 
   useEffect(() => {
     setLocalIsConnected(isConnected);
@@ -39,9 +40,7 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         console.log('[Parent] Initiating OAuth 1.0a flow with URL:', tokens.oauth1_url);
         setOauth1Pending(true);
         
-        // Add a small delay before opening the OAuth 1.0a window
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
+        // Don't call onSuccess yet, wait for OAuth 1.0a to complete
         const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
         console.log('[Parent] OAuth 1.0a window opened:', { 
           windowOpened: !!oauth1Window,
@@ -55,23 +54,15 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         return;
       }
 
-      onSuccess(tokens);
-
-      // Add a delay before closing the window
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      if (authWindow && !authWindow.closed) {
-        console.log('[Parent] Closing auth window');
-        authWindow.close();
-        setAuthWindow(null);
-      }
-
-      // Only show success and start countdown after both flows complete
-      if (!oauth1Pending || isOAuth1) {
+      // Only call onSuccess and close window after both flows are complete
+      if (isOAuth1 || !tokens.oauth1_url) {
+        console.log('[Parent] Both OAuth flows complete, calling onSuccess');
+        onSuccess(tokens);
         setLocalIsConnected(true);
         setCountdown(5);
         toast.success('Twitter autorización exitosa. La ventana se cerrará en 5 segundos.');
       }
+
     } catch (error) {
       console.error('[Parent] Twitter token exchange error:', error);
       onError(error as Error);

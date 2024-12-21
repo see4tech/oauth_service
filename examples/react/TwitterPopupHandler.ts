@@ -28,23 +28,45 @@ export class TwitterPopupHandler {
   }
 
   static openAuthWindow(url: string, isOAuth1: boolean = false): Window | null {
+    console.log(`Opening ${isOAuth1 ? 'OAuth 1.0a' : 'OAuth 2.0'} window with URL:`, url);
+    
     const width = 600;
     const height = 700;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
     const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`;
     
-    const authWindow = window.open(url, 'Twitter Auth', features);
+    // Use different window names for OAuth 1.0a and OAuth 2.0 to prevent conflicts
+    const windowName = isOAuth1 ? 'Twitter Auth OAuth1' : 'Twitter Auth OAuth2';
+    const authWindow = window.open(url, windowName, features);
     
-    window.addEventListener('message', (event) => {
+    if (!authWindow) {
+      console.error('Failed to open auth window');
+      return null;
+    }
+
+    // Add event listener for this specific window
+    const messageHandler = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) {
+        console.warn('Received message from unauthorized origin:', event.origin);
         return;
       }
       
+      console.log('Received message in popup handler:', event.data);
+      
       if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
+        // Forward the message with OAuth type information
         window.postMessage({ ...event.data, isOAuth1 }, window.location.origin);
+        
+        // Clean up the event listener
+        window.removeEventListener('message', messageHandler);
       }
-    });
+    };
+
+    window.addEventListener('message', messageHandler);
+    
+    // Focus the window
+    authWindow.focus();
     
     return authWindow;
   }
