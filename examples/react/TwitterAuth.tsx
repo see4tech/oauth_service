@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "../components/ui/button";
 import { Loader2, Twitter, RefreshCw } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
