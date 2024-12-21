@@ -41,8 +41,10 @@ async def oauth_callback(
             logger.error(f"Error description: {error_description}")
             return create_html_response(error=error_description or error, platform=platform)
 
-        if not code or not state:
-            logger.error("Missing code or state")
+        # For Twitter OAuth 1.0a, we don't get a code parameter
+        oauth1_verifier = request.query_params.get('oauth_verifier')
+        if not (code or oauth1_verifier) or not state:
+            logger.error("Missing required parameters")
             return create_html_response(error="Missing required parameters", platform=platform)
 
         oauth_handler = await get_oauth_handler(platform)
@@ -63,39 +65,64 @@ async def oauth_callback(
         
         token_manager = TokenManager()
         
-        # Handle Twitter OAuth 2.0 with PKCE
+        # For Twitter, handle OAuth 1.0a and 2.0 separately
         if platform == "twitter":
-            # Retrieve code verifier
-            code_verifier = await get_code_verifier(state)
-            if not code_verifier:
-                logger.error("Code verifier not found for Twitter OAuth")
-                return create_html_response(error="Code verifier not found", platform=platform)
-                
-            token_data = await oauth_handler.get_access_token(
-                oauth2_code=code,
-                code_verifier=code_verifier
-            )
-        else:
-            token_data = await oauth_handler.get_access_token(code)
-            
-        await token_manager.store_token(platform, user_id, token_data)
-        
-        # Store API key in external storage service
-        settings = get_settings()
-        storage_url = settings.API_KEY_STORAGE
-        api_key = settings.API_KEY
-        
-        if storage_url and api_key:
             try:
-                # Generate API key
-                user_api_key = generate_api_key()
+                if oauth1_verifier:
+                    logger.debug("Processing OAuth 1.0a callback")
+                    token_data = await oauth_handler.get_access_token(
+                        oauth1_verifier=oauth1_verifier
+                    )
+                    if not token_data or 'oauth1' not in token_data:
+                        logger.error("Failed to get OAuth 1.0a tokens")
+                        return create_html_response(error="Failed to get OAuth 1.0a tokens", platform=platform)
+                else:
+                    logger.debug("Processing OAuth 2.0 callback")
+                    code_verifier = await get_code_verifier(state)
+                    if not code_verifier:
+                        logger.error("Code verifier not found")
+                        return create_html_response(error="Code verifier not found", platform=platform)
+                    
+                    token_data = await oauth_handler.get_access_token(
+                        oauth2_code=code,
+                        code_verifier=code_verifier
+                    )
+                    if not token_data or 'oauth2' not in token_data:
+                        logger.error("Failed to get OAuth 2.0 tokens")
+                        return create_html_response(error="Failed to get OAuth 2.0 tokens", platform=platform)
                 
-                # Store API key locally first
-                db = SqliteDB()
-                db.store_user_api_key(user_id, platform, user_api_key)
-                logger.info(f"Stored API key locally for user {user_id} on platform {platform}")
+                # Store token data
+                await token_manager.store_token(
+                    platform=platform,
+                    user_id=user_id,
+                    token_data=token_data
+                )
+                logger.debug(f"Successfully stored tokens with structure: {list(token_data.keys())}")
                 
-                # Then store in external service
+            except Exception as e:
+                logger.error(f"Error processing Twitter callback: {str(e)}")
+                return create_html_response(error=str(e), platform=platform)
+        else:
+            # Handle other platforms
+            token_data = await oauth_handler.get_access_token(code)
+            await token_manager.store_token(platform, user_id, token_data)
+        
+        # Generate and store API key
+        try:
+            # Generate API key
+            user_api_key = generate_api_key()
+            
+            # Store API key locally
+            db = SqliteDB()
+            db.store_user_api_key(user_id, platform, user_api_key)
+            logger.info(f"Stored API key locally for user {user_id} on platform {platform}")
+            
+            # Store in external service if configured
+            settings = get_settings()
+            storage_url = settings.API_KEY_STORAGE
+            api_key = settings.API_KEY
+            
+            if storage_url and api_key:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         f"{storage_url}/store",
@@ -113,14 +140,12 @@ async def oauth_callback(
                             logger.error(f"Failed to store API key in external service: {await response.text()}")
                         else:
                             logger.info(f"Successfully stored API key in external service for user {user_id} on platform {platform}")
-            except Exception as e:
-                logger.error(f"Error storing API key: {str(e)}")
-        else:
-            logger.error("API_KEY_STORAGE or API_KEY not configured")
+        except Exception as e:
+            logger.error(f"Error storing API key: {str(e)}")
         
         # Return success response
         return create_html_response(platform=platform)
-
+        
     except Exception as e:
         logger.error(f"Error handling OAuth callback for {platform}: {str(e)}")
         return create_html_response(error=str(e), platform=platform)
