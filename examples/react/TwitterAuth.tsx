@@ -1,4 +1,4 @@
-import { Button } from "./ui/button";
+import { Button } from "@/components/ui/button";
 import { Loader2, Twitter, RefreshCw } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
@@ -44,19 +44,22 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         // Store the OAuth 1.0a URL in case we need to retry
         sessionStorage.setItem('twitter_oauth1_url', tokens.oauth1_url);
         
-        // Reuse the existing window for OAuth 1.0a
-        if (authWindow && !authWindow.closed) {
-          console.log('[Parent] Reusing existing window for OAuth 1.0a...');
-          authWindow.location.href = tokens.oauth1_url;
-          authWindow.focus();
-          
-          console.log('[Parent] OAuth 1.0a URL loaded in existing window');
-          toast.success('Completando OAuth 1.0a...');
-        } else {
-          console.error('[Parent] Auth window was closed');
-          toast.error('La ventana de autorización se cerró. Por favor, intente de nuevo.');
-          throw new Error('Auth window was closed');
+        // Add a longer delay before opening the OAuth 1.0a window
+        console.log('[Parent] Waiting before opening OAuth 1.0a window...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Open a new window for OAuth 1.0a
+        console.log('[Parent] Opening OAuth 1.0a window...');
+        const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
+        
+        if (!oauth1Window) {
+          console.error('[Parent] Failed to open OAuth 1.0a window');
+          toast.error('Could not open OAuth 1.0a window. Please try again.');
+          throw new Error('Could not open OAuth 1.0a window');
         }
+        
+        console.log('[Parent] OAuth 1.0a window opened successfully');
+        setAuthWindow(oauth1Window);
         
         return;
       }
