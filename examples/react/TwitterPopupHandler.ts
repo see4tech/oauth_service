@@ -11,7 +11,7 @@ export class TwitterPopupHandler {
       body: JSON.stringify({
         user_id: userId,
         redirect_uri: redirectUri,
-        frontend_callback_url: window.location.origin,
+        frontend_callback_url: redirectUri,
         scopes: ['tweet.read', 'tweet.write', 'users.read']
       }),
     });
@@ -19,15 +19,11 @@ export class TwitterPopupHandler {
     if (!response.ok) {
       const errorData = await response.text();
       console.error('Twitter auth response error:', errorData);
-      throw new Error('Error initiating Twitter authentication');
+      throw new Error(`Failed to initialize Twitter authentication: ${errorData}`);
     }
 
     const data = await response.json();
-    console.log('Twitter auth response:', {
-      oauth2_url: data.authorization_url,
-      oauth1_url: data.additional_params?.oauth1_url,
-      state: data.state
-    });
+    console.log('Twitter auth response:', data);
     return data;
   }
 
@@ -40,21 +36,16 @@ export class TwitterPopupHandler {
     
     const authWindow = window.open(url, 'Twitter Auth', features);
     
-    // Add message listener to the parent window
     window.addEventListener('message', (event) => {
       if (event.origin !== window.location.origin) {
         return;
       }
       
-      // Handle both OAuth 1.0a and 2.0 callbacks
       if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
-        window.postMessage({
-          ...event.data,
-          isOAuth1
-        }, window.location.origin);
+        window.postMessage({ ...event.data, isOAuth1 }, window.location.origin);
       }
     });
     
     return authWindow;
   }
-} 
+}
