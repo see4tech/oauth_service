@@ -32,6 +32,7 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         type: isOAuth1 ? 'OAuth1.0a' : 'OAuth2.0', 
         hasOAuth1Url: !!tokens.oauth1_url,
         tokenKeys: Object.keys(tokens),
+        oauth1Url: tokens.oauth1_url,
         tokens 
       });
       
@@ -40,26 +41,43 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         console.log('[Parent] Initiating OAuth 1.0a flow with URL:', tokens.oauth1_url);
         setOauth1Pending(true);
         
-        // Add a small delay before opening the OAuth 1.0a window
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Add a longer delay before opening the OAuth 1.0a window
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Store the OAuth 1.0a URL in case we need to retry
+        sessionStorage.setItem('twitter_oauth1_url', tokens.oauth1_url);
         
         // Don't call onSuccess yet, wait for OAuth 1.0a to complete
         const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
         console.log('[Parent] OAuth 1.0a window opened:', { 
           windowOpened: !!oauth1Window,
-          url: tokens.oauth1_url 
+          url: tokens.oauth1_url,
+          windowName: 'Twitter Auth OAuth1'
         });
         
         if (!oauth1Window) {
-          // If popup is blocked, store the URL and show a message
-          sessionStorage.setItem('twitter_oauth1_url', tokens.oauth1_url);
+          // If popup is blocked, show a message
           toast.error('Please allow popups and try again');
           throw new Error('Could not open OAuth 1.0a window - popup blocked');
         }
+        
+        // Focus the window and store it
+        oauth1Window.focus();
         setAuthWindow(oauth1Window);
+        
+        // Set a timeout to check if the window was closed too quickly
+        setTimeout(() => {
+          if (oauth1Window.closed) {
+            console.error('[Parent] OAuth 1.0a window closed too quickly');
+            toast.error('OAuth 1.0a window closed too quickly. Please try again.');
+            setOauth1Pending(false);
+            setIsLoading(false);
+          }
+        }, 1000);
+        
         return;
       }
-
+      
       // Only call onSuccess and close window after both flows are complete
       if (isOAuth1 || !tokens.oauth1_url) {
         console.log('[Parent] Both OAuth flows complete, calling onSuccess');
@@ -73,6 +91,14 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
       console.error('[Parent] Twitter token exchange error:', error);
       onError(error as Error);
       toast.error((error as Error).message);
+      
+      // If this was an OAuth 1.0a error, we might want to retry
+      if (isOAuth1) {
+        const storedOAuth1Url = sessionStorage.getItem('twitter_oauth1_url');
+        if (storedOAuth1Url) {
+          toast.error('OAuth 1.0a failed. Click "Reconectar Twitter" to try again.');
+        }
+      }
     } finally {
       setIsLoading(false);
       if (isOAuth1) {

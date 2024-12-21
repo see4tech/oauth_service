@@ -127,12 +127,24 @@ class TwitterOAuth(OAuthBase):
                 
                 # Try to get OAuth 1.0a tokens automatically
                 try:
-                    oauth1_url = self.oauth1_handler.get_authorization_url()
+                    # Create a new OAuth1 handler for this request
+                    oauth1_handler = tweepy.OAuthHandler(
+                        self._consumer_key,
+                        self._decrypted_consumer_secret,
+                        self.callback_url
+                    )
+                    
+                    # Get the authorization URL and request token
+                    oauth1_url = oauth1_handler.get_authorization_url()
                     logger.debug("Got OAuth 1.0a authorization URL")
                     
-                    # Store OAuth 1.0a request token
-                    tokens['oauth1_request_token'] = self.oauth1_handler.request_token
+                    # Store OAuth 1.0a request token and secret
+                    request_token = oauth1_handler.request_token
+                    tokens['oauth1_request_token'] = request_token['oauth_token']
+                    tokens['oauth1_request_token_secret'] = request_token['oauth_token_secret']
                     tokens['oauth1_url'] = oauth1_url
+                    
+                    logger.debug("Stored OAuth 1.0a request tokens")
                 except Exception as e:
                     logger.error(f"Error getting OAuth 1.0a URL: {str(e)}")
             except Exception as e:
@@ -141,10 +153,24 @@ class TwitterOAuth(OAuthBase):
         
         if oauth1_verifier:
             try:
-                self.oauth1_handler.get_access_token(oauth1_verifier)
+                # Create a new OAuth1 handler with the stored request token
+                oauth1_handler = tweepy.OAuthHandler(
+                    self._consumer_key,
+                    self._decrypted_consumer_secret,
+                    self.callback_url
+                )
+                
+                # Set the request token and secret
+                oauth1_handler.request_token = {
+                    'oauth_token': tokens.get('oauth1_request_token'),
+                    'oauth_token_secret': tokens.get('oauth1_request_token_secret')
+                }
+                
+                # Get the access token
+                oauth1_handler.get_access_token(oauth1_verifier)
                 tokens['oauth1'] = {
-                    'access_token': self.oauth1_handler.access_token,
-                    'access_token_secret': self.oauth1_handler.access_token_secret
+                    'access_token': oauth1_handler.access_token,
+                    'access_token_secret': oauth1_handler.access_token_secret
                 }
                 logger.debug("OAuth 1.0a tokens obtained successfully")
             except Exception as e:

@@ -32,6 +32,8 @@ class TokenResponse(BaseModel):
     scope: Optional[str] = None
     access_token_secret: Optional[str] = None  # For OAuth 1.0a tokens
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    oauth1_url: Optional[str] = None  # For Twitter OAuth 1.0a URL
+    success: bool = True  # Indicate if the token exchange was successful
 
 class PostContent(BaseModel):
     """Request model for creating social media posts."""

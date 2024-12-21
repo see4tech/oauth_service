@@ -9,14 +9,14 @@ export class TwitterTokenExchange {
     if (!isOAuth1) {
       // OAuth 2.0 flow
       const savedState = sessionStorage.getItem('twitter_auth_state');
-      console.log('Comparing states:', { received: state, saved: savedState });
+      console.log('[Parent] Comparing states:', { received: state, saved: savedState });
       
       if (state !== savedState) {
         throw new Error('State mismatch in OAuth callback');
       }
     }
 
-    console.log('Making token exchange request:', {
+    console.log('[Parent] Making token exchange request:', {
       url: `${import.meta.env.VITE_BASE_OAUTH_URL}/oauth/twitter/token`,
       isOAuth1,
       hasVerifier: !!oauth1Verifier
@@ -39,7 +39,7 @@ export class TwitterTokenExchange {
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('Token exchange failed:', {
+      console.error('[Parent] Token exchange failed:', {
         status: response.status,
         statusText: response.statusText,
         error: errorData
@@ -48,16 +48,22 @@ export class TwitterTokenExchange {
     }
 
     const data = await response.json();
+    console.log('[Parent] Token exchange response:', {
+      success: data.success,
+      hasOAuth1Url: !!data.oauth1_url,
+      oauth1Url: data.oauth1_url,
+      tokenKeys: Object.keys(data)
+    });
     
     if (data.success) {
       if (!isOAuth1) {
         localStorage.setItem('twitter_access_token', JSON.stringify(data));
-        console.log('Twitter OAuth 2.0 tokens stored');
+        console.log('[Parent] Twitter OAuth 2.0 tokens stored');
       } else {
-        console.log('Twitter OAuth 1.0a tokens received');
+        console.log('[Parent] Twitter OAuth 1.0a tokens received');
       }
     } else {
-      console.error('Twitter authentication failed:', data.error);
+      console.error('[Parent] Twitter authentication failed:', data.error);
       throw new Error(data.error || 'Failed to authenticate with Twitter');
     }
     

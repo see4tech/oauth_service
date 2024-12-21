@@ -42,16 +42,18 @@ export class TwitterPopupHandler {
     // Try to focus existing window first
     const existingWindow = window.open('', windowName);
     if (existingWindow && !existingWindow.closed) {
+      console.log(`[Parent] Found existing ${windowName} window, updating URL`);
       existingWindow.location.href = url;
       existingWindow.focus();
       return existingWindow;
     }
     
     // Open new window
+    console.log(`[Parent] Opening new ${windowName} window`);
     const authWindow = window.open(url, windowName, features);
     
     if (!authWindow) {
-      console.error('[Parent] Failed to open auth window');
+      console.error('[Parent] Failed to open auth window - popup blocked');
       return null;
     }
 
@@ -77,6 +79,13 @@ export class TwitterPopupHandler {
     
     // Focus the window
     authWindow.focus();
+    
+    // Add unload handler to detect if window is closed
+    authWindow.onunload = () => {
+      console.log(`[Parent] ${windowName} window unloaded`);
+      // Remove the message handler when the window is closed
+      window.removeEventListener('message', messageHandler);
+    };
     
     return authWindow;
   }

@@ -153,6 +153,7 @@ async def exchange_code(
         if platform == "twitter":
             # Check if this is an OAuth 1.0a callback
             if request.oauth1_verifier:
+                logger.debug("Processing OAuth 1.0a token exchange")
                 token_data = await oauth_handler.get_access_token(
                     oauth1_verifier=request.oauth1_verifier
                 )
@@ -187,17 +188,32 @@ async def exchange_code(
                         status_code=400,
                         detail="Failed to get OAuth 2.0 tokens"
                     )
+                
+                # Store OAuth 1.0a request token if available
+                if 'oauth1_request_token' in token_data and 'oauth1_request_token_secret' in token_data:
+                    logger.debug("Storing OAuth 1.0a request token")
+                    oauth_handler.oauth1_handler.request_token = {
+                        'oauth_token': token_data['oauth1_request_token'],
+                        'oauth_token_secret': token_data['oauth1_request_token_secret']
+                    }
+                
                 oauth2_data = token_data['oauth2']
-                return TokenResponse(
+                response = TokenResponse(
                     access_token=oauth2_data["access_token"],
                     token_type="Bearer",
                     expires_in=oauth2_data.get("expires_in", 3600),
                     refresh_token=oauth2_data.get("refresh_token"),
                     scope=oauth2_data.get("scope")
                 )
+                
+                # Include OAuth 1.0a URL if available
+                if 'oauth1_url' in token_data:
+                    response.oauth1_url = token_data['oauth1_url']
+                
+                return response
         else:
             token_data = await oauth_handler.get_access_token(request.code)
-        
+            
         token_manager = TokenManager()
         await token_manager.store_token(
             platform=platform,
