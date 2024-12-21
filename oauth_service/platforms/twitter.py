@@ -124,6 +124,17 @@ class TwitterOAuth(OAuthBase):
                     'expires_at': token.get('expires_at')
                 }
                 logger.debug("OAuth 2.0 tokens obtained successfully")
+                
+                # Try to get OAuth 1.0a tokens automatically
+                try:
+                    oauth1_url = self.oauth1_handler.get_authorization_url()
+                    logger.debug("Got OAuth 1.0a authorization URL")
+                    
+                    # Store OAuth 1.0a request token
+                    tokens['oauth1_request_token'] = self.oauth1_handler.request_token
+                    tokens['oauth1_url'] = oauth1_url
+                except Exception as e:
+                    logger.error(f"Error getting OAuth 1.0a URL: {str(e)}")
             except Exception as e:
                 logger.error(f"Error exchanging OAuth 2.0 code: {str(e)}")
                 raise

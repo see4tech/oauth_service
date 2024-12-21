@@ -186,19 +186,40 @@ const TwitterAuth: React.FC<TwitterAuthProps> = ({
         sessionStorage.setItem('twitter_auth_state', authData.state);
       }
 
-      // Open OAuth 2.0 window by default, fallback to OAuth 1.0a if needed
-      const authUrl = authData.authorization_url || authData.additional_params?.oauth1_url;
-      const isOAuth1 = !authData.authorization_url;
-      
-      if (authUrl) {
-        const newWindow = TwitterPopupHandler.openAuthWindow(authUrl, isOAuth1);
-        if (!newWindow) {
+      // First complete OAuth 2.0 flow
+      const oauth2Url = authData.authorization_url;
+      if (oauth2Url) {
+        const oauth2Window = TwitterPopupHandler.openAuthWindow(oauth2Url, false);
+        if (!oauth2Window) {
           throw new Error('popup_blocked');
         }
-        setAuthWindow(newWindow);
+        oauth2Window.focus();
         
-        // Focus the popup window
-        newWindow.focus();
+        // Wait for OAuth 2.0 to complete
+        await new Promise<void>((resolve, reject) => {
+          const messageHandler = (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
+            if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
+              window.removeEventListener('message', messageHandler);
+              if (event.data.error) {
+                reject(new Error(event.data.error));
+              } else {
+                resolve();
+              }
+            }
+          };
+          window.addEventListener('message', messageHandler);
+        });
+
+        // Then complete OAuth 1.0a flow if available
+        const oauth1Url = authData.additional_params?.oauth1_url;
+        if (oauth1Url) {
+          const oauth1Window = TwitterPopupHandler.openAuthWindow(oauth1Url, true);
+          if (!oauth1Window) {
+            throw new Error('popup_blocked');
+          }
+          oauth1Window.focus();
+        }
       } else {
         throw new Error('No authorization URL received from server');
       }
