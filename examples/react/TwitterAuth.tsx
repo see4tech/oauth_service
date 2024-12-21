@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "./ui/button";
 import { Loader2, Twitter, RefreshCw } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
@@ -48,10 +48,9 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         console.log('[Parent] Waiting before opening OAuth 1.0a window...');
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Open the window directly with the OAuth 1.0a URL
+        // Open the window using TwitterPopupHandler
         console.log('[Parent] Opening OAuth 1.0a window...');
-        const features = 'width=600,height=700,scrollbars=yes,toolbar=no,menubar=no,location=yes,status=yes';
-        const oauth1Window = window.open(tokens.oauth1_url, '_blank', features);
+        const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
         
         if (!oauth1Window) {
           console.error('[Parent] Failed to open OAuth 1.0a window');
@@ -63,21 +62,6 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         
         // Store the window reference
         setAuthWindow(oauth1Window);
-        
-        // Focus the window
-        oauth1Window.focus();
-        
-        // Set a timeout to check if the window was closed too quickly
-        setTimeout(() => {
-          if (oauth1Window.closed) {
-            console.error('[Parent] OAuth 1.0a window closed too quickly');
-            toast.error('OAuth 1.0a window closed too quickly. Please try again.');
-            setOauth1Pending(false);
-            setIsLoading(false);
-          } else {
-            console.log('[Parent] OAuth 1.0a window still open after timeout check');
-          }
-        }, 1000);
         
         return;
       }
@@ -160,7 +144,7 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
 
     const checkWindow = setInterval(() => {
       if (authWindow.closed) {
-        console.log('Auth window was closed by user');
+        console.log('[Parent] Auth window was closed by user');
         setAuthWindow(null);
         setIsLoading(false);
         setOauth1Pending(false);
