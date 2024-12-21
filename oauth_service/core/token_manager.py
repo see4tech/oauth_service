@@ -58,20 +58,65 @@ class TokenManager:
             token_data: Token information to store
         """
         try:
-            # Structure token data for storage
-            structured_token = {
-                "access_token": token_data.get("access_token"),
-                "token_type": token_data.get("token_type", "Bearer"),
-                "expires_in": token_data.get("expires_in", 3600),
-                "refresh_token": token_data.get("refresh_token"),
-                "scope": token_data.get("scope"),
-                "expires_at": datetime.utcnow().timestamp() + token_data.get("expires_in", 3600),
-                "platform": platform
-            }
-            
             logger.debug(f"Storing token for user {user_id} on platform {platform}")
+            logger.debug(f"Token data structure: {list(token_data.keys())}")
+            
+            # Special handling for Twitter's dual OAuth structure
+            if platform == 'twitter':
+                # Get existing token data if any
+                existing_data = None
+                try:
+                    encrypted_existing = self.db.get_token(user_id, platform)
+                    if encrypted_existing:
+                        existing_data = self.decrypt_token_data(encrypted_existing)
+                except Exception:
+                    pass
+
+                structured_token = {}
+                
+                # Handle OAuth 2.0 tokens
+                if 'oauth2' in token_data:
+                    oauth2_data = token_data['oauth2']
+                    structured_token['oauth2'] = {
+                        'access_token': oauth2_data.get('access_token'),
+                        'refresh_token': oauth2_data.get('refresh_token'),
+                        'expires_in': oauth2_data.get('expires_in', 7200),
+                        'expires_at': oauth2_data.get('expires_at') or (
+                            datetime.utcnow().timestamp() + oauth2_data.get('expires_in', 7200)
+                        )
+                    }
+                elif existing_data and 'oauth2' in existing_data:
+                    structured_token['oauth2'] = existing_data['oauth2']
+
+                # Handle OAuth 1.0a tokens
+                if 'oauth1' in token_data:
+                    oauth1_data = token_data['oauth1']
+                    structured_token['oauth1'] = {
+                        'access_token': oauth1_data.get('access_token'),
+                        'access_token_secret': oauth1_data.get('access_token_secret')
+                    }
+                elif existing_data and 'oauth1' in existing_data:
+                    structured_token['oauth1'] = existing_data['oauth1']
+
+                structured_token['platform'] = platform
+                
+            else:
+                # Standard OAuth 2.0 structure for other platforms
+                structured_token = {
+                    'access_token': token_data.get('access_token'),
+                    'token_type': token_data.get('token_type', 'Bearer'),
+                    'expires_in': token_data.get('expires_in', 3600),
+                    'refresh_token': token_data.get('refresh_token'),
+                    'scope': token_data.get('scope'),
+                    'expires_at': token_data.get('expires_at') or (
+                        datetime.utcnow().timestamp() + token_data.get('expires_in', 3600)
+                    ),
+                    'platform': platform
+                }
+            
             encrypted_data = self.encrypt_token_data(structured_token)
             self.db.store_token(user_id, platform, encrypted_data)
+            logger.debug(f"Successfully stored token with structure: {list(structured_token.keys())}")
             
         except Exception as e:
             logger.error(f"Error storing token: {str(e)}")
@@ -95,27 +140,39 @@ class TokenManager:
                 return None
             
             token_data = self.decrypt_token_data(encrypted_data)
+            logger.debug(f"Retrieved token data with keys: {token_data.keys()}")
             
-            # Check token expiration
+            # For Twitter, we need both OAuth 1.0a and 2.0 tokens
+            if platform == 'twitter':
+                # Check OAuth 2.0 token expiration if it exists
+                if 'oauth2' in token_data:
+                    expires_at = token_data.get('expires_at')
+                    if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
+                        logger.debug(f"OAuth 2.0 token expired for user {user_id}")
+                        # Attempt to refresh if refresh token exists
+                        if token_data.get('refresh_token'):
+                            refreshed_token = await self.refresh_token(platform, user_id, token_data)
+                            if refreshed_token:
+                                # Preserve OAuth 1.0a tokens if they exist
+                                if 'oauth1' in token_data:
+                                    refreshed_token['oauth1'] = token_data['oauth1']
+                                return refreshed_token
+                
+                # Return both OAuth 1.0a and 2.0 tokens if they exist
+                return {
+                    'oauth1': token_data.get('oauth1', {}),
+                    'oauth2': token_data.get('oauth2', {})
+                }
+            
+            # For other platforms, handle standard OAuth 2.0
             expires_at = token_data.get('expires_at')
             if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
                 logger.debug(f"Token expired for user {user_id} on platform {platform}")
-                
-                # Attempt to refresh if refresh token exists
                 if token_data.get('refresh_token'):
-                    refreshed_token = await self.refresh_token(platform, user_id, token_data)
-                    if refreshed_token:
-                        return refreshed_token
+                    return await self.refresh_token(platform, user_id, token_data)
                 return None
             
-            # Return token in format expected by platform handlers
-            return {
-                "access_token": token_data["access_token"],
-                "token_type": token_data.get("token_type", "Bearer"),
-                "expires_in": token_data.get("expires_in"),
-                "refresh_token": token_data.get("refresh_token"),
-                "scope": token_data.get("scope")
-            }
+            return token_data
             
         except Exception as e:
             logger.error(f"Error retrieving token: {str(e)}")

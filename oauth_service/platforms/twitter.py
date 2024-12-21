@@ -123,6 +123,7 @@ class TwitterOAuth(OAuthBase):
                     'expires_in': token.get('expires_in', 7200),
                     'expires_at': token.get('expires_at')
                 }
+                logger.debug("OAuth 2.0 tokens obtained successfully")
             except Exception as e:
                 logger.error(f"Error exchanging OAuth 2.0 code: {str(e)}")
                 raise
@@ -134,10 +135,13 @@ class TwitterOAuth(OAuthBase):
                     'access_token': self.oauth1_handler.access_token,
                     'access_token_secret': self.oauth1_handler.access_token_secret
                 }
+                logger.debug("OAuth 1.0a tokens obtained successfully")
             except Exception as e:
                 logger.error(f"Error exchanging OAuth 1.0a verifier: {str(e)}")
                 raise
         
+        # Log token structure (without sensitive data)
+        logger.debug(f"Final token structure: {list(tokens.keys())}")
         return tokens
     
     async def refresh_token(self, refresh_token: str) -> Dict:
@@ -208,6 +212,27 @@ class TwitterOAuth(OAuthBase):
             Media ID string
         """
         try:
+            logger.debug("Starting media upload process")
+            logger.debug(f"Token data structure: {list(token_data.keys() if isinstance(token_data, dict) else [])}")
+            
+            # First check if we have OAuth 1.0a tokens
+            if not isinstance(token_data, dict):
+                logger.error("Token data is not a dictionary")
+                raise ValueError("Invalid token data structure")
+                
+            if 'oauth1' not in token_data:
+                logger.error("OAuth 1.0a tokens not found in token data")
+                raise ValueError("OAuth 1.0a tokens required for media upload")
+            
+            oauth1_tokens = token_data['oauth1']
+            if not isinstance(oauth1_tokens, dict):
+                logger.error("OAuth 1.0a token data is not a dictionary")
+                raise ValueError("Invalid OAuth 1.0a token structure")
+                
+            if not oauth1_tokens.get('access_token') or not oauth1_tokens.get('access_token_secret'):
+                logger.error("Missing required OAuth 1.0a token components")
+                raise ValueError("Missing OAuth 1.0a access token or secret")
+
             # Download the image
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url) as response:
@@ -215,25 +240,31 @@ class TwitterOAuth(OAuthBase):
                         raise ValueError(f"Failed to download image: {response.status}")
                     image_data = await response.read()
 
+            logger.debug("Image downloaded successfully")
+
             # Create Twitter API v1.1 client
             auth = tweepy.OAuth1UserHandler(
                 consumer_key=self._consumer_key,
                 consumer_secret=self._decrypted_consumer_secret,
-                access_token=token_data['oauth1']['access_token'],
-                access_token_secret=token_data['oauth1']['access_token_secret']
+                access_token=oauth1_tokens['access_token'],
+                access_token_secret=oauth1_tokens['access_token_secret']
             )
             api = tweepy.API(auth)
 
             # Upload media
             media = api.media_upload(filename='image', file=image_data)
+            logger.debug(f"Successfully uploaded media with ID: {media.media_id}")
             
             return str(media.media_id)
 
+        except ValueError as e:
+            logger.error(f"Validation error in media upload: {str(e)}")
+            raise
         except Exception as e:
             logger.error(f"Error uploading media to Twitter: {str(e)}")
             raise ValueError(f"Failed to upload media: {str(e)}")
     
-    async def create_tweet(self, token_data: Dict, content: Dict) -> Dict:
+    async def create_post(self, token_data: Dict, content: Dict) -> Dict:
         """
         Create a tweet using Twitter API v2.
         
@@ -244,28 +275,73 @@ class TwitterOAuth(OAuthBase):
         Returns:
             Dictionary containing tweet data
         """
-        if 'oauth2' not in token_data:
-            raise ValueError("OAuth 2.0 tokens required for creating tweets")
-        
-        client = tweepy.Client(
-            bearer_token=None,
-            consumer_key=self._consumer_key,
-            consumer_secret=self._decrypted_consumer_secret,
-            access_token=token_data['oauth2']['access_token']
-        )
-        
-        # Create tweet with text and media IDs
-        tweet = client.create_tweet(
-            text=content['text'],
-            media_ids=content.get('media_ids')
-        )
-        
-        return {
-            'post_id': str(tweet.data['id']),
-            'text': tweet.data['text'],
-            'platform': 'twitter',
-            'url': f"https://twitter.com/i/web/status/{tweet.data['id']}"
-        }
+        try:
+            logger.debug("Starting tweet creation process")
+            logger.debug(f"Token data structure: {token_data.keys()}")
+            
+            # For media upload, we need OAuth 1.0a tokens
+            media_ids = None
+            if content.get('image_url'):
+                if not isinstance(token_data, dict) or 'oauth1' not in token_data:
+                    logger.error("OAuth 1.0a tokens required but not found")
+                    raise ValueError("OAuth 1.0a tokens required for media upload")
+                
+                try:
+                    media_id = await self.upload_media_v1(token_data, content['image_url'])
+                    media_ids = [media_id]
+                    logger.debug(f"Media uploaded successfully with ID: {media_id}")
+                except Exception as e:
+                    logger.error(f"Media upload failed: {str(e)}")
+                    raise ValueError(f"Media upload failed: {str(e)}")
+
+            # For creating the tweet, prefer OAuth 2.0 but fall back to OAuth 1.0a if needed
+            if isinstance(token_data, dict) and 'oauth2' in token_data:
+                oauth2_data = token_data['oauth2']
+                oauth2_token = oauth2_data.get('access_token')
+                if not oauth2_token:
+                    raise ValueError("OAuth 2.0 access token not found")
+                
+                client = tweepy.Client(
+                    bearer_token=None,
+                    consumer_key=self._consumer_key,
+                    consumer_secret=self._decrypted_consumer_secret,
+                    access_token=oauth2_token
+                )
+            elif isinstance(token_data, dict) and 'oauth1' in token_data:
+                oauth1_data = token_data['oauth1']
+                if not oauth1_data.get('access_token') or not oauth1_data.get('access_token_secret'):
+                    raise ValueError("OAuth 1.0a tokens incomplete")
+                
+                client = tweepy.Client(
+                    bearer_token=None,
+                    consumer_key=self._consumer_key,
+                    consumer_secret=self._decrypted_consumer_secret,
+                    access_token=oauth1_data['access_token'],
+                    access_token_secret=oauth1_data['access_token_secret']
+                )
+            else:
+                raise ValueError("No valid OAuth tokens found")
+            
+            # Create the tweet
+            tweet = client.create_tweet(
+                text=content['text'],
+                media_ids=media_ids
+            )
+            
+            if not tweet or not tweet.data:
+                raise ValueError("Failed to create tweet")
+            
+            logger.debug("Tweet created successfully")
+            return {
+                'post_id': str(tweet.data['id']),
+                'text': tweet.data['text'],
+                'platform': 'twitter',
+                'url': f"https://twitter.com/i/web/status/{tweet.data['id']}"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creating tweet: {str(e)}")
+            raise
     
     async def _fetch_media(self, url: str) -> bytes:
         """

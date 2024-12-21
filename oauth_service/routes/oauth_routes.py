@@ -306,6 +306,7 @@ async def create_post(
         oauth_handler = await get_oauth_handler(platform)
         token_manager = TokenManager()
         
+        # Get token data
         token_data = await token_manager.get_valid_token(platform, request.user_id)
         if not token_data:
             raise HTTPException(
@@ -313,18 +314,38 @@ async def create_post(
                 detail="No valid token found for this user"
             )
         
+        # Log token structure (without sensitive data)
+        logger.debug(f"Token data structure: {list(token_data.keys() if isinstance(token_data, dict) else [])}")
+        
         content_dict = request.content.dict(exclude_none=True)
         
-        # Special handling for Twitter with media
-        if platform == "twitter" and content_dict.get("image_url"):
-            # First upload media using v1.1 API
-            media_id = await oauth_handler.upload_media_v1(
-                token_data,
-                content_dict["image_url"]
-            )
-            # Then create tweet with media_id using v2 API
-            content_dict["media_ids"] = [media_id]
-            del content_dict["image_url"]  # Remove image_url as we now have media_id
+        # For Twitter, ensure we have both OAuth 1.0a and 2.0 tokens if needed
+        if platform == "twitter":
+            if not isinstance(token_data, dict):
+                raise HTTPException(
+                    status_code=500,
+                    detail="Invalid token data structure"
+                )
+            
+            if content_dict.get("image_url") and 'oauth1' not in token_data:
+                raise HTTPException(
+                    status_code=400,
+                    detail="OAuth 1.0a tokens required for media upload"
+                )
+            
+            # Ensure OAuth 1.0a tokens are properly structured
+            if 'oauth1' in token_data:
+                oauth1_data = token_data['oauth1']
+                if not isinstance(oauth1_data, dict):
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Invalid OAuth 1.0a token structure"
+                    )
+                if not oauth1_data.get('access_token') or not oauth1_data.get('access_token_secret'):
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Missing OAuth 1.0a tokens"
+                    )
         
         result = await oauth_handler.create_post(
             token_data,
