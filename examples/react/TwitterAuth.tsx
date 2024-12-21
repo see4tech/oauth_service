@@ -24,10 +24,10 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
   const handleCallback = useCallback(async (code: string, state: string, isOAuth1: boolean = false, oauth1Verifier?: string) => {
     try {
       setIsLoading(true);
-      console.log('Starting token exchange:', { isOAuth1, code: code.slice(0, 10) + '...', hasVerifier: !!oauth1Verifier });
+      console.log('[Parent] Starting token exchange:', { isOAuth1, code: code.slice(0, 10) + '...', hasVerifier: !!oauth1Verifier });
       
       const tokens = await TwitterTokenExchange.exchangeCodeForToken(code, state, redirectUri, isOAuth1, oauth1Verifier);
-      console.log('Twitter tokens received:', { 
+      console.log('[Parent] Twitter tokens received:', { 
         type: isOAuth1 ? 'OAuth1.0a' : 'OAuth2.0', 
         hasOAuth1Url: !!tokens.oauth1_url,
         tokenKeys: Object.keys(tokens),
@@ -36,13 +36,18 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
       
       // If we received OAuth 1.0a URL in the response and we're not already in OAuth 1.0a flow
       if (!isOAuth1 && tokens.oauth1_url) {
-        console.log('Initiating OAuth 1.0a flow with URL:', tokens.oauth1_url);
+        console.log('[Parent] Initiating OAuth 1.0a flow with URL:', tokens.oauth1_url);
         setOauth1Pending(true);
+        
+        // Add a small delay before opening the OAuth 1.0a window
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
-        console.log('OAuth 1.0a window opened:', { 
+        console.log('[Parent] OAuth 1.0a window opened:', { 
           windowOpened: !!oauth1Window,
           url: tokens.oauth1_url 
         });
+        
         if (!oauth1Window) {
           throw new Error('Could not open OAuth 1.0a window');
         }
@@ -52,8 +57,11 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
 
       onSuccess(tokens);
 
+      // Add a delay before closing the window
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       if (authWindow && !authWindow.closed) {
-        console.log('Closing auth window');
+        console.log('[Parent] Closing auth window');
         authWindow.close();
         setAuthWindow(null);
       }
@@ -65,7 +73,7 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         toast.success('Twitter autorización exitosa. La ventana se cerrará en 5 segundos.');
       }
     } catch (error) {
-      console.error('Twitter token exchange error:', error);
+      console.error('[Parent] Twitter token exchange error:', error);
       onError(error as Error);
       toast.error((error as Error).message);
     } finally {
@@ -79,11 +87,11 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) {
-        console.warn('Received message from unauthorized origin:', event.origin);
+        console.warn('[Parent] Received message from unauthorized origin:', event.origin);
         return;
       }
 
-      console.log('Received postMessage:', {
+      console.log('[Parent] Received postMessage:', {
         type: event.data.type,
         hasCode: !!event.data.code,
         hasState: !!event.data.state,
@@ -94,18 +102,18 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
       
       if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
         if (event.data.success) {
-          console.log('Twitter OAuth successful, proceeding with token exchange');
+          console.log('[Parent] Twitter OAuth successful, proceeding with token exchange');
           if (event.data.oauth_verifier) {
             // Handle OAuth 1.0a callback
-            console.log('Processing OAuth 1.0a callback');
+            console.log('[Parent] Processing OAuth 1.0a callback');
             handleCallback(event.data.oauth_token, '', true, event.data.oauth_verifier);
           } else if (event.data.code && event.data.state) {
             // Handle OAuth 2.0 callback
-            console.log('Processing OAuth 2.0 callback');
+            console.log('[Parent] Processing OAuth 2.0 callback');
             handleCallback(event.data.code, event.data.state);
           }
         } else {
-          console.error('Twitter OAuth failed:', event.data.error);
+          console.error('[Parent] Twitter OAuth failed:', event.data.error);
           onError(new Error(event.data.error || 'Authentication failed'));
           if (authWindow && !authWindow.closed) {
             authWindow.close();
