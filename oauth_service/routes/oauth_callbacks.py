@@ -20,7 +20,7 @@ def generate_api_key() -> str:
     """Generate a secure API key."""
     return f"user_{secrets.token_urlsafe(32)}"
 
-@callback_router.post("/{platform}/callback/{version}")
+@callback_router.get("/{platform}/callback/{version}")
 async def oauth_callback(
     request: Request,
     platform: str,
