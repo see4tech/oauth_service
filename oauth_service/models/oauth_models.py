@@ -1,20 +1,21 @@
 from pydantic import BaseModel, HttpUrl, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 class OAuthInitRequest(BaseModel):
     """Request model for initializing OAuth flow."""
     user_id: str
-    redirect_uri: HttpUrl
-    frontend_callback_url: HttpUrl
+    redirect_uri: str
+    frontend_callback_url: Optional[str] = None
     scopes: Optional[List[str]] = None
+    use_oauth1: Optional[bool] = False  # Added to support separate OAuth flows
 
 class OAuthInitResponse(BaseModel):
     """Response model for OAuth initialization."""
     authorization_url: str
     state: str
     platform: str
-    additional_params: Optional[Dict] = None
+    additional_params: Optional[Dict[str, Any]] = None
 
 class OAuthCallbackRequest(BaseModel):
     """Request model for OAuth callback."""

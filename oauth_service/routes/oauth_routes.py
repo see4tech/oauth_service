@@ -82,24 +82,31 @@ async def initialize_oauth(
             frontend_callback_url=str(request.frontend_callback_url)
         )
         
-        # Get authorization URLs
-        auth_urls = await oauth_handler.get_authorization_url(state=state)
+        # Get authorization URL based on OAuth type
+        auth_urls = await oauth_handler.get_authorization_url(
+            state=state,
+            use_oauth1=getattr(request, 'use_oauth1', False)
+        )
         
-        # For Twitter, handle the case where OAuth 1.0a might fail
+        # For Twitter, handle OAuth 1.0a and 2.0 separately
         if platform == "twitter":
-            # Store code verifier in state for later use
-            if isinstance(auth_urls, dict) and 'code_verifier' in auth_urls:
+            # Store code verifier in state for OAuth 2.0
+            if not request.use_oauth1 and isinstance(auth_urls, dict) and 'code_verifier' in auth_urls:
                 await store_code_verifier(state, auth_urls['code_verifier'])
-                
-            return OAuthInitResponse(
-                authorization_url=auth_urls['oauth2_url'],
-                state=auth_urls['state'],
-                platform=platform,
-                additional_params={
-                    'oauth1_url': auth_urls.get('oauth1_url'),
-                    'oauth1_error': auth_urls.get('oauth1_error')
-                }
-            )
+            
+            # Return appropriate URL based on OAuth type
+            if request.use_oauth1:
+                return OAuthInitResponse(
+                    authorization_url=auth_urls['oauth1_url'],
+                    state=auth_urls['state'],
+                    platform=platform
+                )
+            else:
+                return OAuthInitResponse(
+                    authorization_url=auth_urls['oauth2_url'],
+                    state=auth_urls['state'],
+                    platform=platform
+                )
         
         # For other platforms that return a string URL directly
         if isinstance(auth_urls, str):
@@ -108,7 +115,7 @@ async def initialize_oauth(
                 state=state,
                 platform=platform
             )
-            
+        
         # For other platforms that return a dictionary
         return OAuthInitResponse(
             authorization_url=auth_urls['oauth2_url'] if 'oauth2_url' in auth_urls else auth_urls['authorization_url'],
