@@ -107,40 +107,19 @@ async def initialize_oauth(
                     await store_code_verifier(state, auth_urls['code_verifier'])
                 
                 # Get base URL and code challenge from Twitter's OAuth handler
-                oauth2_url = auth_urls['oauth2_url'].split('?')[0]
-                code_challenge = None
-                code_challenge_method = None
+                oauth2_url = auth_urls['oauth2_url']
                 
-                # Extract code_challenge from original URL if present
-                if 'code_challenge=' in auth_urls['oauth2_url']:
-                    original_params = dict(param.split('=') for param in auth_urls['oauth2_url'].split('?')[1].split('&'))
-                    code_challenge = original_params.get('code_challenge')
-                    code_challenge_method = original_params.get('code_challenge_method')
-                
-                # Add required OAuth 2.0 parameters
-                params = {
-                    'response_type': 'code',
-                    'client_id': oauth_handler.client_id,
-                    'redirect_uri': oauth_handler.callback_url + '/2',
-                    'scope': 'tweet.read tweet.write users.read offline.access',
-                    'state': state,
-                    'code_challenge': code_challenge,
-                    'code_challenge_method': code_challenge_method,
-                    'access_type': 'offline',  # Request refresh token
-                    'prompt': 'consent'  # Force consent screen
-                }
-                
-                # Remove None values and URL encode parameters
-                from urllib.parse import urlencode
-                query_params = urlencode({k: v for k, v in params.items() if v is not None})
-                oauth2_url = f"{oauth2_url}?{query_params}"
+                # Add state parameter to URL
+                separator = '&' if '?' in oauth2_url else '?'
+                oauth2_url = f"{oauth2_url}{separator}state={state}"
                 
                 logger.debug(f"Generated OAuth 2.0 URL: {oauth2_url}")
                 
                 return OAuthInitResponse(
                     authorization_url=oauth2_url,
                     state=state,
-                    platform=platform
+                    platform=platform,
+                    additional_params={'headers': auth_urls.get('headers')}  # Include headers in response
                 )
         
         # For other platforms that return a string URL directly

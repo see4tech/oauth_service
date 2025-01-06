@@ -10,6 +10,7 @@ import base64
 import os
 import hashlib
 from datetime import datetime
+from urllib.parse import urlencode
 
 logger = get_logger(__name__)
 
@@ -63,30 +64,43 @@ class TwitterOAuth(OAuthBase):
             code_verifier = base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8').rstrip('=')
             code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode('utf-8')).digest()).decode('utf-8').rstrip('=')
             
+            # Create Basic Auth header
+            auth_string = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
+            basic_auth = base64.b64encode(auth_string.encode()).decode()
+            
             # Add required parameters for refresh token
             extra_params = {
                 'code_challenge': code_challenge,
                 'code_challenge_method': 'S256',
+                'response_type': 'code',
                 'code_verifier': code_verifier,
                 'access_type': 'offline',  # Request refresh token
-                'prompt': 'consent'  # Force consent screen to ensure refresh token
+                'prompt': 'consent',  # Force consent screen
+                'client_id': self.client_id
             }
             
-            authorization_url, state = self.oauth2_client.authorization_url(
-                'https://twitter.com/i/oauth2/authorize',
-                **extra_params
-            )
+            headers = {
+                'Authorization': f'Basic {basic_auth}',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+            
+            authorization_url = 'https://twitter.com/i/oauth2/authorize'
+            
+            # Build URL with parameters
+            query_params = urlencode(extra_params)
+            oauth2_url = f"{authorization_url}?{query_params}"
             
             logger.debug("Generated OAuth 2.0 authorization URL with parameters:")
             logger.debug(f"- Scopes: {self.oauth2_client.scope}")
             logger.debug(f"- Code challenge method: {extra_params['code_challenge_method']}")
             logger.debug(f"- Access type: {extra_params['access_type']}")
+            logger.debug(f"- Headers: {headers}")  # Log headers (without sensitive info)
             
             return {
                 'oauth1_url': oauth1_url,
-                'oauth2_url': authorization_url,
-                'state': state,
-                'code_verifier': code_verifier
+                'oauth2_url': oauth2_url,
+                'code_verifier': code_verifier,
+                'headers': headers  # Include headers in return value
             }
             
         except Exception as e:
@@ -105,61 +119,51 @@ class TwitterOAuth(OAuthBase):
                 logger.debug("Starting OAuth 2.0 token exchange")
                 logger.debug(f"Code verifier present: {bool(code_verifier)}")
                 
-                # Include code verifier for PKCE and request offline.access
-                token = self.oauth2_client.fetch_token(
-                    'https://api.twitter.com/2/oauth2/token',
-                    code=oauth2_code,
-                    client_secret=self._decrypted_client_secret,
-                    code_verifier=code_verifier,
-                    include_client_id=True,
-                    client_id=self.client_id
-                )
+                # Create Basic Auth header
+                auth_string = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
+                basic_auth = base64.b64encode(auth_string.encode()).decode()
                 
-                # Log token response for debugging
-                logger.debug(f"OAuth 2.0 token response keys: {list(token.keys())}")
-                logger.debug(f"OAuth 2.0 token response scopes: {token.get('scope', '')}")
-                logger.debug(f"Has refresh_token: {bool(token.get('refresh_token'))}")
-                
-                if not token.get('refresh_token'):
-                    logger.warning("No refresh token received in OAuth 2.0 response")
-                    logger.warning("Token response data: %s", {k: '...' if k in ['access_token', 'refresh_token'] else v for k, v in token.items()})
-                
-                tokens['oauth2'] = {
-                    'access_token': token['access_token'],
-                    'refresh_token': token.get('refresh_token'),
-                    'expires_in': token.get('expires_in', 7200),
-                    'expires_at': token.get('expires_at', datetime.utcnow().timestamp() + token.get('expires_in', 7200))
+                # Set up token exchange parameters
+                token_data = {
+                    'code': oauth2_code,
+                    'grant_type': 'authorization_code',
+                    'client_id': self.client_id,
+                    'redirect_uri': f"{self.callback_url}/2",
+                    'code_verifier': code_verifier
                 }
-                logger.debug(f"OAuth 2.0 tokens obtained successfully. Has refresh token: {bool(tokens['oauth2'].get('refresh_token'))}")
-
-                # Try to get OAuth 1.0a tokens automatically
-                try:
-                    # Create a new OAuth1 handler for this request
-                    if self.callback_url.endswith('/callback'):
-                        base_callback = self.callback_url
-                    else:
-                        base_callback = self.callback_url.rstrip('/') + '/callback'
-                    oauth1_callback = base_callback + '/1'
-                    
-                    oauth1_handler = tweepy.OAuthHandler(
-                        self._consumer_key,
-                        self._decrypted_consumer_secret,
-                        oauth1_callback
-                    )
-                    
-                    # Get the authorization URL and request token
-                    oauth1_url = oauth1_handler.get_authorization_url()
-                    logger.debug("Got OAuth 1.0a authorization URL")
-                    
-                    # Store OAuth 1.0a request token and secret
-                    request_token = oauth1_handler.request_token
-                    tokens['oauth1_request_token'] = request_token['oauth_token']
-                    tokens['oauth1_request_token_secret'] = request_token['oauth_token_secret']
-                    tokens['oauth1_url'] = oauth1_url
-                    
-                    logger.debug("Stored OAuth 1.0a request tokens")
-                except Exception as e:
-                    logger.error(f"Error getting OAuth 1.0a URL: {str(e)}")
+                
+                headers = {
+                    'Authorization': f'Basic {basic_auth}',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        'https://api.twitter.com/2/oauth2/token',
+                        data=token_data,
+                        headers=headers
+                    ) as response:
+                        if not response.ok:
+                            error_text = await response.text()
+                            logger.error(f"Token exchange failed: {error_text}")
+                            raise ValueError(f"Token exchange failed: {error_text}")
+                        
+                        token = await response.json()
+                        
+                        # Log token response for debugging
+                        logger.debug(f"OAuth 2.0 token response keys: {list(token.keys())}")
+                        logger.debug(f"OAuth 2.0 token response scopes: {token.get('scope', '')}")
+                        logger.debug(f"Has refresh_token: {bool(token.get('refresh_token'))}")
+                        
+                        tokens['oauth2'] = {
+                            'access_token': token['access_token'],
+                            'refresh_token': token.get('refresh_token'),
+                            'expires_in': token.get('expires_in', 7200),
+                            'expires_at': token.get('expires_at', datetime.utcnow().timestamp() + token.get('expires_in', 7200))
+                        }
+                        
+                        logger.debug(f"OAuth 2.0 tokens obtained successfully. Has refresh token: {bool(tokens['oauth2'].get('refresh_token'))}")
+            
             except Exception as e:
                 logger.error(f"Error exchanging OAuth 2.0 code: {str(e)}")
                 raise
