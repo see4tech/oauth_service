@@ -96,9 +96,10 @@ async def initialize_oauth(
             auth_urls = await oauth_handler.get_authorization_url()
             
             if request.use_oauth1:
+                # OAuth 1.0a doesn't use state
                 return OAuthInitResponse(
                     authorization_url=auth_urls['oauth1_url'],
-                    state=state,
+                    state=state,  # Use our encrypted state
                     platform=platform
                 )
             else:
@@ -106,14 +107,20 @@ async def initialize_oauth(
                 if 'code_verifier' in auth_urls:
                     await store_code_verifier(state, auth_urls['code_verifier'])
                 
-                # Append state to OAuth 2.0 URL
-                oauth2_url = auth_urls['oauth2_url']
-                separator = '&' if '?' in oauth2_url else '?'
-                oauth2_url = f"{oauth2_url}{separator}state={state}"
+                # Use our encrypted state, ignore Twitter's state
+                oauth2_url = auth_urls['oauth2_url'].split('?')[0]  # Remove any existing query params
+                oauth2_url = f"{oauth2_url}?state={state}"  # Add our state first
+                
+                # Add other necessary params from the original URL
+                if 'code_challenge=' in auth_urls['oauth2_url']:
+                    params = auth_urls['oauth2_url'].split('?')[1].split('&')
+                    for param in params:
+                        if not param.startswith('state='):  # Skip Twitter's state
+                            oauth2_url += f"&{param}"
                 
                 return OAuthInitResponse(
                     authorization_url=oauth2_url,
-                    state=state,
+                    state=state,  # Use our encrypted state
                     platform=platform
                 )
         

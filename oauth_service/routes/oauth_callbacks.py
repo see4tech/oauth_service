@@ -71,6 +71,7 @@ async def oauth_callback(
         logger.info(f"Received callback for platform: {platform}, version: {version}")
         logger.info(f"Code present: {bool(code)}")
         logger.info(f"State present: {bool(state)}")
+        logger.debug(f"Actual state value received: {state}")
         
         # Handle OAuth errors
         if error:
