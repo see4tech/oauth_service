@@ -93,20 +93,17 @@ async def initialize_oauth(
         
         # For Twitter, handle OAuth 1.0a and 2.0 separately
         if platform == "twitter":
+            auth_urls = await oauth_handler.get_authorization_url()  # This gets both OAuth 1.0a and 2.0 URLs
+            
             if request.use_oauth1:
-                # OAuth 1.0a doesn't use state
-                auth_urls = await oauth_handler.get_authorization_url(use_oauth1=True)
                 return OAuthInitResponse(
                     authorization_url=auth_urls['oauth1_url'],
                     state=auth_urls['state'],
                     platform=platform
                 )
             else:
-                # OAuth 2.0 - get base URL and append state
-                auth_urls = await oauth_handler.get_authorization_url(use_oauth1=False)
-                
                 # Store code verifier if present
-                if isinstance(auth_urls, dict) and 'code_verifier' in auth_urls:
+                if 'code_verifier' in auth_urls:
                     await store_code_verifier(state, auth_urls['code_verifier'])
                 
                 # Append state to OAuth 2.0 URL
