@@ -36,28 +36,30 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
       });
       
       // If we received OAuth 1.0a URL in the response and we're not already in OAuth 1.0a flow
-      if (!isOAuth1 && tokens.oauth1_url && authWindow && !authWindow.closed) {
+      if (!isOAuth1 && tokens.oauth1_url) {
         console.log('[Parent] Initiating OAuth 1.0a flow with URL:', tokens.oauth1_url);
         setOauth1Pending(true);
         
         // Store the OAuth 1.0a URL in case we need to retry
         sessionStorage.setItem('twitter_oauth1_url', tokens.oauth1_url);
         
-        // Close the OAuth 2.0 window first
-        authWindow.close();
+        // Close the OAuth 2.0 window if it exists
+        if (authWindow && !authWindow.closed) {
+          authWindow.close();
+        }
         setAuthWindow(null);
         
-        // Wait a short moment before opening the OAuth 1.0a window
-        setTimeout(() => {
-          console.log('[Parent] Opening OAuth 1.0a window after delay');
-          const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
-          if (oauth1Window) {
-            setAuthWindow(oauth1Window);
-          } else {
-            console.error('[Parent] Failed to open OAuth 1.0a window');
-            onError(new Error('Failed to open OAuth 1.0a window'));
-          }
-        }, 500);
+        // Open OAuth 1.0a window immediately
+        console.log('[Parent] Opening OAuth 1.0a window');
+        const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
+        if (oauth1Window) {
+          setAuthWindow(oauth1Window);
+          oauth1Window.focus();
+        } else {
+          console.error('[Parent] Failed to open OAuth 1.0a window');
+          onError(new Error('Failed to open OAuth 1.0a window'));
+          setOauth1Pending(false);
+        }
         
         return;
       }
