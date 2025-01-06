@@ -189,9 +189,9 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
       const authData = await TwitterPopupHandler.initializeAuth(Number(userId), twitterCallbackUrl, true);
       console.log('[Parent] OAuth 1.0a initialization successful:', authData);
       
-      // Check for oauth1_url in the response for OAuth 1.0a flow
-      if (authData.oauth1_url) {
-        const newWindow = TwitterPopupHandler.openAuthWindow(authData.oauth1_url, true);
+      // Check for authorization_url in the response for OAuth 1.0a flow
+      if (authData.authorization_url) {
+        const newWindow = TwitterPopupHandler.openAuthWindow(authData.authorization_url, true);
         if (!newWindow) {
           throw new Error('Could not open OAuth 1.0a window');
         }

@@ -63,8 +63,8 @@ export class TwitterTokenExchange {
     const data = await response.json();
     console.log('[Parent] Token exchange response:', {
       success: data.success,
-      hasOAuth1Url: !!data.oauth1_url,
-      oauth1Url: data.oauth1_url,
+      hasAuthUrl: !!data.authorization_url,
+      authUrl: data.authorization_url,
       tokenKeys: Object.keys(data)
     });
     
@@ -96,11 +96,11 @@ export class TwitterTokenExchange {
           hasRefreshToken: !!data.refresh_token
         });
 
-        if (data.oauth1_url) {
+        if (data.authorization_url) {
           console.log('[Parent] Redirecting to OAuth1 URL in the same window');
           // Instead of opening a new window, redirect the current one
           const currentWindow = window.opener || window;
-          currentWindow.location.href = data.oauth1_url;
+          currentWindow.location.href = data.authorization_url;
         }
       } else {
         storedTokens = {
