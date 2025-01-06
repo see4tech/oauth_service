@@ -20,6 +20,48 @@ def generate_api_key() -> str:
     """Generate a secure API key."""
     return f"user_{secrets.token_urlsafe(32)}"
 
+def init_twitter_oauth(user_id: str, frontend_callback_url: str) -> dict:
+    """Initialize Twitter OAuth flow."""
+    try:
+        # Get the base callback URL from settings
+        callback_url = f"{settings.TWITTER_CALLBACK_URL}/2"  # Append /2 for OAuth 2.0
+        
+        oauth = TwitterOAuth(
+            client_id=settings.TWITTER_CLIENT_ID,
+            client_secret=settings.TWITTER_CLIENT_SECRET,
+            redirect_uri=callback_url,  # Use the constructed callback URL
+        )
+        
+        # Generate and encrypt state
+        state = generate_oauth_state(
+            user_id=user_id,
+            frontend_callback_url=frontend_callback_url,
+            platform="twitteroauth"
+        )
+        
+        # Get the base authorization URL first
+        auth_url = oauth.get_authorization_url()
+        
+        # Manually append the state parameter to the URL
+        if '?' in auth_url:
+            auth_url = f"{auth_url}&state={state}"
+        else:
+            auth_url = f"{auth_url}?state={state}"
+        
+        logger.debug(f"Generated Twitter OAuth URL: {auth_url}")
+        logger.debug(f"Using callback URL: {callback_url}")
+        
+        return {
+            "authorization_url": auth_url,
+            "state": state
+        }
+    except Exception as e:
+        logger.error(f"Error initializing OAuth for twitter: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initialize Twitter OAuth: {str(e)}"
+        )
+
 @callback_router.get("/{platform}/callback/{version}")
 async def oauth_callback(
     request: Request,
