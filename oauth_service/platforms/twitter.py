@@ -67,7 +67,6 @@ class TwitterOAuth(OAuthBase):
             extra_params = {
                 'code_challenge': code_challenge,
                 'code_challenge_method': 'S256',
-                'response_type': 'code',
                 'code_verifier': code_verifier,
                 'access_type': 'offline',  # Request refresh token
                 'prompt': 'consent'  # Force consent screen to ensure refresh token
@@ -81,7 +80,6 @@ class TwitterOAuth(OAuthBase):
             logger.debug("Generated OAuth 2.0 authorization URL with parameters:")
             logger.debug(f"- Scopes: {self.oauth2_client.scope}")
             logger.debug(f"- Code challenge method: {extra_params['code_challenge_method']}")
-            logger.debug(f"- Response type: {extra_params['response_type']}")
             logger.debug(f"- Access type: {extra_params['access_type']}")
             
             return {
