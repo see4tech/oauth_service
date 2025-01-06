@@ -56,19 +56,24 @@ class TokenManager:
                 # Get existing token data if any
                 existing_data = await self.get_token(platform, user_id) or {}
                 
+                # Log the token structure before update
+                logger.debug(f"Existing token data structure for user {user_id}: {list(existing_data.keys())}")
+                logger.debug(f"New token data structure: {list(token_data.keys())}")
+                
                 # Update with new token data while preserving existing tokens
                 if 'oauth1' in token_data:
                     existing_data['oauth1'] = token_data['oauth1']
                 if 'oauth2' in token_data:
                     existing_data['oauth2'] = token_data['oauth2']
+                    logger.debug(f"Storing OAuth 2.0 token with keys: {list(token_data['oauth2'].keys())}")
                     
                 # Store the combined token data
                 token_data = existing_data
             
-            # Store token data in Redis
-            key = f"{platform}:{user_id}"
-            await self.redis.set(key, json.dumps(token_data))
-            logger.debug(f"Stored token for user {user_id} on platform {platform}")
+            # Encrypt and store token data
+            encrypted_data = self.encrypt_token_data(token_data)
+            self.db.store_token(user_id, platform, encrypted_data)
+            logger.debug(f"Successfully stored token for user {user_id} on platform {platform}")
             
         except Exception as e:
             logger.error(f"Error storing token: {str(e)}")
@@ -77,10 +82,13 @@ class TokenManager:
     async def get_token(self, platform: str, user_id: str) -> Optional[Dict]:
         """Get token data for a user."""
         try:
-            key = f"{platform}:{user_id}"
-            token_data = await self.redis.get(key)
-            if token_data:
-                return json.loads(token_data)
+            encrypted_data = self.db.get_token(user_id, platform)
+            if encrypted_data:
+                token_data = self.decrypt_token_data(encrypted_data)
+                logger.debug(f"Retrieved token data structure: {list(token_data.keys())}")
+                if platform == "twitter" and 'oauth2' in token_data:
+                    logger.debug(f"OAuth 2.0 token keys: {list(token_data['oauth2'].keys())}")
+                return token_data
             return None
         except Exception as e:
             logger.error(f"Error retrieving token: {str(e)}")
@@ -101,10 +109,13 @@ class TokenManager:
                 
                 if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
                     logger.debug(f"OAuth 2.0 token expired for Twitter user {user_id}")
-                    if oauth2_data.get('refresh_token'):
+                    refresh_token = oauth2_data.get('refresh_token')
+                    if refresh_token:
+                        logger.debug(f"Found refresh token for Twitter user {user_id}, attempting refresh")
                         return await self.refresh_token(platform, user_id, token_data)
                     # If no refresh token, but we have OAuth 1.0a tokens, return those
                     if 'oauth1' in token_data:
+                        logger.debug(f"No refresh token, but found OAuth 1.0a tokens for user {user_id}")
                         return token_data
                     return None
                 return token_data

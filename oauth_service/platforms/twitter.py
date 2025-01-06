@@ -101,6 +101,7 @@ class TwitterOAuth(OAuthBase):
                 # Log token response for debugging
                 logger.debug(f"OAuth 2.0 token response keys: {list(token.keys())}")
                 logger.debug(f"OAuth 2.0 token response scopes: {token.get('scope', '')}")
+                logger.debug(f"Has refresh_token: {bool(token.get('refresh_token'))}")
                 
                 tokens['oauth2'] = {
                     'access_token': token['access_token'],
@@ -108,8 +109,8 @@ class TwitterOAuth(OAuthBase):
                     'expires_in': token.get('expires_in', 7200),
                     'expires_at': token.get('expires_at', datetime.utcnow().timestamp() + token.get('expires_in', 7200))
                 }
-                logger.debug("OAuth 2.0 tokens obtained successfully")
-                
+                logger.debug(f"OAuth 2.0 tokens obtained successfully. Has refresh token: {bool(tokens['oauth2'].get('refresh_token'))}")
+
                 # Try to get OAuth 1.0a tokens automatically
                 try:
                     # Create a new OAuth1 handler for this request
@@ -197,6 +198,11 @@ class TwitterOAuth(OAuthBase):
                 scope=['tweet.read', 'tweet.write', 'users.read', 'offline.access']
             )
             
+            # Log refresh attempt details
+            logger.debug(f"Refresh token length: {len(refresh_token)}")
+            logger.debug(f"Client ID length: {len(self.client_id)}")
+            logger.debug(f"Client secret length: {len(self._decrypted_client_secret)}")
+            
             # Refresh the token
             token = refresh_session.refresh_token(
                 'https://api.twitter.com/2/oauth2/token',
@@ -209,6 +215,7 @@ class TwitterOAuth(OAuthBase):
             # Log token response for debugging
             logger.debug(f"Refresh token response keys: {list(token.keys())}")
             logger.debug(f"Refresh token response scopes: {token.get('scope', '')}")
+            logger.debug(f"New refresh token received: {bool(token.get('refresh_token'))}")
             
             # Ensure we have required fields
             if 'access_token' not in token:

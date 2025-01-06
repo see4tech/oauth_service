@@ -87,7 +87,7 @@ class TokenRefreshService:
                     logger.error(f"No token data found for Twitter user {user_id}")
                     return None
 
-                # Log the token structure we received
+                # Log the token structure we received (safely)
                 logger.debug(f"Token data structure for user {user_id}: {list(token_data.keys())}")
                 
                 oauth_handler = TwitterOAuth(
@@ -107,8 +107,21 @@ class TokenRefreshService:
                 oauth2_data = token_data['oauth2']
                 refresh_token = oauth2_data.get('refresh_token')
                 
+                # Log token data safely (only show presence/absence and expiry)
+                logger.debug(
+                    f"Twitter OAuth 2.0 token data for user {user_id}:\n"
+                    f"- Has access_token: {bool(oauth2_data.get('access_token'))}\n"
+                    f"- Has refresh_token: {bool(refresh_token)}\n"
+                    f"- Expires in: {oauth2_data.get('expires_in')}\n"
+                    f"- Expires at: {datetime.fromtimestamp(oauth2_data.get('expires_at', 0)).strftime('%Y-%m-%d %H:%M:%S') if oauth2_data.get('expires_at') else 'Not set'}"
+                )
+                
                 if not refresh_token:
-                    logger.error(f"No Twitter OAuth 2.0 refresh token found for user {user_id}. Token data: {oauth2_data.keys()}")
+                    logger.error(
+                        f"No Twitter OAuth 2.0 refresh token found for user {user_id}. "
+                        f"Token data keys: {list(oauth2_data.keys())}. "
+                        f"Refresh token is: {type(refresh_token).__name__}"
+                    )
                     return None
                 
                 logger.debug(f"Attempting to refresh Twitter OAuth 2.0 token for user {user_id}")
