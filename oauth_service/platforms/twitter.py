@@ -68,15 +68,16 @@ class TwitterOAuth(OAuthBase):
             auth_string = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
             basic_auth = base64.b64encode(auth_string.encode()).decode()
             
-            # Add required parameters for refresh token
+            # Add required parameters for OAuth 2.0
             extra_params = {
+                'response_type': 'code',
+                'client_id': self.client_id,
+                'redirect_uri': f"{self.callback_url}/2",
+                'scope': 'tweet.read tweet.write users.read offline.access',
                 'code_challenge': code_challenge,
                 'code_challenge_method': 'S256',
-                'response_type': 'code',
-                'code_verifier': code_verifier,
                 'access_type': 'offline',  # Request refresh token
-                'prompt': 'consent',  # Force consent screen
-                'client_id': self.client_id
+                'prompt': 'consent'  # Force consent screen
             }
             
             headers = {
@@ -91,16 +92,16 @@ class TwitterOAuth(OAuthBase):
             oauth2_url = f"{authorization_url}?{query_params}"
             
             logger.debug("Generated OAuth 2.0 authorization URL with parameters:")
-            logger.debug(f"- Scopes: {self.oauth2_client.scope}")
-            logger.debug(f"- Code challenge method: {extra_params['code_challenge_method']}")
-            logger.debug(f"- Access type: {extra_params['access_type']}")
-            logger.debug(f"- Headers: {headers}")  # Log headers (without sensitive info)
+            logger.debug(f"- Authorization URL: {oauth2_url}")
+            logger.debug(f"- Scopes: tweet.read tweet.write users.read offline.access")
+            logger.debug(f"- Code challenge method: S256")
+            logger.debug(f"- Redirect URI: {extra_params['redirect_uri']}")
             
             return {
                 'oauth1_url': oauth1_url,
                 'oauth2_url': oauth2_url,
-                'code_verifier': code_verifier,
-                'headers': headers  # Include headers in return value
+                'code_verifier': code_verifier,  # Save for token exchange
+                'headers': headers  # Include headers for token exchange
             }
             
         except Exception as e:
