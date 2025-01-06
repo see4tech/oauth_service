@@ -42,7 +42,8 @@ export class TwitterTokenExchange {
         'x-api-key': import.meta.env.VITE_API_KEY
       },
       body: JSON.stringify({
-        code,
+        code: isOAuth1 ? undefined : code,
+        oauth_token: isOAuth1 ? code : undefined,
         state,
         redirect_uri: redirectUri,
         is_oauth1: isOAuth1,
@@ -55,7 +56,8 @@ export class TwitterTokenExchange {
       console.error('[Parent] Token exchange failed:', {
         status: response.status,
         statusText: response.statusText,
-        error: errorData
+        error: errorData,
+        isOAuth1
       });
       throw new Error(errorData || 'Error exchanging code for tokens');
     }
