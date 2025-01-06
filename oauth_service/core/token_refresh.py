@@ -127,6 +127,10 @@ class TokenRefreshService:
                 for user_id, token_data in user_tokens.items():
                     needs_refresh = False
                     
+                    # Skip OAuth 1.0a tokens as they don't expire
+                    if platform == "twitter" and 'oauth1' in token_data and 'oauth2' not in token_data:
+                        continue
+                    
                     # Check Twitter OAuth 2.0 tokens
                     if platform == "twitter" and 'oauth2' in token_data:
                         expires_at = token_data['oauth2'].get('expires_at')
@@ -153,7 +157,7 @@ class TokenRefreshService:
                             logger.info(f"Successfully refreshed token for {platform}, user {user_id}")
                         else:
                             logger.error(f"Failed to refresh token for {platform}, user {user_id}")
-                    
+                            
         except Exception as e:
             logger.error(f"Error in token refresh process: {str(e)}")
 

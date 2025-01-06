@@ -28,25 +28,26 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         
-        # Skip CSP for OAuth callback routes
-        if request.url.path.startswith('/oauth') and request.url.path.endswith('/callback'):
-            # Only set other security headers
-            response.headers["X-Frame-Options"] = "SAMEORIGIN"
-            response.headers["X-Content-Type-Options"] = "nosniff"
-            response.headers["X-XSS-Protection"] = "1; mode=block"
-            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-            return response
-            
-        # For all other routes, set default CSP
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https:; "
-            "connect-src 'self' https:; "
-            "frame-src 'self' https://www.linkedin.com https://api.linkedin.com; "
-            "frame-ancestors 'self'"
-        )
+        # For OAuth callback routes, allow inline scripts and styles
+        if request.url.path.startswith('/oauth') and '/callback/' in request.url.path:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "connect-src 'self' *; "
+                "frame-ancestors 'self'"
+            )
+        else:
+            # For all other routes, set default CSP
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https:; "
+                "connect-src 'self' https:; "
+                "frame-src 'self' https://www.linkedin.com https://api.linkedin.com; "
+                "frame-ancestors 'self'"
+            )
         
         # Set other security headers
         response.headers["X-Frame-Options"] = "SAMEORIGIN"

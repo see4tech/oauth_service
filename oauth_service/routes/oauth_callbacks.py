@@ -42,11 +42,20 @@ async def oauth_callback(
             logger.error(f"Error description: {error_description}")
             return create_html_response(error=error_description or error, platform=platform, version=version)
 
-        # For Twitter OAuth 1.0a, we don't get a code parameter
-        oauth1_verifier = request.query_params.get('oauth_verifier')
-        if not (code or oauth1_verifier) or not state:
-            logger.error("Missing required parameters")
-            return create_html_response(error="Missing required parameters", platform=platform, version=version)
+        # Get OAuth 1.0a parameters
+        oauth_token = request.query_params.get('oauth_token')
+        oauth_verifier = request.query_params.get('oauth_verifier')
+        
+        # For OAuth 1.0a, we need oauth_token and oauth_verifier
+        if version == "1":
+            if not oauth_token or not oauth_verifier:
+                logger.error("Missing OAuth 1.0a parameters")
+                return create_html_response(error="Missing OAuth 1.0a parameters", platform=platform, version=version)
+        # For OAuth 2.0, we need code and state
+        else:
+            if not code or not state:
+                logger.error("Missing OAuth 2.0 parameters")
+                return create_html_response(error="Missing OAuth 2.0 parameters", platform=platform, version=version)
 
         oauth_handler = await get_oauth_handler(platform)
         
