@@ -37,10 +37,11 @@ export class TwitterPopupHandler {
     const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=yes,status=yes,scrollbars=yes`;
     
     try {
-      // For OAuth 1.0a, always open a new window with _blank target
+      // For OAuth 1.0a, always open a new window with a unique name
       if (isOAuth1) {
         console.log(`[Parent] Opening new OAuth 1.0a window with URL:`, url);
-        const authWindow = window.open(url, '_blank', features);
+        const windowName = `Twitter Auth OAuth1 ${Date.now()}`;
+        const authWindow = window.open(url, windowName, features);
         
         if (!authWindow) {
           console.error('[Parent] Failed to open OAuth 1.0a window');
@@ -101,6 +102,8 @@ export class TwitterPopupHandler {
           
           // Clean up
           window.removeEventListener('message', messageHandler);
+          
+          // Don't close the window here - let the parent component handle it
         }
       };
 
