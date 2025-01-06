@@ -81,42 +81,93 @@ async def oauth_callback(
                 error=error_description or error,
                 platform=platform,
                 version=version,
-                auto_close=True  # Auto close on error
+                auto_close=True
             )
 
-        # Get OAuth 1.0a parameters
-        oauth_token = request.query_params.get('oauth_token')
-        oauth_verifier = request.query_params.get('oauth_verifier')
-        
         success = False
         try:
-            if version == "1":
-                # OAuth 1.0a flow
-                if not oauth_token or not oauth_verifier:
-                    return create_html_response(
-                        error="Missing OAuth 1.0a parameters",
-                        platform=platform,
-                        version=version,
-                        auto_close=True
+            # Get the callback URL that matches what was used in the request
+            callback_url = str(request.url).split('?')[0]
+            logger.debug(f"Callback URL: {callback_url}")
+            
+            # Initialize OAuth handler with the same callback URL
+            oauth_handler = await get_oauth_handler(platform, callback_url)
+            
+            if platform == "twitter":
+                # Get OAuth 1.0a parameters
+                oauth_token = request.query_params.get('oauth_token')
+                oauth_verifier = request.query_params.get('oauth_verifier')
+                
+                if version == "1":
+                    # Twitter OAuth 1.0a flow
+                    if not oauth_token or not oauth_verifier:
+                        return create_html_response(
+                            error="Missing OAuth 1.0a parameters",
+                            platform=platform,
+                            version=version,
+                            auto_close=True
+                        )
+                    # Process OAuth 1.0a...
+                    success = True
+                else:
+                    # Twitter OAuth 2.0 flow
+                    if not code or not state:
+                        return create_html_response(
+                            error="Missing OAuth 2.0 parameters",
+                            platform=platform,
+                            version=version,
+                            auto_close=True
+                        )
+                    
+                    # Get code verifier for PKCE
+                    code_verifier = await get_code_verifier(state)
+                    tokens = await oauth_handler.get_access_token(
+                        oauth2_code=code,
+                        code_verifier=code_verifier
                     )
-                # Process OAuth 1.0a...
-                success = True
+                    success = True
             else:
-                # OAuth 2.0 flow
+                # Other platforms (LinkedIn, etc.) - OAuth 2.0 only
                 if not code or not state:
                     return create_html_response(
-                        error="Missing OAuth 2.0 parameters",
+                        error="Missing OAuth parameters",
                         platform=platform,
                         version=version,
                         auto_close=True
                     )
-                # Process OAuth 2.0...
-                success = True
                 
+                # Verify state
+                logger.info(f"Attempting to verify state: {state}")
+                state_data = oauth_handler.verify_state(state)
+                if not state_data:
+                    return create_html_response(
+                        error="Invalid state",
+                        platform=platform,
+                        version=version,
+                        auto_close=True
+                    )
+                
+                logger.info(f"State verification successful. State data: {state_data}")
+                logger.info(f"Processing callback for user_id: {state_data['user_id']}")
+                
+                # Exchange code for tokens
+                try:
+                    tokens = await oauth_handler.get_access_token(code)
+                    success = True
+                except Exception as e:
+                    logger.error(f"Error exchanging code for tokens: {str(e)}")
+                    return create_html_response(
+                        error=str(e),
+                        platform=platform,
+                        version=version,
+                        auto_close=True
+                    )
+            
+            # Return success response
             return create_html_response(
                 platform=platform,
                 version=version,
-                auto_close=True,  # Auto close on success
+                auto_close=True,
                 success=success
             )
             
