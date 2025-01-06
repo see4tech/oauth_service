@@ -56,12 +56,45 @@ export class TwitterTokenExchange {
     });
     
     if (data.success) {
+      // Get existing tokens if any
+      let storedTokens = {};
+      try {
+        const existingTokens = localStorage.getItem('twitter_access_token');
+        if (existingTokens) {
+          storedTokens = JSON.parse(existingTokens);
+        }
+      } catch (error) {
+        console.warn('[Parent] Error reading stored tokens:', error);
+      }
+
       if (!isOAuth1) {
-        localStorage.setItem('twitter_access_token', JSON.stringify(data));
+        // Store OAuth 2.0 tokens
+        storedTokens = {
+          ...storedTokens,
+          oauth2: {
+            access_token: data.access_token,
+            token_type: data.token_type,
+            expires_in: data.expires_in,
+            refresh_token: data.refresh_token,
+            scope: data.scope
+          }
+        };
         console.log('[Parent] Twitter OAuth 2.0 tokens stored');
       } else {
-        console.log('[Parent] Twitter OAuth 1.0a tokens received');
+        // Store OAuth 1.0a tokens
+        storedTokens = {
+          ...storedTokens,
+          oauth1: {
+            access_token: data.access_token,
+            access_token_secret: data.access_token_secret
+          }
+        };
+        console.log('[Parent] Twitter OAuth 1.0a tokens stored');
       }
+
+      // Save combined tokens
+      localStorage.setItem('twitter_access_token', JSON.stringify(storedTokens));
+      console.log('[Parent] Combined tokens stored:', Object.keys(storedTokens));
     } else {
       console.error('[Parent] Twitter authentication failed:', data.error);
       throw new Error(data.error || 'Failed to authenticate with Twitter');
