@@ -16,7 +16,14 @@ class LinkedInOAuth(OAuthBase):
     def __init__(self, client_id: str, client_secret: str, callback_url: str):
         super().__init__(client_id, client_secret, callback_url)
         self.rate_limiter = RateLimiter(platform="linkedin")
-        logger.debug(f"Initialized LinkedIn OAuth with callback URL: {callback_url}")
+        self.token_url = "https://www.linkedin.com/oauth/v2/accessToken"
+        self.api_url = "https://api.linkedin.com/v2"
+        
+        # Ensure callback URL ends with version suffix
+        if not callback_url.endswith('/2'):
+            self.callback_url = f"{callback_url.rstrip('/')}/2"
+        
+        logger.debug(f"Initialized LinkedIn OAuth with callback URL: {self.callback_url}")
         
         self.default_scopes = [
             'openid',
@@ -36,8 +43,8 @@ class LinkedInOAuth(OAuthBase):
             params = {
                 'response_type': 'code',
                 'client_id': self.client_id,
-                'redirect_uri': self.callback_url,
-                'state': state,  # Remove None default
+                'redirect_uri': self.callback_url,  # Now includes /2
+                'state': state,
                 'scope': ' '.join(final_scopes)
             }
             

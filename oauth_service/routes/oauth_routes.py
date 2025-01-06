@@ -76,14 +76,15 @@ async def initialize_oauth(
     request: OAuthInitRequest
 ) -> OAuthInitResponse:
     try:
-        oauth_handler = await get_oauth_handler(platform)
-        
         # Parse the base callback URL
         parsed_url = urlparse(request.frontend_callback_url)
         base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
         
         # Create version-specific callback URLs
         callback_url = urljoin(base_url, f"/oauth/{platform}/callback/{'1' if request.use_oauth1 else '2'}")
+        
+        # Initialize OAuth handler with correct callback URL
+        oauth_handler = await get_oauth_handler(platform, callback_url)
         
         # Generate state with the correct callback URL
         state = oauth_handler.generate_state(
@@ -119,7 +120,6 @@ async def initialize_oauth(
         else:
             # For other platforms (LinkedIn, Facebook, etc.)
             authorization_url = await oauth_handler.get_authorization_url(state=state)
-            
             logger.debug(f"Generated authorization URL for {platform}: {authorization_url}")
             
             return OAuthInitResponse(
