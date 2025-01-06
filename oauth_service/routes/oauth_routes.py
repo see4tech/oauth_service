@@ -118,11 +118,9 @@ async def initialize_oauth(
                 )
         else:
             # For other platforms (LinkedIn, Facebook, etc.)
-            authorization_url = await oauth_handler.get_authorization_url()
+            authorization_url = await oauth_handler.get_authorization_url(state=state)
             
-            # Append state parameter if not already present
-            separator = '&' if '?' in authorization_url else '?'
-            authorization_url = f"{authorization_url}{separator}state={state}"
+            logger.debug(f"Generated authorization URL for {platform}: {authorization_url}")
             
             return OAuthInitResponse(
                 authorization_url=authorization_url,

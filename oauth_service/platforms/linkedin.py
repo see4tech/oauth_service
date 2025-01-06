@@ -11,61 +11,51 @@ from ..utils.logger import get_logger
 logger = get_logger(__name__)
 
 class LinkedInOAuth(OAuthBase):
-    """LinkedIn OAuth 2.0 implementation with image support."""
+    """LinkedIn OAuth 2.0 implementation."""
     
     def __init__(self, client_id: str, client_secret: str, callback_url: str):
-        """
-        Initialize LinkedIn OAuth handler.
-        
-        Args:
-            client_id: LinkedIn application client ID
-            client_secret: LinkedIn application client secret
-            callback_url: OAuth callback URL
-        """
         super().__init__(client_id, client_secret, callback_url)
         self.rate_limiter = RateLimiter(platform="linkedin")
-        self.auth_url = "https://www.linkedin.com/oauth/v2/authorization"
-        self.token_url = "https://www.linkedin.com/oauth/v2/accessToken"
-        self.api_url = "https://api.linkedin.com/v2"
         logger.debug(f"Initialized LinkedIn OAuth with callback URL: {callback_url}")
+        
+        self.default_scopes = [
+            'openid',
+            'profile',
+            'w_member_social',
+            'email'
+        ]
     
     async def get_authorization_url(self, state: Optional[str] = None, scopes: Optional[List[str]] = None) -> str:
-        """
-        Get LinkedIn authorization URL.
-        
-        Args:
-            state: Optional state parameter for CSRF protection
-            scopes: Optional list of scopes to request
-            
-        Returns:
-            Authorization URL string
-        """
+        """Get LinkedIn authorization URL."""
         try:
-            scope_str = " ".join(scopes) if scopes else "openid profile w_member_social email"
+            # Use provided scopes or default scopes
+            final_scopes = scopes or self.default_scopes
+            logger.debug(f"Building authorization URL with scopes: {' '.join(final_scopes)}")
             
+            # Build authorization parameters
             params = {
-                "response_type": "code",
-                "client_id": self.client_id,
-                "redirect_uri": self.callback_url,
-                "state": state,
-                "scope": scope_str
+                'response_type': 'code',
+                'client_id': self.client_id,
+                'redirect_uri': self.callback_url,
+                'state': state,  # Remove None default
+                'scope': ' '.join(final_scopes)
             }
             
-            logger.debug(f"Building authorization URL with scopes: {scope_str}")
+            # Remove None values
+            params = {k: v for k, v in params.items() if v is not None}
+            
             logger.debug(f"Authorization parameters: {params}")
             
+            # Build URL with parameters
             query = urlencode(params)
-            auth_url = f"{self.auth_url}?{query}"
+            authorization_url = f"https://www.linkedin.com/oauth/v2/authorization?{query}"
             
-            logger.debug(f"Generated authorization URL: {auth_url}")
-            return auth_url
+            logger.debug(f"Generated authorization URL: {authorization_url}")
+            return authorization_url
             
         except Exception as e:
-            logger.error(f"Error generating authorization URL: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error generating authorization URL: {str(e)}"
-            )
+            logger.error(f"Error generating LinkedIn authorization URL: {str(e)}")
+            raise
 
     async def get_access_token(self, code: str) -> Dict:
         """
