@@ -63,16 +63,26 @@ class TwitterOAuth(OAuthBase):
             code_verifier = base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8').rstrip('=')
             code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode('utf-8')).digest()).decode('utf-8').rstrip('=')
             
-            # Add offline.access scope for refresh tokens
+            # Add required parameters for refresh token
+            extra_params = {
+                'code_challenge': code_challenge,
+                'code_challenge_method': 'S256',
+                'response_type': 'code',
+                'code_verifier': code_verifier,
+                'access_type': 'offline',  # Request refresh token
+                'prompt': 'consent'  # Force consent screen to ensure refresh token
+            }
+            
             authorization_url, state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
-                code_challenge=code_challenge,
-                code_challenge_method='S256',
-                response_type='code',
-                access_type='offline'  # Request refresh token
+                **extra_params
             )
             
-            logger.debug("Generated OAuth 2.0 authorization URL with offline access")
+            logger.debug("Generated OAuth 2.0 authorization URL with parameters:")
+            logger.debug(f"- Scopes: {self.oauth2_client.scope}")
+            logger.debug(f"- Code challenge method: {extra_params['code_challenge_method']}")
+            logger.debug(f"- Response type: {extra_params['response_type']}")
+            logger.debug(f"- Access type: {extra_params['access_type']}")
             
             return {
                 'oauth1_url': oauth1_url,
@@ -94,6 +104,9 @@ class TwitterOAuth(OAuthBase):
         
         if oauth2_code:
             try:
+                logger.debug("Starting OAuth 2.0 token exchange")
+                logger.debug(f"Code verifier present: {bool(code_verifier)}")
+                
                 # Include code verifier for PKCE and request offline.access
                 token = self.oauth2_client.fetch_token(
                     'https://api.twitter.com/2/oauth2/token',
@@ -101,7 +114,7 @@ class TwitterOAuth(OAuthBase):
                     client_secret=self._decrypted_client_secret,
                     code_verifier=code_verifier,
                     include_client_id=True,
-                    grant_type='authorization_code'
+                    client_id=self.client_id
                 )
                 
                 # Log token response for debugging
@@ -111,6 +124,7 @@ class TwitterOAuth(OAuthBase):
                 
                 if not token.get('refresh_token'):
                     logger.warning("No refresh token received in OAuth 2.0 response")
+                    logger.warning("Token response data: %s", {k: '...' if k in ['access_token', 'refresh_token'] else v for k, v in token.items()})
                 
                 tokens['oauth2'] = {
                     'access_token': token['access_token'],
