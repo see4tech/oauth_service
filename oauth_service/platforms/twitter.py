@@ -141,10 +141,16 @@ class TwitterOAuth(OAuthBase):
                 # Try to get OAuth 1.0a tokens automatically
                 try:
                     # Create a new OAuth1 handler for this request
+                    if self.callback_url.endswith('/callback'):
+                        base_callback = self.callback_url
+                    else:
+                        base_callback = self.callback_url.rstrip('/') + '/callback'
+                    oauth1_callback = base_callback + '/1'
+                    
                     oauth1_handler = tweepy.OAuthHandler(
                         self._consumer_key,
                         self._decrypted_consumer_secret,
-                        self.callback_url
+                        oauth1_callback
                     )
                     
                     # Get the authorization URL and request token
@@ -167,10 +173,16 @@ class TwitterOAuth(OAuthBase):
         if oauth1_verifier:
             try:
                 # Create a new OAuth1 handler with the stored request token
+                if self.callback_url.endswith('/callback'):
+                    base_callback = self.callback_url
+                else:
+                    base_callback = self.callback_url.rstrip('/') + '/callback'
+                oauth1_callback = base_callback + '/1'
+                
                 oauth1_handler = tweepy.OAuthHandler(
                     self._consumer_key,
                     self._decrypted_consumer_secret,
-                    self.callback_url
+                    oauth1_callback
                 )
                 
                 # Set the request token and secret
