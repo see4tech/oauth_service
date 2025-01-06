@@ -197,13 +197,6 @@ app.include_router(
     dependencies=[Depends(get_api_key)],
 )
 
-# Add version-specific callback routes WITHOUT API key requirement
-app.include_router(
-    callback_router,
-    prefix="/oauth/{platform}/callback/{version}",
-    tags=["oauth-callbacks"],
-)
-
 @app.get("/")
 async def root():
     """Root endpoint to verify service is running."""
