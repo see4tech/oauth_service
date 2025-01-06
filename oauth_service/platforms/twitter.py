@@ -26,17 +26,26 @@ class TwitterOAuth(OAuthBase):
         # For OAuth 1.0a, use raw secrets as they come from settings
         self._decrypted_consumer_secret = self._consumer_secret
         
+        # Modify callback URL to include version
+        if callback_url.endswith('/callback'):
+            base_callback = callback_url
+        else:
+            base_callback = callback_url.rstrip('/') + '/callback'
+            
+        oauth1_callback = base_callback + '/1'
+        oauth2_callback = base_callback + '/2'
+        
         # OAuth 1.0a setup
         self.oauth1_handler = tweepy.OAuthHandler(
             self._consumer_key,
             self._decrypted_consumer_secret,
-            callback_url
+            oauth1_callback
         )
         
-        # OAuth 2.0 setup - with minimum required scopes
+        # OAuth 2.0 setup
         self.oauth2_client = OAuth2Session(
             client_id=self.client_id,
-            redirect_uri=callback_url,
+            redirect_uri=oauth2_callback,
             scope=['tweet.read', 'tweet.write', 'users.read']
         )
     

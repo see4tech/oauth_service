@@ -14,122 +14,51 @@ interface TwitterTokens {
 
 export class TwitterTokenExchange {
   static async exchangeCodeForToken(
-    code: string, 
-    state: string, 
-    redirectUri: string, 
+    code: string,
+    state: string,
+    redirectUri: string,
     isOAuth1: boolean = false,
     oauth1Verifier?: string
   ) {
-    if (!isOAuth1) {
-      const savedState = sessionStorage.getItem('twitter_auth_state');
-      console.log('[Parent] Comparing states:', { received: state, saved: savedState });
-      
-      if (state !== savedState) {
-        throw new Error('State mismatch in OAuth callback');
-      }
-    }
-
-    console.log('[Parent] Making token exchange request:', {
-      url: `${import.meta.env.VITE_BASE_OAUTH_URL}/oauth/twitter/token`,
+    console.log('[Parent] Starting token exchange:', {
       isOAuth1,
+      code: code.slice(0, 10) + '...',
       hasVerifier: !!oauth1Verifier
     });
 
-    const response = await fetch(`${import.meta.env.VITE_BASE_OAUTH_URL}/oauth/twitter/token`, {
+    const baseOAuthUrl = import.meta.env.VITE_BASE_OAUTH_URL.replace(/\/$/, '');
+    const origin = window.location.origin.replace(/\/$/, '');
+    const frontendCallbackUrl = `${origin}/oauth/twitter/callback/${isOAuth1 ? '1' : '2'}`;
+
+    const response = await fetch(`${baseOAuthUrl}/oauth/twitter/callback/${isOAuth1 ? '1' : '2'}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': import.meta.env.VITE_API_KEY
       },
       body: JSON.stringify({
-        code: isOAuth1 ? undefined : code,
-        oauth_token: isOAuth1 ? code : undefined,
-        state,
+        code: code,
+        state: state,
         redirect_uri: redirectUri,
-        is_oauth1: isOAuth1,
-        oauth1_verifier: oauth1Verifier
+        frontend_callback_url: frontendCallbackUrl,
+        oauth1_verifier: oauth1Verifier,
+        use_oauth1: isOAuth1
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('[Parent] Token exchange failed:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorData,
-        isOAuth1
-      });
-      throw new Error(errorData || 'Error exchanging code for tokens');
+      console.error('[Parent] Token exchange error:', errorData);
+      throw new Error(`Failed to exchange token: ${errorData}`);
     }
 
     const data = await response.json();
     console.log('[Parent] Token exchange response:', {
-      success: data.success,
-      hasAuthUrl: !!data.authorization_url,
-      authUrl: data.authorization_url,
+      hasOAuth1: !!data.oauth1,
+      hasOAuth2: !!data.oauth2,
       tokenKeys: Object.keys(data)
     });
-    
-    if (data.success) {
-      let storedTokens: TwitterTokens = {};
-      try {
-        const existingTokens = localStorage.getItem('twitter_access_token');
-        console.log('[Parent] Existing stored tokens:', existingTokens ? JSON.parse(existingTokens) : 'None');
-        if (existingTokens) {
-          storedTokens = JSON.parse(existingTokens);
-        }
-      } catch (error) {
-        console.error('[Parent] Error reading stored tokens:', error);
-      }
 
-      if (!isOAuth1) {
-        storedTokens = {
-          ...storedTokens,
-          oauth2: {
-            access_token: data.access_token,
-            token_type: data.token_type,
-            expires_in: data.expires_in,
-            refresh_token: data.refresh_token,
-            scope: data.scope
-          }
-        };
-        console.log('[Parent] Twitter OAuth 2.0 tokens stored:', {
-          hasAccessToken: !!data.access_token,
-          hasRefreshToken: !!data.refresh_token
-        });
-
-        if (data.authorization_url) {
-          console.log('[Parent] Redirecting to OAuth1 URL in the same window');
-          // Instead of opening a new window, redirect the current one
-          const currentWindow = window.opener || window;
-          currentWindow.location.href = data.authorization_url;
-        }
-      } else {
-        storedTokens = {
-          ...storedTokens,
-          oauth1: {
-            access_token: data.access_token,
-            access_token_secret: data.access_token_secret
-          }
-        };
-        console.log('[Parent] Twitter OAuth 1.0a tokens stored:', {
-          hasAccessToken: !!data.access_token,
-          hasAccessTokenSecret: !!data.access_token_secret
-        });
-      }
-
-      localStorage.setItem('twitter_access_token', JSON.stringify(storedTokens));
-      console.log('[Parent] Final stored token state:', {
-        hasOAuth1: !!storedTokens.oauth1,
-        hasOAuth2: !!storedTokens.oauth2,
-        oauth1Keys: storedTokens.oauth1 ? Object.keys(storedTokens.oauth1) : [],
-        oauth2Keys: storedTokens.oauth2 ? Object.keys(storedTokens.oauth2) : []
-      });
-    } else {
-      console.error('[Parent] Twitter authentication failed:', data.error);
-      throw new Error(data.error || 'Failed to authenticate with Twitter');
-    }
-    
     return data;
   }
 }

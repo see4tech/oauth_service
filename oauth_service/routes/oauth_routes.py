@@ -12,6 +12,7 @@ from ..utils.logger import get_logger
 from ..config import get_settings
 from fastapi.responses import RedirectResponse, JSONResponse
 import json
+from urllib.parse import urlparse, urljoin
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -77,9 +78,17 @@ async def initialize_oauth(
     try:
         oauth_handler = await get_oauth_handler(platform)
         
+        # Parse the base callback URL
+        parsed_url = urlparse(request.frontend_callback_url)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        
+        # Create version-specific callback URLs
+        callback_url = urljoin(base_url, f"/oauth/{platform}/callback/{'1' if request.use_oauth1 else '2'}")
+        
+        # Generate state with the correct callback URL
         state = oauth_handler.generate_state(
             user_id=request.user_id,
-            frontend_callback_url=str(request.frontend_callback_url)
+            frontend_callback_url=callback_url
         )
         
         # Get authorization URL based on OAuth type

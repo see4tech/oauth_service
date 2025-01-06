@@ -20,10 +20,11 @@ def generate_api_key() -> str:
     """Generate a secure API key."""
     return f"user_{secrets.token_urlsafe(32)}"
 
-@callback_router.get("/{platform}/callback")
+@callback_router.post("/{platform}/callback/{version}")
 async def oauth_callback(
     request: Request,
     platform: str,
+    version: str,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
@@ -31,7 +32,7 @@ async def oauth_callback(
 ) -> HTMLResponse:
     """Handle OAuth callback from providers"""
     try:
-        logger.info(f"Received callback for platform: {platform}")
+        logger.info(f"Received callback for platform: {platform}, version: {version}")
         logger.info(f"Code present: {bool(code)}")
         logger.info(f"State present: {bool(state)}")
         
@@ -39,13 +40,13 @@ async def oauth_callback(
         if error:
             logger.error(f"OAuth error: {error}")
             logger.error(f"Error description: {error_description}")
-            return create_html_response(error=error_description or error, platform=platform)
+            return create_html_response(error=error_description or error, platform=platform, version=version)
 
         # For Twitter OAuth 1.0a, we don't get a code parameter
         oauth1_verifier = request.query_params.get('oauth_verifier')
         if not (code or oauth1_verifier) or not state:
             logger.error("Missing required parameters")
-            return create_html_response(error="Missing required parameters", platform=platform)
+            return create_html_response(error="Missing required parameters", platform=platform, version=version)
 
         oauth_handler = await get_oauth_handler(platform)
         
@@ -53,10 +54,9 @@ async def oauth_callback(
         logger.info(f"Attempting to verify state: {state}")
         
         state_data = oauth_handler.verify_state(state)
-        
         if not state_data:
             logger.error("Invalid state")
-            return create_html_response(error="Invalid state", platform=platform)
+            return create_html_response(error="Invalid state", platform=platform, version=version)
 
         logger.info(f"State verification successful. State data: {state_data}")
         user_id = state_data['user_id']
@@ -65,14 +65,14 @@ async def oauth_callback(
         
         token_manager = TokenManager()
         
-        # For Twitter, handle OAuth 1.0a and 2.0 separately
+        # For Twitter, handle OAuth 1.0a and 2.0 separately based on version
         if platform == "twitter":
             try:
                 # Get OAuth 1.0a parameters
                 oauth_token = request.query_params.get('oauth_token')
                 oauth1_verifier = request.query_params.get('oauth_verifier')
 
-                if oauth_token and oauth1_verifier:
+                if version == "1" and oauth_token and oauth1_verifier:
                     logger.debug("Processing OAuth 1.0a callback")
                     logger.debug(f"OAuth 1.0a parameters: token={oauth_token}, verifier={oauth1_verifier}")
                     
@@ -96,13 +96,13 @@ async def oauth_callback(
                     )
                     if not token_data or 'oauth1' not in token_data:
                         logger.error("Failed to get OAuth 1.0a tokens")
-                        return create_html_response(error="Failed to get OAuth 1.0a tokens", platform=platform)
-                else:
+                        return create_html_response(error="Failed to get OAuth 1.0a tokens", platform=platform, version=version)
+                elif version == "2" and code:
                     logger.debug("Processing OAuth 2.0 callback")
                     code_verifier = await get_code_verifier(state)
                     if not code_verifier:
                         logger.error("Code verifier not found")
-                        return create_html_response(error="Code verifier not found", platform=platform)
+                        return create_html_response(error="Code verifier not found", platform=platform, version=version)
                     
                     token_data = await oauth_handler.get_access_token(
                         oauth2_code=code,
@@ -110,7 +110,10 @@ async def oauth_callback(
                     )
                     if not token_data or 'oauth2' not in token_data:
                         logger.error("Failed to get OAuth 2.0 tokens")
-                        return create_html_response(error="Failed to get OAuth 2.0 tokens", platform=platform)
+                        return create_html_response(error="Failed to get OAuth 2.0 tokens", platform=platform, version=version)
+                else:
+                    logger.error("Invalid OAuth version or missing parameters")
+                    return create_html_response(error="Invalid OAuth version or missing parameters", platform=platform, version=version)
                 
                 # Store token data
                 await token_manager.store_token(
@@ -122,7 +125,7 @@ async def oauth_callback(
                 
             except Exception as e:
                 logger.error(f"Error processing Twitter callback: {str(e)}")
-                return create_html_response(error=str(e), platform=platform)
+                return create_html_response(error=str(e), platform=platform, version=version)
         else:
             # Handle other platforms
             token_data = await oauth_handler.get_access_token(code)
@@ -200,15 +203,16 @@ async def oauth_callback(
             logger.error(f"Error storing API key: {str(e)}")
         
         # Return success response
-        return create_html_response(platform=platform)
+        return create_html_response(platform=platform, version=version)
         
     except Exception as e:
         logger.error(f"Error handling OAuth callback for {platform}: {str(e)}")
-        return create_html_response(error=str(e), platform=platform)
+        return create_html_response(error=str(e), platform=platform, version=version)
 
 def create_html_response(
     error: Optional[str] = None,
-    platform: Optional[str] = None
+    platform: Optional[str] = None,
+    version: Optional[str] = None
 ) -> HTMLResponse:
     """Create HTML response for OAuth callback."""
     
@@ -220,6 +224,7 @@ def create_html_response(
             <script>
                 window.oauthData = {{
                     platform: {json.dumps(platform)},
+                    version: {json.dumps(version)},
                     code: new URLSearchParams(window.location.search).get('code'),
                     state: new URLSearchParams(window.location.search).get('state'),
                     oauth_verifier: new URLSearchParams(window.location.search).get('oauth_verifier'),
@@ -287,11 +292,12 @@ def create_html_response(
                 <h2 class="{error and 'error' or 'success'}">
                     {error and 'Authentication Failed' or 'Authentication Successful'}
                 </h2>
-                <p>{error or 'You can close this window now.'}</p>
-                <p>This window will close automatically in <span id="countdown">10</span> seconds.</p>
-                <button onclick="closeWindow()" class="button">
-                    Close Window
-                </button>
+                <p>
+                    {error or 'You can close this window now.'}
+                </p>
+                <p>
+                    Window will close automatically in <span id="countdown">5</span> seconds.
+                </p>
             </div>
         </body>
         </html>
