@@ -82,6 +82,14 @@ class TokenRefreshService:
         """Refresh token for a specific platform."""
         try:
             if platform == "twitter":
+                # First, validate we have token data
+                if not token_data:
+                    logger.error(f"No token data found for Twitter user {user_id}")
+                    return None
+
+                # Log the token structure we received
+                logger.debug(f"Token data structure for user {user_id}: {list(token_data.keys())}")
+                
                 oauth_handler = TwitterOAuth(
                     client_id=os.getenv("TWITTER_CLIENT_ID"),
                     client_secret=os.getenv("TWITTER_CLIENT_SECRET"),
@@ -90,26 +98,35 @@ class TokenRefreshService:
                     consumer_secret=os.getenv("TWITTER_CONSUMER_SECRET")
                 )
                 
-                # Check if we have OAuth 2.0 tokens and a refresh token
-                oauth2_data = token_data.get('oauth2', {})
+                # Check if we have OAuth 2.0 tokens
+                if 'oauth2' not in token_data:
+                    logger.error(f"No OAuth 2.0 token data found for Twitter user {user_id}")
+                    return None
+                
+                # Check if we have a refresh token
+                oauth2_data = token_data['oauth2']
                 refresh_token = oauth2_data.get('refresh_token')
                 
-                if refresh_token:
-                    logger.debug(f"Refreshing Twitter OAuth 2.0 token for user {user_id}")
-                    try:
-                        new_token_data = await oauth_handler.refresh_token(refresh_token)
+                if not refresh_token:
+                    logger.error(f"No Twitter OAuth 2.0 refresh token found for user {user_id}. Token data: {oauth2_data.keys()}")
+                    return None
+                
+                logger.debug(f"Attempting to refresh Twitter OAuth 2.0 token for user {user_id}")
+                try:
+                    new_token_data = await oauth_handler.refresh_token(refresh_token)
+                    
+                    # Preserve OAuth 1.0a tokens if they exist
+                    if 'oauth1' in token_data:
+                        new_token_data['oauth1'] = token_data['oauth1']
+                        logger.debug(f"Preserved existing OAuth 1.0a tokens for user {user_id}")
                         
-                        # Preserve OAuth 1.0a tokens if they exist
-                        if 'oauth1' in token_data:
-                            new_token_data['oauth1'] = token_data['oauth1']
-                            
-                        logger.debug(f"Successfully refreshed Twitter OAuth 2.0 token for user {user_id}")
-                        return new_token_data
-                    except Exception as e:
-                        logger.error(f"Failed to refresh Twitter OAuth 2.0 token: {str(e)}")
-                        return None
-                else:
-                    logger.debug(f"No Twitter OAuth 2.0 refresh token available for user {user_id}")
+                    logger.debug(f"Successfully refreshed Twitter OAuth 2.0 token for user {user_id}")
+                    return new_token_data
+                except Exception as e:
+                    logger.error(f"Failed to refresh Twitter OAuth 2.0 token for user {user_id}: {str(e)}")
+                    if hasattr(e, 'response'):
+                        logger.error(f"Response status: {e.response.status_code}")
+                        logger.error(f"Response body: {e.response.text}")
                     return None
                     
             elif platform == "linkedin":
@@ -129,8 +146,11 @@ class TokenRefreshService:
 
         except Exception as e:
             if platform == "twitter":
-                oauth_type = "OAuth 2.0" if token_data.get('oauth2') else "OAuth 1.0a"
-                logger.error(f"Error refreshing Twitter {oauth_type} token for user {user_id}: {str(e)}")
+                oauth_type = "OAuth 2.0" if 'oauth2' in token_data else "OAuth 1.0a"
+                logger.error(f"Unexpected error refreshing Twitter {oauth_type} token for user {user_id}: {str(e)}")
+                if hasattr(e, 'response'):
+                    logger.error(f"Response status: {e.response.status_code}")
+                    logger.error(f"Response body: {e.response.text}")
             else:
                 logger.error(f"Error refreshing token for {platform}, user {user_id}: {str(e)}")
             return None
