@@ -45,20 +45,43 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         
         // Close the OAuth 2.0 window if it exists
         if (authWindow && !authWindow.closed) {
-          authWindow.close();
-        }
-        setAuthWindow(null);
-        
-        // Open OAuth 1.0a window immediately
-        console.log('[Parent] Opening OAuth 1.0a window');
-        const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
-        if (oauth1Window) {
-          setAuthWindow(oauth1Window);
-          oauth1Window.focus();
+          // Send close message to window
+          window.postMessage({ type: 'CLOSE_OAUTH_WINDOW' }, window.location.origin);
+          
+          // Wait for window to close before opening OAuth 1.0a
+          const checkInterval = setInterval(() => {
+            if (authWindow.closed) {
+              clearInterval(checkInterval);
+              setAuthWindow(null);
+              
+              // Open OAuth 1.0a window
+              console.log('[Parent] Opening OAuth 1.0a window');
+              const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
+              if (oauth1Window) {
+                setAuthWindow(oauth1Window);
+                oauth1Window.focus();
+              } else {
+                console.error('[Parent] Failed to open OAuth 1.0a window');
+                onError(new Error('Failed to open OAuth 1.0a window'));
+                setOauth1Pending(false);
+              }
+            }
+          }, 100);
+
+          // Set a timeout to prevent infinite checking
+          setTimeout(() => clearInterval(checkInterval), 5000);
         } else {
-          console.error('[Parent] Failed to open OAuth 1.0a window');
-          onError(new Error('Failed to open OAuth 1.0a window'));
-          setOauth1Pending(false);
+          // If window is already closed, open OAuth 1.0a directly
+          console.log('[Parent] Opening OAuth 1.0a window');
+          const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
+          if (oauth1Window) {
+            setAuthWindow(oauth1Window);
+            oauth1Window.focus();
+          } else {
+            console.error('[Parent] Failed to open OAuth 1.0a window');
+            onError(new Error('Failed to open OAuth 1.0a window'));
+            setOauth1Pending(false);
+          }
         }
         
         return;

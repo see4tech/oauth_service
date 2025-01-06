@@ -102,12 +102,32 @@ export class TwitterPopupHandler {
           
           // Clean up
           window.removeEventListener('message', messageHandler);
-          
-          // Don't close the window here - let the parent component handle it
+
+          // Add a small delay before closing to ensure the message is processed
+          setTimeout(() => {
+            console.log('[Parent] Closing OAuth 2.0 window');
+            if (authWindow && !authWindow.closed) {
+              authWindow.close();
+            }
+          }, 100);
+        }
+      };
+
+      // Add a message listener for manual window close
+      const closeHandler = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        
+        if (event.data.type === 'CLOSE_OAUTH_WINDOW') {
+          console.log('[Parent] Received close window command');
+          window.removeEventListener('message', closeHandler);
+          if (authWindow && !authWindow.closed) {
+            authWindow.close();
+          }
         }
       };
 
       window.addEventListener('message', messageHandler);
+      window.addEventListener('message', closeHandler);
       
       // Focus the window
       authWindow.focus();
