@@ -3,6 +3,7 @@ from typing import Optional, Dict, List
 from pydantic import BaseModel, Field
 from ..core import TokenManager
 from ..core.db import SqliteDB
+from ..core.oauth_base import OAuthBase
 from ..platforms import TwitterOAuth, LinkedInOAuth, InstagramOAuth, FacebookOAuth
 from ..models.oauth_models import (
     OAuthInitRequest, OAuthInitResponse, OAuthCallbackRequest,
