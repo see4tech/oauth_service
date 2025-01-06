@@ -127,7 +127,6 @@ class TwitterOAuth(OAuthBase):
                 token_data = {
                     'code': oauth2_code,
                     'grant_type': 'authorization_code',
-                    'client_id': self.client_id,
                     'redirect_uri': f"{self.callback_url}/2",
                     'code_verifier': code_verifier
                 }
@@ -137,6 +136,10 @@ class TwitterOAuth(OAuthBase):
                     'Content-Type': 'application/x-www-form-urlencoded'
                 }
                 
+                logger.debug(f"Token exchange URL: https://api.twitter.com/2/oauth2/token")
+                logger.debug(f"Token exchange data: {token_data}")
+                logger.debug(f"Token exchange headers: {headers}")
+                
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         'https://api.twitter.com/2/oauth2/token',
@@ -145,7 +148,7 @@ class TwitterOAuth(OAuthBase):
                     ) as response:
                         if not response.ok:
                             error_text = await response.text()
-                            logger.error(f"Token exchange failed: {error_text}")
+                            logger.error(f"Token exchange failed with status {response.status}: {error_text}")
                             raise ValueError(f"Token exchange failed: {error_text}")
                         
                         token = await response.json()
