@@ -68,8 +68,29 @@ async def oauth_callback(
         # For Twitter, handle OAuth 1.0a and 2.0 separately
         if platform == "twitter":
             try:
-                if oauth1_verifier:
+                # Get OAuth 1.0a parameters
+                oauth_token = request.query_params.get('oauth_token')
+                oauth1_verifier = request.query_params.get('oauth_verifier')
+
+                if oauth_token and oauth1_verifier:
                     logger.debug("Processing OAuth 1.0a callback")
+                    logger.debug(f"OAuth 1.0a parameters: token={oauth_token}, verifier={oauth1_verifier}")
+                    
+                    # Create new OAuth handler for this request
+                    oauth_handler = TwitterOAuth(
+                        client_id=os.getenv("TWITTER_CLIENT_ID"),
+                        client_secret=os.getenv("TWITTER_CLIENT_SECRET"),
+                        callback_url=os.getenv("TWITTER_CALLBACK_URL"),
+                        consumer_key=os.getenv("TWITTER_CONSUMER_KEY"),
+                        consumer_secret=os.getenv("TWITTER_CONSUMER_SECRET")
+                    )
+                    
+                    # Set up the request token
+                    oauth_handler.oauth1_handler.request_token = {
+                        'oauth_token': oauth_token,
+                        'oauth_token_secret': ''  # This is okay for the verification step
+                    }
+                    
                     token_data = await oauth_handler.get_access_token(
                         oauth1_verifier=oauth1_verifier
                     )
@@ -189,29 +210,28 @@ def create_html_response(
     error: Optional[str] = None,
     platform: Optional[str] = None
 ) -> HTMLResponse:
-    """Create HTML response for OAuth callback"""
+    """Create HTML response for OAuth callback."""
+    
     html_content = f"""
-    <!DOCTYPE html>
-    <html>
+        <!DOCTYPE html>
+        <html>
         <head>
-            <title>{platform.title()} Auth Callback</title>
+            <title>OAuth Callback</title>
             <script>
-                // Store data that will be used by the main script
                 window.oauthData = {{
+                    platform: {json.dumps(platform)},
                     code: new URLSearchParams(window.location.search).get('code'),
                     state: new URLSearchParams(window.location.search).get('state'),
                     oauth_verifier: new URLSearchParams(window.location.search).get('oauth_verifier'),
                     oauth_token: new URLSearchParams(window.location.search).get('oauth_token'),
-                    error: new URLSearchParams(window.location.search).get('error'),
                     error_description: new URLSearchParams(window.location.search).get('error_description'),
-                    platform: '{platform.upper()}'
+                    error: {json.dumps(error)}
                 }};
 
                 function closeWindow() {{
-                    // Send message to opener and close window
                     if (window.opener) {{
                         window.opener.postMessage({{
-                            type: window.oauthData.platform + '_AUTH_CALLBACK',
+                            type: 'TWITTER_AUTH_CALLBACK',
                             success: !{json.dumps(bool(error))},
                             code: window.oauthData.code,
                             state: window.oauthData.state,
@@ -225,27 +245,12 @@ def create_html_response(
                     }}
                 }}
 
-                // Start countdown
-                let timeLeft = 10;
-                function updateCountdown() {{
-                    const countdownElement = document.getElementById('countdown');
-                    if (countdownElement) {{
-                        countdownElement.textContent = timeLeft;
-                        if (timeLeft > 0) {{
-                            timeLeft--;
-                            setTimeout(updateCountdown, 1000);
-                        }} else {{
-                            closeWindow();
-                        }}
-                    }}
-                }}
-
                 // Initialize when page loads
                 window.onload = function() {{
                     // Send message immediately
                     if (window.opener) {{
                         window.opener.postMessage({{
-                            type: window.oauthData.platform + '_AUTH_CALLBACK',
+                            type: 'TWITTER_AUTH_CALLBACK',
                             success: !{json.dumps(bool(error))},
                             code: window.oauthData.code,
                             state: window.oauthData.state,
@@ -275,31 +280,21 @@ def create_html_response(
                 }}
                 .success {{ color: #10B981; }}
                 .error {{ color: #EF4444; }}
-                .button {{
-                    background-color: #3B82F6;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    margin-top: 16px;
-                }}
-                .button:hover {{
-                    background-color: #2563EB;
-                }}
             </style>
         </head>
         <body>
             <div class="container">
                 <h2 class="{error and 'error' or 'success'}">
-                    {error and 'Authentication Error' or 'Authentication Successful'}
+                    {error and 'Authentication Failed' or 'Authentication Successful'}
                 </h2>
-                <p>{error or 'Authorization successful! You can close this window.'}</p>
-                <p>This window will close in <span id="countdown">10</span> seconds</p>
-                <button class="button" onclick="closeWindow()">Close Window Now</button>
+                <p>{error or 'You can close this window now.'}</p>
+                <p>This window will close automatically in <span id="countdown">10</span> seconds.</p>
+                <button onclick="closeWindow()" class="button">
+                    Close Window
+                </button>
             </div>
         </body>
-    </html>
+        </html>
     """
     
     return HTMLResponse(content=html_content)
