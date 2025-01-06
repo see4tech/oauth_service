@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Loader2, Twitter } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { TwitterPopupHandler } from "./TwitterPopupHandler";
@@ -213,8 +213,8 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
           </>
         ) : (
           <>
-            <Twitter className="mr-2 h-4 w-4" />
-            {localIsConnected ? 'Reconectar Twitter OAuth 2.0' : 'Conectar Twitter OAuth 2.0'}
+            <X className="mr-2 h-4 w-4" />
+            {localIsConnected ? 'Reconectar X OAuth 2.0' : 'Conectar X OAuth 2.0'}
           </>
         )}
       </Button>
@@ -232,15 +232,15 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
           </>
         ) : (
           <>
-            <Twitter className="mr-2 h-4 w-4" />
-            {localIsConnected ? 'Reconectar Twitter OAuth 1.0a' : 'Conectar Twitter OAuth 1.0a'}
+            <X className="mr-2 h-4 w-4" />
+            {localIsConnected ? 'Reconectar X OAuth 1.0a' : 'Conectar X OAuth 1.0a'}
           </>
         )}
       </Button>
 
       {localIsConnected && !isLoading && (
         <p className="text-sm text-green-600 flex items-center justify-center">
-          ✓ Twitter conectado
+          ✓ X conectado
         </p>
       )}
     </div>

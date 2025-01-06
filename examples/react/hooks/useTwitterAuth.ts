@@ -115,7 +115,7 @@ export const useTwitterAuth = (
       if (isOAuth1) {
         const storedOAuth1Url = sessionStorage.getItem('twitter_oauth1_url');
         if (storedOAuth1Url) {
-          toast.error('OAuth 1.0a failed. Click "Reconnect Twitter" to try again.');
+          toast.error('OAuth 1.0a failed. Click "Reconnect X" to try again.');
         }
       }
     } finally {
@@ -158,7 +158,7 @@ export const useTwitterAuth = (
           sessionStorage.setItem('twitter_oauth1_url', authData.additional_params.oauth1_url);
         }
         
-        const newWindow = TwitterPopupHandler.openAuthWindow(authData.authorization_url);
+        const newWindow = TwitterPopupHandler.openAuthWindow(authData.authorization_url, false);
         if (!newWindow) {
           throw new Error('Could not open authentication window');
         }
