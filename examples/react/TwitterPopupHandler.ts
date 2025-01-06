@@ -1,68 +1,49 @@
 export class TwitterPopupHandler {
-  static async initializeAuth(
-    userId: string,
-    redirectUri: string,
-    useOAuth1: boolean,
-    frontendCallbackUrl: string,
-    apiKey: string
-  ) {
-    try {
-      const response = await fetch('https://dukat.see4.tech/oauth/twitter/init', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          redirect_uri: redirectUri,
-          frontend_callback_url: frontendCallbackUrl,
-          use_oauth1: useOAuth1
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to initialize Twitter OAuth');
+  static async initializeAuth(userId: number, redirectUri: string, useOAuth1: boolean = false) {
+    console.log(`[Parent] Initiating Twitter ${useOAuth1 ? 'OAuth 1.0a' : 'OAuth 2.0'} auth with user ID:`, userId);
+    
+    // Ensure clean URLs without trailing slashes
+    const origin = window.location.origin.replace(/\/$/, '');
+    const frontendCallbackUrl = `${origin}/auth/callback/twitter`;
+    const baseOAuthUrl = import.meta.env.VITE_BASE_OAUTH_URL.replace(/\/$/, '');
+    
+    console.log('[Parent] Request details:', {
+      endpoint: `${baseOAuthUrl}/oauth/twitter/init`,
+      payload: {
+        user_id: userId.toString(), // Convert userId to string
+        redirect_uri: redirectUri,
+        frontend_callback_url: frontendCallbackUrl,
+        use_oauth1: useOAuth1
+      },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': 'VITE_API_KEY present: ' + !!import.meta.env.VITE_API_KEY
       }
+    });
 
-      const data = await response.json();
-      console.log(`Twitter OAuth ${useOAuth1 ? '1.0a' : '2.0'} initialization response:`, data);
-      return data;
-    } catch (error) {
-      console.error('Error initializing Twitter OAuth:', error);
-      throw error;
-    }
-  }
-
-  static exchangeToken(
-    code: string,
-    state: string,
-    redirectUri: string,
-    apiKey: string,
-    isOAuth1: boolean = false,
-    oauth1Verifier?: string
-  ) {
-    return fetch('https://dukat.see4.tech/oauth/twitter/callback', {
+    const response = await fetch(`${baseOAuthUrl}/oauth/twitter/init`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey
+        'x-api-key': import.meta.env.VITE_API_KEY
       },
       body: JSON.stringify({
-        code,
-        state,
+        user_id: userId.toString(), // Convert userId to string
         redirect_uri: redirectUri,
-        oauth1_verifier: oauth1Verifier
-      })
-    }).then(response => {
-      if (!response.ok) {
-        return response.json().then(error => {
-          throw new Error(error.message || 'Failed to exchange token');
-        });
-      }
-      return response.json();
+        frontend_callback_url: frontendCallbackUrl,
+        use_oauth1: useOAuth1
+      }),
     });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('[Parent] Twitter auth response error:', errorData);
+      throw new Error(`Failed to initialize Twitter authentication: ${errorData}`);
+    }
+
+    const data = await response.json();
+    console.log('[Parent] Twitter auth response:', data);
+    return data;
   }
 
   static openAuthWindow(url: string, isOAuth1: boolean = false): Window | null {

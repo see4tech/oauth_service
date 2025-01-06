@@ -1,3 +1,17 @@
+interface TwitterTokens {
+  oauth1?: {
+    access_token: string;
+    access_token_secret: string;
+  };
+  oauth2?: {
+    access_token: string;
+    token_type: string;
+    expires_in: number;
+    refresh_token: string;
+    scope: string;
+  };
+}
+
 export class TwitterTokenExchange {
   static async exchangeCodeForToken(
     code: string, 
@@ -7,7 +21,6 @@ export class TwitterTokenExchange {
     oauth1Verifier?: string
   ) {
     if (!isOAuth1) {
-      // OAuth 2.0 flow
       const savedState = sessionStorage.getItem('twitter_auth_state');
       console.log('[Parent] Comparing states:', { received: state, saved: savedState });
       
@@ -56,8 +69,7 @@ export class TwitterTokenExchange {
     });
     
     if (data.success) {
-      // Get existing tokens if any
-      let storedTokens = {};
+      let storedTokens: TwitterTokens = {};
       try {
         const existingTokens = localStorage.getItem('twitter_access_token');
         console.log('[Parent] Existing stored tokens:', existingTokens ? JSON.parse(existingTokens) : 'None');
@@ -69,7 +81,6 @@ export class TwitterTokenExchange {
       }
 
       if (!isOAuth1) {
-        // Store OAuth 2.0 tokens
         storedTokens = {
           ...storedTokens,
           oauth2: {
@@ -84,8 +95,14 @@ export class TwitterTokenExchange {
           hasAccessToken: !!data.access_token,
           hasRefreshToken: !!data.refresh_token
         });
+
+        if (data.oauth1_url) {
+          console.log('[Parent] Redirecting to OAuth1 URL in the same window');
+          // Instead of opening a new window, redirect the current one
+          const currentWindow = window.opener || window;
+          currentWindow.location.href = data.oauth1_url;
+        }
       } else {
-        // Store OAuth 1.0a tokens
         storedTokens = {
           ...storedTokens,
           oauth1: {
@@ -99,7 +116,6 @@ export class TwitterTokenExchange {
         });
       }
 
-      // Save combined tokens
       localStorage.setItem('twitter_access_token', JSON.stringify(storedTokens));
       console.log('[Parent] Final stored token state:', {
         hasOAuth1: !!storedTokens.oauth1,
