@@ -4,7 +4,9 @@ export class TwitterPopupHandler {
     
     // Ensure clean URLs without trailing slashes
     const origin = window.location.origin.replace(/\/$/, '');
-    const frontendCallbackUrl = `${origin}/auth/callback/twitter`;
+    const frontendCallbackUrl = useOAuth1 
+      ? `${origin}/auth/1/callback/twitter`
+      : `${origin}/auth/2/callback/twitter`;
     const baseOAuthUrl = import.meta.env.VITE_BASE_OAUTH_URL.replace(/\/$/, '');
     
     console.log('[Parent] Request details:', {
