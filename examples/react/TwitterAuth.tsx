@@ -43,61 +43,21 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         // Store the OAuth 1.0a URL in case we need to retry
         sessionStorage.setItem('twitter_oauth1_url', tokens.oauth1_url);
         
-        // Display a message in the window
-        try {
-          authWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-              <head>
-                <title>Twitter OAuth</title>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                  body {
-                    font-family: system-ui, -apple-system, sans-serif;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    margin: 0;
-                    background-color: #f5f5f5;
-                  }
-                  .container {
-                    text-align: center;
-                    padding: 2rem;
-                    background: white;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                  }
-                  .button {
-                    background-color: #1da1f2;
-                    color: white;
-                    padding: 12px 24px;
-                    border-radius: 6px;
-                    text-decoration: none;
-                    font-weight: 500;
-                    display: inline-block;
-                    margin-top: 1rem;
-                  }
-                  .button:hover {
-                    background-color: #1a91da;
-                  }
-                </style>
-              </head>
-              <body>
-                <div class="container">
-                  <h2>OAuth 2.0 Authorization Complete</h2>
-                  <p>Please click the button below to complete Twitter OAuth 1.0a authorization.</p>
-                  <a href="${tokens.oauth1_url}" class="button">Continue with Twitter OAuth 1.0a</a>
-                </div>
-              </body>
-            </html>
-          `);
-        } catch (error) {
-          // If we can't modify the window content (e.g., due to CORS), navigate directly
-          console.log('[Parent] Redirecting to OAuth 1.0a URL');
-          authWindow.location.href = tokens.oauth1_url;
-        }
+        // Close the OAuth 2.0 window first
+        authWindow.close();
+        setAuthWindow(null);
+        
+        // Wait a short moment before opening the OAuth 1.0a window
+        setTimeout(() => {
+          console.log('[Parent] Opening OAuth 1.0a window after delay');
+          const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
+          if (oauth1Window) {
+            setAuthWindow(oauth1Window);
+          } else {
+            console.error('[Parent] Failed to open OAuth 1.0a window');
+            onError(new Error('Failed to open OAuth 1.0a window'));
+          }
+        }, 500);
         
         return;
       }
