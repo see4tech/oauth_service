@@ -91,7 +91,7 @@ async def initialize_oauth(
             frontend_callback_url=callback_url
         )
         
-        # For Twitter, handle OAuth 1.0a and 2.0 separately
+        # Handle platform-specific OAuth initialization
         if platform == "twitter":
             auth_urls = await oauth_handler.get_authorization_url()
             
@@ -106,40 +106,36 @@ async def initialize_oauth(
                 if 'code_verifier' in auth_urls:
                     await store_code_verifier(state, auth_urls['code_verifier'])
                 
-                # Get base URL and code challenge from Twitter's OAuth handler
                 oauth2_url = auth_urls['oauth2_url']
-                
-                # Add state parameter to URL
                 separator = '&' if '?' in oauth2_url else '?'
                 oauth2_url = f"{oauth2_url}{separator}state={state}"
-                
-                logger.debug(f"Generated OAuth 2.0 URL: {oauth2_url}")
                 
                 return OAuthInitResponse(
                     authorization_url=oauth2_url,
                     state=state,
                     platform=platform,
-                    additional_params={'headers': auth_urls.get('headers')}  # Include headers in response
+                    additional_params={'headers': auth_urls.get('headers')}
                 )
-        
-        # For other platforms that return a string URL directly
-        if isinstance(auth_urls, str):
+        else:
+            # For other platforms (LinkedIn, Facebook, etc.)
+            authorization_url = await oauth_handler.get_authorization_url()
+            
+            # Append state parameter if not already present
+            separator = '&' if '?' in authorization_url else '?'
+            authorization_url = f"{authorization_url}{separator}state={state}"
+            
             return OAuthInitResponse(
-                authorization_url=auth_urls,
+                authorization_url=authorization_url,
                 state=state,
                 platform=platform
             )
-        
-        # For other platforms that return a dictionary
-        return OAuthInitResponse(
-            authorization_url=auth_urls['oauth2_url'] if 'oauth2_url' in auth_urls else auth_urls['authorization_url'],
-            state=auth_urls.get('state', state),
-            platform=platform
-        )
-        
+            
     except Exception as e:
         logger.error(f"Error initializing OAuth for {platform}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initialize {platform} OAuth: {str(e)}"
+        )
 
 async def store_code_verifier(state: str, code_verifier: str):
     """Store code verifier in Redis or another temporary storage."""
