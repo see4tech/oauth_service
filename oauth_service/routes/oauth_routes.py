@@ -96,10 +96,9 @@ async def initialize_oauth(
             auth_urls = await oauth_handler.get_authorization_url()
             
             if request.use_oauth1:
-                # OAuth 1.0a doesn't use state
                 return OAuthInitResponse(
                     authorization_url=auth_urls['oauth1_url'],
-                    state=state,  # Use our encrypted state
+                    state=state,
                     platform=platform
                 )
             else:
@@ -109,18 +108,25 @@ async def initialize_oauth(
                 
                 # Use our encrypted state, ignore Twitter's state
                 oauth2_url = auth_urls['oauth2_url'].split('?')[0]  # Remove any existing query params
-                oauth2_url = f"{oauth2_url}?state={state}"  # Add our state first
                 
-                # Add other necessary params from the original URL
-                if 'code_challenge=' in auth_urls['oauth2_url']:
-                    params = auth_urls['oauth2_url'].split('?')[1].split('&')
-                    for param in params:
-                        if not param.startswith('state='):  # Skip Twitter's state
-                            oauth2_url += f"&{param}"
+                # Add required OAuth 2.0 parameters
+                params = {
+                    'response_type': 'code',
+                    'client_id': oauth_handler.client_id,
+                    'redirect_uri': oauth_handler.callback_url + '/2',  # Ensure correct callback URL
+                    'scope': 'tweet.read tweet.write users.read offline.access',
+                    'state': state,
+                    'code_challenge': auth_urls.get('code_challenge'),
+                    'code_challenge_method': 'S256'
+                }
+                
+                # Build the URL with all parameters
+                query_params = '&'.join(f"{k}={v}" for k, v in params.items() if v is not None)
+                oauth2_url = f"{oauth2_url}?{query_params}"
                 
                 return OAuthInitResponse(
                     authorization_url=oauth2_url,
-                    state=state,  # Use our encrypted state
+                    state=state,
                     platform=platform
                 )
         
