@@ -295,50 +295,29 @@ def create_html_response(
         <head>
             <title>OAuth Callback</title>
             <script>
-                window.oauthData = {{
-                    platform: {json.dumps(platform)},
-                    version: {json.dumps(version)},
-                    code: new URLSearchParams(window.location.search).get('code'),
-                    state: new URLSearchParams(window.location.search).get('state'),
-                    oauth_verifier: new URLSearchParams(window.location.search).get('oauth_verifier'),
-                    oauth_token: new URLSearchParams(window.location.search).get('oauth_token'),
-                    error_description: new URLSearchParams(window.location.search).get('error_description'),
-                    error: {json.dumps(error)}
-                }};
-
-                function closeWindow() {{
+                window.onload = function() {{
+                    // Send message to opener immediately
                     if (window.opener) {{
                         window.opener.postMessage({{
                             type: 'TWITTER_AUTH_CALLBACK',
                             success: !{json.dumps(bool(error))},
-                            code: window.oauthData.code,
-                            state: window.oauthData.state,
-                            oauth_verifier: window.oauthData.oauth_verifier,
-                            oauth_token: window.oauthData.oauth_token,
-                            error: window.oauthData.error_description || window.oauthData.error || {json.dumps(error)}
+                            error: {json.dumps(error)},
+                            platform: {json.dumps(platform)},
+                            version: {json.dumps(version)}
                         }}, '*');
                         
-                        // Add a delay before closing
-                        setTimeout(() => window.close(), 1000);
+                        // Close window after a short delay
+                        setTimeout(function() {{
+                            window.close();
+                            // If window didn't close, notify opener to handle it
+                            if (!window.closed) {{
+                                window.opener.postMessage({{
+                                    type: 'TWITTER_AUTH_WINDOW_STUCK',
+                                    platform: {json.dumps(platform)}
+                                }}, '*');
+                            }}
+                        }}, 2000);
                     }}
-                }}
-
-                // Initialize when page loads
-                window.onload = function() {{
-                    // Send message immediately
-                    if (window.opener) {{
-                        window.opener.postMessage({{
-                            type: 'TWITTER_AUTH_CALLBACK',
-                            success: !{json.dumps(bool(error))},
-                            code: window.oauthData.code,
-                            state: window.oauthData.state,
-                            oauth_verifier: window.oauthData.oauth_verifier,
-                            oauth_token: window.oauthData.oauth_token,
-                            error: window.oauthData.error_description || window.oauthData.error || {json.dumps(error)}
-                        }}, '*');
-                    }}
-                    // Start countdown after message is sent
-                    updateCountdown();
                 }};
             </script>
             <style>
@@ -369,7 +348,7 @@ def create_html_response(
                     {error or 'You can close this window now.'}
                 </p>
                 <p>
-                    Window will close automatically in <span id="countdown">5</span> seconds.
+                    Window will close automatically in <span id="countdown">2</span> seconds.
                 </p>
             </div>
         </body>

@@ -70,56 +70,40 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
 
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) {
-        console.warn('[Parent] Received message from unauthorized origin:', event.origin);
-        return;
-      }
+        if (event.origin !== window.location.origin) {
+            console.warn('[Parent] Received message from unauthorized origin:', event.origin);
+            return;
+        }
 
-      console.log('[Parent] Received postMessage:', {
-        type: event.data.type,
-        hasCode: !!event.data.code,
-        hasState: !!event.data.state,
-        hasVerifier: !!event.data.oauth_verifier,
-        hasToken: !!event.data.oauth_token,
-        currentFlow,
-        data: event.data
-      });
-      
-      if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
-        if (event.data.error) {
-          console.error('[Parent] Twitter OAuth failed:', event.data.error);
-          onError(new Error(event.data.error));
-          if (authWindow && !authWindow.closed) {
-            window.postMessage({ type: 'CLOSE_OAUTH_WINDOW' }, window.location.origin);
+        if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
+            if (authWindow && !authWindow.closed) {
+                authWindow.close();
+            }
             setAuthWindow(null);
-          }
-          toast.error(`Twitter authentication failed: ${event.data.error}`);
-          return;
+            setIsLoading(false);
+            
+            if (event.data.error) {
+                onError?.(new Error(event.data.error));
+            } else {
+                onSuccess?.(event.data);
+            }
+        } else if (event.data.type === 'TWITTER_AUTH_WINDOW_STUCK') {
+            // Handle stuck window
+            setIsLoading(false);
+            if (authWindow) {
+                try {
+                    authWindow.close();
+                } catch (e) {
+                    console.error('Failed to close auth window:', e);
+                }
+                setAuthWindow(null);
+            }
         }
-
-        // Handle OAuth 1.0a callback
-        if (event.data.oauth_token && event.data.oauth_verifier && currentFlow === 'oauth1') {
-          console.log('[Parent] Processing OAuth 1.0a callback');
-          handleCallback(event.data.oauth_token, '', true, event.data.oauth_verifier);
-          return;
-        }
-
-        // Handle OAuth 2.0 callback
-        if (event.data.code && event.data.state && currentFlow === 'oauth2') {
-          console.log('[Parent] Processing OAuth 2.0 callback');
-          handleCallback(event.data.code, event.data.state);
-          return;
-        }
-
-        console.error('[Parent] Invalid callback data received:', event.data);
-        onError(new Error('Invalid callback data received'));
-        toast.error('Authentication failed: Invalid callback data');
-      }
     };
 
     window.addEventListener('message', messageHandler);
     return () => window.removeEventListener('message', messageHandler);
-  }, [handleCallback, onError, authWindow, currentFlow]);
+  }, [authWindow, onSuccess, onError]);
 
   const handleOAuth2Login = async () => {
     if (isLoading) return;
