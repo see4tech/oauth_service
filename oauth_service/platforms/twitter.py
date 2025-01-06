@@ -6,6 +6,10 @@ from ..core.oauth_base import OAuthBase
 from ..utils.rate_limiter import RateLimiter
 from ..utils.logger import get_logger
 from fastapi import HTTPException
+import base64
+import os
+import hashlib
+from datetime import datetime
 
 logger = get_logger(__name__)
 
@@ -42,77 +46,39 @@ class TwitterOAuth(OAuthBase):
             oauth1_callback
         )
         
-        # OAuth 2.0 setup
+        # OAuth 2.0 setup with offline.access scope for refresh tokens
         self.oauth2_client = OAuth2Session(
             client_id=self.client_id,
             redirect_uri=oauth2_callback,
-            scope=['tweet.read', 'tweet.write', 'users.read']
+            scope=['tweet.read', 'tweet.write', 'users.read', 'offline.access']
         )
     
-    async def get_authorization_url(self, state: Optional[str] = None, use_oauth1: bool = False) -> Dict[str, str]:
-        """Get authorization URLs for either OAuth 1.0a or 2.0 based on use_oauth1 parameter."""
-        result = {}
-        
-        if use_oauth1:
-            # OAuth 1.0a only
-            try:
-                logger.debug("Starting OAuth 1.0a authorization URL generation")
-                oauth1_auth_url = self.oauth1_handler.get_authorization_url()
-                logger.debug(f"Generated OAuth 1.0a URL: {oauth1_auth_url}")
-                result['oauth1_url'] = oauth1_auth_url
-                result['state'] = state
-            except Exception as e:
-                logger.error(f"Error generating OAuth 1.0a URL: {str(e)}")
-                raise HTTPException(status_code=500, detail=f"Failed to generate OAuth 1.0a URL: {str(e)}")
-        else:
-            # OAuth 2.0 only
-            try:
-                logger.debug("Starting OAuth 2.0 authorization URL generation")
-                
-                # Generate PKCE challenge
-                from base64 import urlsafe_b64encode
-                import hashlib
-                import secrets
-                
-                # Generate code verifier
-                code_verifier = secrets.token_urlsafe(32)
-                
-                # Generate code challenge
-                code_challenge_bytes = hashlib.sha256(code_verifier.encode('utf-8')).digest()
-                code_challenge = urlsafe_b64encode(code_challenge_bytes).decode('utf-8').rstrip('=')
-                
-                # Add PKCE and specific parameters
-                oauth2_auth_url, oauth2_state = self.oauth2_client.authorization_url(
-                    'https://twitter.com/i/oauth2/authorize',
-                    state=state,
-                    code_challenge=code_challenge,
-                    code_challenge_method='S256'
-                )
-                
-                logger.debug(f"Generated OAuth 2.0 URL: {oauth2_auth_url}")
-                result['oauth2_url'] = oauth2_auth_url
-                result['state'] = oauth2_state
-                result['code_verifier'] = code_verifier
-                
-                # Log URL components for debugging
-                from urllib.parse import urlparse, parse_qs
-                parsed = urlparse(oauth2_auth_url)
-                params = parse_qs(parsed.query)
-                logger.debug("OAuth 2.0 URL components:")
-                logger.debug(f"- redirect_uri: {params.get('redirect_uri', [''])[0]}")
-                logger.debug(f"- scope: {params.get('scope', [''])[0]}")
-                logger.debug(f"- response_type: {params.get('response_type', [''])[0]}")
-                logger.debug(f"- code_challenge_method: {params.get('code_challenge_method', [''])[0]}")
-                logger.debug(f"- code_challenge: {params.get('code_challenge', [''])[0]}")
-                
-            except Exception as e:
-                logger.error(f"Error generating OAuth 2.0 URL: {str(e)}")
-                if hasattr(e, 'response'):
-                    logger.error(f"Response status: {e.response.status_code}")
-                    logger.error(f"Response body: {e.response.text}")
-                raise HTTPException(status_code=500, detail=f"Failed to generate OAuth 2.0 URL: {str(e)}")
-        
-        return result
+    async def get_authorization_url(self) -> Dict[str, str]:
+        """Get authorization URLs for both OAuth 1.0a and OAuth 2.0."""
+        try:
+            # Get OAuth 1.0a URL
+            oauth1_url = self.oauth1_handler.get_authorization_url()
+            
+            # Get OAuth 2.0 URL with PKCE
+            code_verifier = base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8').rstrip('=')
+            code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode('utf-8')).digest()).decode('utf-8').rstrip('=')
+            
+            authorization_url, state = self.oauth2_client.authorization_url(
+                'https://twitter.com/i/oauth2/authorize',
+                code_challenge=code_challenge,
+                code_challenge_method='S256'
+            )
+            
+            return {
+                'oauth1_url': oauth1_url,
+                'oauth2_url': authorization_url,
+                'state': state,
+                'code_verifier': code_verifier
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting authorization URL: {str(e)}")
+            raise
     
     async def get_access_token(self, 
                              oauth2_code: Optional[str] = None,
@@ -123,18 +89,24 @@ class TwitterOAuth(OAuthBase):
         
         if oauth2_code:
             try:
-                # Include code verifier for PKCE
+                # Include code verifier for PKCE and request offline.access
                 token = self.oauth2_client.fetch_token(
                     'https://api.twitter.com/2/oauth2/token',
                     code=oauth2_code,
                     client_secret=self._decrypted_client_secret,
-                    code_verifier=code_verifier
+                    code_verifier=code_verifier,
+                    include_client_id=True
                 )
+                
+                # Log token response for debugging
+                logger.debug(f"OAuth 2.0 token response keys: {list(token.keys())}")
+                logger.debug(f"OAuth 2.0 token response scopes: {token.get('scope', '')}")
+                
                 tokens['oauth2'] = {
                     'access_token': token['access_token'],
                     'refresh_token': token.get('refresh_token'),
                     'expires_in': token.get('expires_in', 7200),
-                    'expires_at': token.get('expires_at')
+                    'expires_at': token.get('expires_at', datetime.utcnow().timestamp() + token.get('expires_in', 7200))
                 }
                 logger.debug("OAuth 2.0 tokens obtained successfully")
                 
@@ -216,21 +188,47 @@ class TwitterOAuth(OAuthBase):
         Returns:
             Dictionary containing new access token data
         """
-        token = self.oauth2_client.refresh_token(
-            'https://api.twitter.com/2/oauth2/token',
-            refresh_token=refresh_token,
-            client_id=self.client_id,
-            client_secret=self._decrypted_client_secret
-        )
-        
-        return {
-            'oauth2': {
-                'access_token': token['access_token'],
-                'refresh_token': token.get('refresh_token'),
-                'expires_in': token.get('expires_in', 7200),
-                'expires_at': token.get('expires_at')
+        try:
+            logger.debug("Attempting to refresh Twitter OAuth 2.0 token")
+            
+            # Create a new OAuth2Session for the refresh
+            refresh_session = OAuth2Session(
+                client_id=self.client_id,
+                scope=['tweet.read', 'tweet.write', 'users.read', 'offline.access']
+            )
+            
+            # Refresh the token
+            token = refresh_session.refresh_token(
+                'https://api.twitter.com/2/oauth2/token',
+                refresh_token=refresh_token,
+                client_id=self.client_id,
+                client_secret=self._decrypted_client_secret,
+                include_client_id=True
+            )
+            
+            # Log token response for debugging
+            logger.debug(f"Refresh token response keys: {list(token.keys())}")
+            logger.debug(f"Refresh token response scopes: {token.get('scope', '')}")
+            
+            # Ensure we have required fields
+            if 'access_token' not in token:
+                raise ValueError("Refresh response missing access_token")
+            
+            return {
+                'oauth2': {
+                    'access_token': token['access_token'],
+                    'refresh_token': token.get('refresh_token', refresh_token),  # Use old refresh token if new one not provided
+                    'expires_in': token.get('expires_in', 7200),
+                    'expires_at': token.get('expires_at', datetime.utcnow().timestamp() + token.get('expires_in', 7200))
+                }
             }
-        }
+            
+        except Exception as e:
+            logger.error(f"Error refreshing Twitter OAuth 2.0 token: {str(e)}")
+            if hasattr(e, 'response'):
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response body: {e.response.text}")
+            raise
     
     async def upload_media(self, token_data: Dict, media_content: bytes,
                           filename: str) -> Dict[str, str]:
