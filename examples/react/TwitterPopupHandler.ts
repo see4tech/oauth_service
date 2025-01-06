@@ -1,6 +1,6 @@
 export class TwitterPopupHandler {
-  static async initializeAuth(userId: string, redirectUri: string) {
-    console.log('[Parent] Initiating Twitter auth with user ID:', userId);
+  static async initializeAuth(userId: string, redirectUri: string, useOAuth1: boolean = false) {
+    console.log(`[Parent] Initiating Twitter ${useOAuth1 ? 'OAuth 1.0a' : 'OAuth 2.0'} auth with user ID:`, userId);
     
     const response = await fetch(`${import.meta.env.VITE_BASE_OAUTH_URL}/oauth/twitter/init`, {
       method: 'POST',
@@ -12,7 +12,8 @@ export class TwitterPopupHandler {
         user_id: userId,
         redirect_uri: redirectUri,
         frontend_callback_url: redirectUri,
-        scopes: ['tweet.read', 'tweet.write', 'users.read']
+        scopes: ['tweet.read', 'tweet.write', 'users.read'],
+        use_oauth1: useOAuth1
       }),
     });
 
@@ -37,75 +38,37 @@ export class TwitterPopupHandler {
     const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=yes,status=yes,scrollbars=yes`;
     
     try {
-      // For OAuth 1.0a, always open a new window with a unique name
-      if (isOAuth1) {
-        console.log(`[Parent] Opening new OAuth 1.0a window with URL:`, url);
-        const windowName = `Twitter Auth OAuth1 ${Date.now()}`;
-        const authWindow = window.open(url, windowName, features);
-        
-        if (!authWindow) {
-          console.error('[Parent] Failed to open OAuth 1.0a window');
-          return null;
-        }
-        
-        // Add message listener for OAuth 1.0a callback
-        const messageHandler = (event: MessageEvent) => {
-          if (event.origin !== window.location.origin) {
-            console.warn('[Parent] Received message from unauthorized origin:', event.origin);
-            return;
-          }
-          
-          console.log('[Parent] Received message in OAuth 1.0a handler:', event.data);
-          
-          if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
-            // Forward the message with OAuth type information
-            window.postMessage({ ...event.data, isOAuth1: true }, window.location.origin);
-            
-            // Clean up
-            window.removeEventListener('message', messageHandler);
-            
-            // Close the window
-            authWindow.close();
-          }
-        };
-        
-        window.addEventListener('message', messageHandler);
-        
-        // Focus the window
-        authWindow.focus();
-        
-        return authWindow;
-      }
+      const windowName = isOAuth1 
+        ? `Twitter Auth OAuth1 ${Date.now()}`  // Unique name for OAuth 1.0a
+        : 'Twitter Auth OAuth2';               // Fixed name for OAuth 2.0
       
-      // For OAuth 2.0, use a named window
-      const windowName = 'Twitter Auth OAuth2';
-      console.log(`[Parent] Opening OAuth 2.0 window with name:`, windowName);
+      console.log(`[Parent] Opening window with name:`, windowName);
       const authWindow = window.open(url, windowName, features);
       
       if (!authWindow) {
-        console.error('[Parent] Failed to open OAuth 2.0 window');
+        console.error(`[Parent] Failed to open ${isOAuth1 ? 'OAuth 1.0a' : 'OAuth 2.0'} window`);
         return null;
       }
 
-      // Add message listener for OAuth 2.0 callback
+      // Add message listener for callback
       const messageHandler = (event: MessageEvent) => {
         if (event.origin !== window.location.origin) {
           console.warn('[Parent] Received message from unauthorized origin:', event.origin);
           return;
         }
         
-        console.log('[Parent] Received message in OAuth 2.0 handler:', event.data);
+        console.log('[Parent] Received message in handler:', event.data);
         
         if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
           // Forward the message with OAuth type information
-          window.postMessage({ ...event.data, isOAuth1: false }, window.location.origin);
+          window.postMessage({ ...event.data, isOAuth1 }, window.location.origin);
           
           // Clean up
           window.removeEventListener('message', messageHandler);
-
-          // Add a small delay before closing to ensure the message is processed
+          window.removeEventListener('message', closeHandler);
+          
+          // Close the window after a short delay
           setTimeout(() => {
-            console.log('[Parent] Closing OAuth 2.0 window');
             if (authWindow && !authWindow.closed) {
               authWindow.close();
             }
@@ -113,12 +76,13 @@ export class TwitterPopupHandler {
         }
       };
 
-      // Add a message listener for manual window close
+      // Add message listener for manual window close
       const closeHandler = (event: MessageEvent) => {
         if (event.origin !== window.location.origin) return;
         
         if (event.data.type === 'CLOSE_OAUTH_WINDOW') {
           console.log('[Parent] Received close window command');
+          window.removeEventListener('message', messageHandler);
           window.removeEventListener('message', closeHandler);
           if (authWindow && !authWindow.closed) {
             authWindow.close();

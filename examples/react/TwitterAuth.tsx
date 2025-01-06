@@ -29,143 +29,75 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
       const tokens = await TwitterTokenExchange.exchangeCodeForToken(code, state, redirectUri, isOAuth1, oauth1Verifier);
       console.log('[Parent] Twitter tokens received:', { 
         type: isOAuth1 ? 'OAuth1.0a' : 'OAuth2.0', 
-        hasOAuth1Url: !!tokens.oauth1_url,
-        tokenKeys: Object.keys(tokens),
-        oauth1Url: tokens.oauth1_url,
-        tokens 
+        tokenKeys: Object.keys(tokens)
       });
       
-      // If we received OAuth 1.0a URL in the response and we're not already in OAuth 1.0a flow
-      if (!isOAuth1 && tokens.oauth1_url) {
-        console.log('[Parent] Initiating OAuth 1.0a flow with URL:', tokens.oauth1_url);
-        setOauth1Pending(true);
-        
-        // Store the OAuth 1.0a URL in case we need to retry
-        sessionStorage.setItem('twitter_oauth1_url', tokens.oauth1_url);
-        
-        // Close the OAuth 2.0 window if it exists
-        if (authWindow && !authWindow.closed) {
-          // Send close message to window
-          window.postMessage({ type: 'CLOSE_OAUTH_WINDOW' }, window.location.origin);
-          
-          // Wait for window to close before opening OAuth 1.0a
-          const checkInterval = setInterval(() => {
-            if (authWindow.closed) {
-              clearInterval(checkInterval);
-              setAuthWindow(null);
-              
-              // Open OAuth 1.0a window
-              console.log('[Parent] Opening OAuth 1.0a window');
-              const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
-              if (oauth1Window) {
-                setAuthWindow(oauth1Window);
-                oauth1Window.focus();
-              } else {
-                console.error('[Parent] Failed to open OAuth 1.0a window');
-                onError(new Error('Failed to open OAuth 1.0a window'));
-                setOauth1Pending(false);
-              }
-            }
-          }, 100);
-
-          // Set a timeout to prevent infinite checking
-          setTimeout(() => clearInterval(checkInterval), 5000);
-        } else {
-          // If window is already closed, open OAuth 1.0a directly
-          console.log('[Parent] Opening OAuth 1.0a window');
-          const oauth1Window = TwitterPopupHandler.openAuthWindow(tokens.oauth1_url, true);
-          if (oauth1Window) {
-            setAuthWindow(oauth1Window);
-            oauth1Window.focus();
-          } else {
-            console.error('[Parent] Failed to open OAuth 1.0a window');
-            onError(new Error('Failed to open OAuth 1.0a window'));
-            setOauth1Pending(false);
-          }
-        }
-        
-        return;
-      }
+      onSuccess(tokens);
+      setLocalIsConnected(true);
       
-      // Only call onSuccess and update UI after both flows are complete
-      if (isOAuth1 || !tokens.oauth1_url) {
-        console.log('[Parent] Both OAuth flows complete, calling onSuccess');
-        onSuccess(tokens);
-        setLocalIsConnected(true);
-        
-        // Display success message in the window
-        if (authWindow && !authWindow.closed) {
-          try {
-            authWindow.document.write(`
-              <!DOCTYPE html>
-              <html>
-                <head>
-                  <title>Twitter OAuth</title>
-                  <meta charset="UTF-8">
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                  <style>
-                    body {
-                      font-family: system-ui, -apple-system, sans-serif;
-                      display: flex;
-                      justify-content: center;
-                      align-items: center;
-                      height: 100vh;
-                      margin: 0;
-                      background-color: #f5f5f5;
-                    }
-                    .container {
-                      text-align: center;
-                      padding: 2rem;
-                      background: white;
-                      border-radius: 8px;
-                      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    }
-                    .success {
-                      color: #10b981;
-                      margin-bottom: 1rem;
-                    }
-                    .button {
-                      background-color: #6b7280;
-                      color: white;
-                      padding: 12px 24px;
-                      border-radius: 6px;
-                      border: none;
-                      cursor: pointer;
-                      font-weight: 500;
-                    }
-                    .button:hover {
-                      background-color: #4b5563;
-                    }
-                  </style>
-                </head>
-                <body>
-                  <div class="container">
-                    <h2 class="success">✓ Twitter Connected Successfully</h2>
-                    <p>You can now close this window.</p>
-                    <button onclick="window.close()" class="button">Close Window</button>
-                  </div>
-                </body>
-              </html>
-            `);
-          } catch (error) {
-            // If we can't modify the window content, just show a toast
-            toast.success('Twitter connected successfully. You can close the popup window.');
-          }
+      // Display success message in the window
+      if (authWindow && !authWindow.closed) {
+        try {
+          authWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>Twitter OAuth</title>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                  body {
+                    font-family: system-ui, -apple-system, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                    background-color: #f5f5f5;
+                  }
+                  .container {
+                    text-align: center;
+                    padding: 2rem;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                  }
+                  .success {
+                    color: #10b981;
+                    margin-bottom: 1rem;
+                  }
+                  .button {
+                    background-color: #6b7280;
+                    color: white;
+                    padding: 12px 24px;
+                    border-radius: 6px;
+                    border: none;
+                    cursor: pointer;
+                    font-weight: 500;
+                  }
+                  .button:hover {
+                    background-color: #4b5563;
+                  }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <h2 class="success">✓ Twitter Connected Successfully</h2>
+                  <p>You can now close this window.</p>
+                  <button onclick="window.opener.postMessage({type: 'CLOSE_OAUTH_WINDOW'}, window.location.origin)" class="button">Close Window</button>
+                </div>
+              </body>
+            </html>
+          `);
+        } catch (error) {
+          // If we can't modify the window content, just show a toast
+          toast.success('Twitter connected successfully. You can close the popup window.');
         }
       }
-
     } catch (error) {
       console.error('[Parent] Twitter token exchange error:', error);
       onError(error as Error);
       toast.error((error as Error).message);
-      
-      // If this was an OAuth 1.0a error, we might want to retry
-      if (isOAuth1) {
-        const storedOAuth1Url = sessionStorage.getItem('twitter_oauth1_url');
-        if (storedOAuth1Url) {
-          toast.error('OAuth 1.0a failed. Click "Reconectar Twitter" to try again.');
-        }
-      }
     } finally {
       setIsLoading(false);
       if (isOAuth1) {
@@ -206,7 +138,7 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
           console.error('[Parent] Twitter OAuth failed:', event.data.error);
           onError(new Error(event.data.error || 'Authentication failed'));
           if (authWindow && !authWindow.closed) {
-            authWindow.close();
+            window.postMessage({ type: 'CLOSE_OAUTH_WINDOW' }, window.location.origin);
             setAuthWindow(null);
           }
           toast.error(`Twitter authentication failed: ${event.data.error || 'Unknown error'}`);
@@ -234,7 +166,7 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
     return () => clearInterval(checkWindow);
   }, [authWindow]);
 
-  const handleLogin = async () => {
+  const handleOAuth2Login = async () => {
     const userString = localStorage.getItem('user');
     if (!userString) {
       const error = new Error('No user found');
@@ -256,64 +188,111 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
     try {
       setIsLoading(true);
       const twitterCallbackUrl = redirectUri.replace('/linkedin/', '/twitter/');
-      const authData = await TwitterPopupHandler.initializeAuth(userId, twitterCallbackUrl);
-      console.log('[Parent] Auth initialization successful:', authData);
+      const authData = await TwitterPopupHandler.initializeAuth(userId, twitterCallbackUrl, false);
+      console.log('[Parent] OAuth 2.0 initialization successful:', authData);
       
       if (authData.authorization_url) {
         sessionStorage.setItem('twitter_auth_state', authData.state);
-        
-        // Store OAuth 1.0a URL for later use
-        if (authData.additional_params?.oauth1_url) {
-          sessionStorage.setItem('twitter_oauth1_url', authData.additional_params.oauth1_url);
-        }
-        
-        const newWindow = TwitterPopupHandler.openAuthWindow(authData.authorization_url);
+        const newWindow = TwitterPopupHandler.openAuthWindow(authData.authorization_url, false);
         if (!newWindow) {
-          throw new Error('Could not open authentication window');
+          throw new Error('Could not open OAuth 2.0 window');
         }
         setAuthWindow(newWindow);
-        
-        // Don't set success state here - wait for the callback
       } else {
-        throw new Error('No authorization URL received');
+        throw new Error('No OAuth 2.0 authorization URL received');
       }
     } catch (error) {
-      console.error('[Parent] Twitter auth error:', error);
+      console.error('[Parent] Twitter OAuth 2.0 error:', error);
       onError(error as Error);
       toast.error((error as Error).message);
       setIsLoading(false);
     }
   };
 
+  const handleOAuth1Login = async () => {
+    const userString = localStorage.getItem('user');
+    if (!userString) {
+      const error = new Error('No user found');
+      onError(error);
+      toast.error(error.message);
+      return;
+    }
+
+    const user = JSON.parse(userString);
+    const userId = user?.id?.toString();
+
+    if (!userId) {
+      const error = new Error('No user ID found');
+      onError(error);
+      toast.error(error.message);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setOauth1Pending(true);
+      const twitterCallbackUrl = redirectUri.replace('/linkedin/', '/twitter/');
+      const authData = await TwitterPopupHandler.initializeAuth(userId, twitterCallbackUrl, true);
+      console.log('[Parent] OAuth 1.0a initialization successful:', authData);
+      
+      if (authData.oauth1_url) {
+        const newWindow = TwitterPopupHandler.openAuthWindow(authData.oauth1_url, true);
+        if (!newWindow) {
+          throw new Error('Could not open OAuth 1.0a window');
+        }
+        setAuthWindow(newWindow);
+      } else {
+        throw new Error('No OAuth 1.0a authorization URL received');
+      }
+    } catch (error) {
+      console.error('[Parent] Twitter OAuth 1.0a error:', error);
+      onError(error as Error);
+      toast.error((error as Error).message);
+      setIsLoading(false);
+      setOauth1Pending(false);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <Button
-        onClick={handleLogin}
+        onClick={handleOAuth2Login}
+        disabled={isLoading}
+        className="w-full mb-2"
+        variant={localIsConnected ? "outline" : "default"}
+      >
+        {isLoading && !oauth1Pending ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Conectando OAuth 2.0...
+          </>
+        ) : (
+          <>
+            <Twitter className="mr-2 h-4 w-4" />
+            {localIsConnected ? 'Reconectar Twitter OAuth 2.0' : 'Conectar Twitter OAuth 2.0'}
+          </>
+        )}
+      </Button>
+
+      <Button
+        onClick={handleOAuth1Login}
         disabled={isLoading}
         className="w-full"
         variant={localIsConnected ? "outline" : "default"}
       >
-        {isLoading ? (
+        {isLoading && oauth1Pending ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            {oauth1Pending ? 'Completando OAuth 1.0a...' : 'Conectando...'}
+            Conectando OAuth 1.0a...
           </>
         ) : (
           <>
-            {localIsConnected ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Reconectar Twitter
-              </>
-            ) : (
-              <>
-                <Twitter className="mr-2 h-4 w-4" />
-                Conectar Twitter
-              </>
-            )}
+            <Twitter className="mr-2 h-4 w-4" />
+            {localIsConnected ? 'Reconectar Twitter OAuth 1.0a' : 'Conectar Twitter OAuth 1.0a'}
           </>
         )}
       </Button>
+
       {localIsConnected && !isLoading && (
         <p className="text-sm text-green-600 flex items-center justify-center">
           ✓ Twitter conectado
