@@ -86,14 +86,15 @@ async def oauth_callback(
 
         success = False
         try:
-            # Get the callback URL that matches what was used in the request
-            callback_url = str(request.url).split('?')[0]
-            logger.debug(f"Callback URL: {callback_url}")
-            
-            # Initialize OAuth handler with the same callback URL
-            oauth_handler = await get_oauth_handler(platform, callback_url)
-            
             if platform == "twitter":
+                # Twitter-specific handling with OAuth 1.0a and 2.0
+                # Get the callback URL that matches what was used in the request
+                callback_url = str(request.url).split('?')[0]
+                logger.debug(f"Callback URL: {callback_url}")
+                
+                # Initialize OAuth handler with the same callback URL
+                oauth_handler = await get_oauth_handler(platform, callback_url)
+                
                 # Get OAuth 1.0a parameters
                 oauth_token = request.query_params.get('oauth_token')
                 oauth_verifier = request.query_params.get('oauth_verifier')
@@ -127,7 +128,9 @@ async def oauth_callback(
                     )
                     success = True
             else:
-                # Other platforms (LinkedIn, etc.) - OAuth 2.0 only
+                # LinkedIn and other OAuth 2.0-only platforms
+                oauth_handler = await get_oauth_handler(platform)
+                
                 if not code or not state:
                     return create_html_response(
                         error="Missing OAuth parameters",
