@@ -86,26 +86,34 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
       });
       
       if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
-        if (event.data.success) {
-          console.log('[Parent] Twitter OAuth successful, proceeding with token exchange');
-          if (event.data.oauth_verifier && currentFlow === 'oauth1') {
-            // Handle OAuth 1.0a callback
-            console.log('[Parent] Processing OAuth 1.0a callback');
-            handleCallback(event.data.oauth_token, '', true, event.data.oauth_verifier);
-          } else if (event.data.code && event.data.state && currentFlow === 'oauth2') {
-            // Handle OAuth 2.0 callback
-            console.log('[Parent] Processing OAuth 2.0 callback');
-            handleCallback(event.data.code, event.data.state);
-          }
-        } else {
+        if (event.data.error) {
           console.error('[Parent] Twitter OAuth failed:', event.data.error);
-          onError(new Error(event.data.error || 'Authentication failed'));
+          onError(new Error(event.data.error));
           if (authWindow && !authWindow.closed) {
             window.postMessage({ type: 'CLOSE_OAUTH_WINDOW' }, window.location.origin);
             setAuthWindow(null);
           }
-          toast.error(`Twitter authentication failed: ${event.data.error || 'Unknown error'}`);
+          toast.error(`Twitter authentication failed: ${event.data.error}`);
+          return;
         }
+
+        // Handle OAuth 1.0a callback
+        if (event.data.oauth_token && event.data.oauth_verifier && currentFlow === 'oauth1') {
+          console.log('[Parent] Processing OAuth 1.0a callback');
+          handleCallback(event.data.oauth_token, '', true, event.data.oauth_verifier);
+          return;
+        }
+
+        // Handle OAuth 2.0 callback
+        if (event.data.code && event.data.state && currentFlow === 'oauth2') {
+          console.log('[Parent] Processing OAuth 2.0 callback');
+          handleCallback(event.data.code, event.data.state);
+          return;
+        }
+
+        console.error('[Parent] Invalid callback data received:', event.data);
+        onError(new Error('Invalid callback data received'));
+        toast.error('Authentication failed: Invalid callback data');
       }
     };
 
