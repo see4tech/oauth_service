@@ -91,29 +91,32 @@ async def initialize_oauth(
             frontend_callback_url=callback_url
         )
         
-        # Get authorization URL based on OAuth type
-        auth_urls = await oauth_handler.get_authorization_url(
-            state=state,
-            use_oauth1=getattr(request, 'use_oauth1', False)
-        )
-        
         # For Twitter, handle OAuth 1.0a and 2.0 separately
         if platform == "twitter":
-            # Store code verifier in state for OAuth 2.0
-            if not request.use_oauth1 and isinstance(auth_urls, dict) and 'code_verifier' in auth_urls:
-                await store_code_verifier(state, auth_urls['code_verifier'])
-            
-            # Return appropriate URL based on OAuth type
             if request.use_oauth1:
+                # OAuth 1.0a doesn't use state
+                auth_urls = await oauth_handler.get_authorization_url(use_oauth1=True)
                 return OAuthInitResponse(
                     authorization_url=auth_urls['oauth1_url'],
                     state=auth_urls['state'],
                     platform=platform
                 )
             else:
+                # OAuth 2.0 - get base URL and append state
+                auth_urls = await oauth_handler.get_authorization_url(use_oauth1=False)
+                
+                # Store code verifier if present
+                if isinstance(auth_urls, dict) and 'code_verifier' in auth_urls:
+                    await store_code_verifier(state, auth_urls['code_verifier'])
+                
+                # Append state to OAuth 2.0 URL
+                oauth2_url = auth_urls['oauth2_url']
+                separator = '&' if '?' in oauth2_url else '?'
+                oauth2_url = f"{oauth2_url}{separator}state={state}"
+                
                 return OAuthInitResponse(
-                    authorization_url=auth_urls['oauth2_url'],
-                    state=auth_urls['state'],
+                    authorization_url=oauth2_url,
+                    state=state,
                     platform=platform
                 )
         
