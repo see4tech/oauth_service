@@ -51,21 +51,28 @@ async def oauth_callback(
             if not oauth_token or not oauth_verifier:
                 logger.error("Missing OAuth 1.0a parameters")
                 return create_html_response(error="Missing OAuth 1.0a parameters", platform=platform, version=version)
+            
+            # For OAuth 1.0a, we don't need to verify state as Twitter doesn't return it
+            state_data = {
+                'user_id': request.query_params.get('user_id'),
+                'frontend_callback_url': request.query_params.get('frontend_callback_url')
+            }
+            if not state_data['user_id'] or not state_data['frontend_callback_url']:
+                logger.error("Missing user_id or frontend_callback_url in OAuth 1.0a callback")
+                return create_html_response(error="Missing user information", platform=platform, version=version)
         # For OAuth 2.0, we need code and state
         else:
             if not code or not state:
                 logger.error("Missing OAuth 2.0 parameters")
                 return create_html_response(error="Missing OAuth 2.0 parameters", platform=platform, version=version)
-
-        oauth_handler = await get_oauth_handler(platform)
-        
-        # Log the state before verification
-        logger.info(f"Attempting to verify state: {state}")
-        
-        state_data = oauth_handler.verify_state(state)
-        if not state_data:
-            logger.error("Invalid state")
-            return create_html_response(error="Invalid state", platform=platform, version=version)
+            
+            oauth_handler = await get_oauth_handler(platform)
+            # Log the state before verification
+            logger.info(f"Attempting to verify state: {state}")
+            state_data = oauth_handler.verify_state(state)
+            if not state_data:
+                logger.error("Invalid state")
+                return create_html_response(error="Invalid state", platform=platform, version=version)
 
         logger.info(f"State verification successful. State data: {state_data}")
         user_id = state_data['user_id']

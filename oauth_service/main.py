@@ -32,10 +32,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith('/oauth') and '/callback/' in request.url.path:
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "script-src 'self' 'unsafe-inline'; "
                 "style-src 'self' 'unsafe-inline'; "
                 "connect-src 'self' *; "
-                "frame-ancestors 'self'"
+                "frame-ancestors 'self'; "
+                "img-src 'self' data:; "
+                "base-uri 'self'"
             )
         else:
             # For all other routes, set default CSP

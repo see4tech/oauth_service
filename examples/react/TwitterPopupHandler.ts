@@ -7,12 +7,17 @@ export class TwitterPopupHandler {
     const baseOAuthUrl = import.meta.env.VITE_BASE_OAUTH_URL.replace(/\/$/, '');
     const frontendCallbackUrl = `${origin}/oauth/twitter/callback/${useOAuth1 ? '1' : '2'}`;
     
+    // For OAuth 1.0a, include user information in the callback URL
+    const callbackUrl = useOAuth1 
+      ? `${frontendCallbackUrl}?user_id=${userId}&frontend_callback_url=${encodeURIComponent(frontendCallbackUrl)}`
+      : frontendCallbackUrl;
+    
     console.log('[Parent] Request details:', {
       endpoint: `${baseOAuthUrl}/oauth/twitter/init`,
       payload: {
         user_id: userId.toString(), // Convert userId to string
         redirect_uri: redirectUri,
-        frontend_callback_url: frontendCallbackUrl,
+        frontend_callback_url: callbackUrl,
         use_oauth1: useOAuth1
       },
       headers: {
@@ -30,7 +35,7 @@ export class TwitterPopupHandler {
       body: JSON.stringify({
         user_id: userId.toString(), // Convert userId to string
         redirect_uri: redirectUri,
-        frontend_callback_url: frontendCallbackUrl,
+        frontend_callback_url: callbackUrl,
         use_oauth1: useOAuth1
       }),
     });
