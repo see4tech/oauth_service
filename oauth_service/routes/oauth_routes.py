@@ -36,39 +36,38 @@ class ProfileRequest(BaseModel):
 class RefreshTokenRequest(BaseModel):
     user_id: str
 
-async def get_oauth_handler(platform: str):
-    handlers = {
-        "twitter": TwitterOAuth,
-        "linkedin": LinkedInOAuth,
-        "instagram": InstagramOAuth,
-        "facebook": FacebookOAuth
-    }
-    
-    if platform not in handlers:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Unsupported platform: {platform}"
-        )
-    
+async def get_oauth_handler(platform: str, callback_url: Optional[str] = None) -> OAuthBase:
+    """Get OAuth handler for specified platform."""
     try:
-        credentials = settings.get_platform_credentials(platform)
+        settings = get_settings()
         
-        # For Twitter, pass both OAuth 1.0a and 2.0 credentials
         if platform == "twitter":
-            oauth_credentials = {
-                "client_id": credentials["client_id"],  # OAuth 2.0 client ID
-                "client_secret": credentials["client_secret"],  # OAuth 2.0 client secret
-                "consumer_key": credentials["consumer_key"],  # OAuth 1.0a key
-                "consumer_secret": credentials["consumer_secret"],  # OAuth 1.0a secret
-                "callback_url": credentials["callback_url"]
-            }
+            return TwitterOAuth(
+                client_id=settings.TWITTER_CLIENT_ID,
+                client_secret=settings.TWITTER_CLIENT_SECRET,
+                callback_url=callback_url or settings.TWITTER_CALLBACK_URL
+            )
+        elif platform == "linkedin":
+            return LinkedInOAuth(
+                client_id=settings.LINKEDIN_CLIENT_ID,
+                client_secret=settings.LINKEDIN_CLIENT_SECRET,
+                callback_url=callback_url or settings.LINKEDIN_CALLBACK_URL
+            )
+        elif platform == "facebook":
+            return FacebookOAuth(
+                client_id=settings.FACEBOOK_CLIENT_ID,
+                client_secret=settings.FACEBOOK_CLIENT_SECRET,
+                callback_url=callback_url or settings.FACEBOOK_CALLBACK_URL
+            )
         else:
-            oauth_credentials = credentials
+            raise ValueError(f"Unsupported platform: {platform}")
             
-        return handlers[platform](**oauth_credentials)
-    except ValueError as e:
+    except Exception as e:
         logger.error(f"Error getting OAuth handler for {platform}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to initialize {platform} OAuth handler: {str(e)}"
+        )
 
 @router.post("/{platform}/init", response_model=OAuthInitResponse)
 async def initialize_oauth(
@@ -85,6 +84,7 @@ async def initialize_oauth(
         
         # Initialize OAuth handler with correct callback URL
         oauth_handler = await get_oauth_handler(platform, callback_url)
+        logger.debug(f"Initialized OAuth handler for {platform} with callback URL: {callback_url}")
         
         # Generate state with the correct callback URL
         state = oauth_handler.generate_state(
