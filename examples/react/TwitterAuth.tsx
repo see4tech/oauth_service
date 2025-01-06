@@ -45,12 +45,6 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         
         // Display a message in the window
         try {
-          // Prevent the window from closing
-          authWindow.onbeforeunload = (e) => {
-            e.preventDefault();
-            e.returnValue = '';
-          };
-          
           authWindow.document.write(`
             <!DOCTYPE html>
             <html>
@@ -58,16 +52,47 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
                 <title>Twitter OAuth</title>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          authWindow.document.body.innerHTML = `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: system-ui, -apple-system, sans-serif;">
-              <h2 style="margin-bottom: 20px;">OAuth 2.0 Authorization Complete</h2>
-              <p style="margin-bottom: 20px;">Please click the button below to complete Twitter OAuth 1.0a authorization.</p>
-              <a href="${tokens.oauth1_url}" 
-                 style="background-color: #1da1f2; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 500;">
-                Continue with Twitter OAuth 1.0a
-              </a>
-            </div>
-          `;
+                <style>
+                  body {
+                    font-family: system-ui, -apple-system, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                    background-color: #f5f5f5;
+                  }
+                  .container {
+                    text-align: center;
+                    padding: 2rem;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                  }
+                  .button {
+                    background-color: #1da1f2;
+                    color: white;
+                    padding: 12px 24px;
+                    border-radius: 6px;
+                    text-decoration: none;
+                    font-weight: 500;
+                    display: inline-block;
+                    margin-top: 1rem;
+                  }
+                  .button:hover {
+                    background-color: #1a91da;
+                  }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <h2>OAuth 2.0 Authorization Complete</h2>
+                  <p>Please click the button below to complete Twitter OAuth 1.0a authorization.</p>
+                  <a href="${tokens.oauth1_url}" class="button">Continue with Twitter OAuth 1.0a</a>
+                </div>
+              </body>
+            </html>
+          `);
         } catch (error) {
           // If we can't modify the window content (e.g., due to CORS), navigate directly
           console.log('[Parent] Redirecting to OAuth 1.0a URL');
@@ -86,16 +111,57 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         // Display success message in the window
         if (authWindow && !authWindow.closed) {
           try {
-            authWindow.document.body.innerHTML = `
-              <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: system-ui, -apple-system, sans-serif;">
-                <h2 style="margin-bottom: 20px; color: #10b981;">✓ Twitter Connected Successfully</h2>
-                <p style="margin-bottom: 20px;">You can now close this window.</p>
-                <button onclick="window.close()" 
-                        style="background-color: #6b7280; color: white; padding: 12px 24px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500;">
-                  Close Window
-                </button>
-              </div>
-            `;
+            authWindow.document.write(`
+              <!DOCTYPE html>
+              <html>
+                <head>
+                  <title>Twitter OAuth</title>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  <style>
+                    body {
+                      font-family: system-ui, -apple-system, sans-serif;
+                      display: flex;
+                      justify-content: center;
+                      align-items: center;
+                      height: 100vh;
+                      margin: 0;
+                      background-color: #f5f5f5;
+                    }
+                    .container {
+                      text-align: center;
+                      padding: 2rem;
+                      background: white;
+                      border-radius: 8px;
+                      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    }
+                    .success {
+                      color: #10b981;
+                      margin-bottom: 1rem;
+                    }
+                    .button {
+                      background-color: #6b7280;
+                      color: white;
+                      padding: 12px 24px;
+                      border-radius: 6px;
+                      border: none;
+                      cursor: pointer;
+                      font-weight: 500;
+                    }
+                    .button:hover {
+                      background-color: #4b5563;
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="container">
+                    <h2 class="success">✓ Twitter Connected Successfully</h2>
+                    <p>You can now close this window.</p>
+                    <button onclick="window.close()" class="button">Close Window</button>
+                  </div>
+                </body>
+              </html>
+            `);
           } catch (error) {
             // If we can't modify the window content, just show a toast
             toast.success('Twitter connected successfully. You can close the popup window.');

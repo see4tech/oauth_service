@@ -101,9 +101,6 @@ export class TwitterPopupHandler {
           
           // Clean up
           window.removeEventListener('message', messageHandler);
-          
-          // Close the window
-          authWindow.close();
         }
       };
 
