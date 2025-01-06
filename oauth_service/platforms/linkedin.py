@@ -19,9 +19,9 @@ class LinkedInOAuth(OAuthBase):
         self.token_url = "https://www.linkedin.com/oauth/v2/accessToken"
         self.api_url = "https://api.linkedin.com/v2"
         
-        # Ensure callback URL ends with version suffix
-        if not callback_url.endswith('/2'):
-            self.callback_url = f"{callback_url.rstrip('/')}/2"
+        # For LinkedIn, we need to use the exact registered callback URL
+        # Remove any version suffix as it's not part of the registered URL
+        self.callback_url = callback_url.replace('/2', '')
         
         logger.debug(f"Initialized LinkedIn OAuth with callback URL: {self.callback_url}")
         

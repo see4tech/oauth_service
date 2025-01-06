@@ -80,8 +80,11 @@ async def initialize_oauth(
         parsed_url = urlparse(request.frontend_callback_url)
         base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
         
-        # Create version-specific callback URLs
-        callback_url = urljoin(base_url, f"/oauth/{platform}/callback/{'1' if request.use_oauth1 else '2'}")
+        # Create version-specific callback URLs, but handle LinkedIn differently
+        if platform == "linkedin":
+            callback_url = urljoin(base_url, f"/oauth/{platform}/callback")  # No version suffix for LinkedIn
+        else:
+            callback_url = urljoin(base_url, f"/oauth/{platform}/callback/{'1' if request.use_oauth1 else '2'}")
         
         # Initialize OAuth handler with correct callback URL
         oauth_handler = await get_oauth_handler(platform, callback_url)
