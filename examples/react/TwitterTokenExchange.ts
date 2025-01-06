@@ -60,11 +60,12 @@ export class TwitterTokenExchange {
       let storedTokens = {};
       try {
         const existingTokens = localStorage.getItem('twitter_access_token');
+        console.log('[Parent] Existing stored tokens:', existingTokens ? JSON.parse(existingTokens) : 'None');
         if (existingTokens) {
           storedTokens = JSON.parse(existingTokens);
         }
       } catch (error) {
-        console.warn('[Parent] Error reading stored tokens:', error);
+        console.error('[Parent] Error reading stored tokens:', error);
       }
 
       if (!isOAuth1) {
@@ -79,7 +80,10 @@ export class TwitterTokenExchange {
             scope: data.scope
           }
         };
-        console.log('[Parent] Twitter OAuth 2.0 tokens stored');
+        console.log('[Parent] Twitter OAuth 2.0 tokens stored:', {
+          hasAccessToken: !!data.access_token,
+          hasRefreshToken: !!data.refresh_token
+        });
       } else {
         // Store OAuth 1.0a tokens
         storedTokens = {
@@ -89,12 +93,20 @@ export class TwitterTokenExchange {
             access_token_secret: data.access_token_secret
           }
         };
-        console.log('[Parent] Twitter OAuth 1.0a tokens stored');
+        console.log('[Parent] Twitter OAuth 1.0a tokens stored:', {
+          hasAccessToken: !!data.access_token,
+          hasAccessTokenSecret: !!data.access_token_secret
+        });
       }
 
       // Save combined tokens
       localStorage.setItem('twitter_access_token', JSON.stringify(storedTokens));
-      console.log('[Parent] Combined tokens stored:', Object.keys(storedTokens));
+      console.log('[Parent] Final stored token state:', {
+        hasOAuth1: !!storedTokens.oauth1,
+        hasOAuth2: !!storedTokens.oauth2,
+        oauth1Keys: storedTokens.oauth1 ? Object.keys(storedTokens.oauth1) : [],
+        oauth2Keys: storedTokens.oauth2 ? Object.keys(storedTokens.oauth2) : []
+      });
     } else {
       console.error('[Parent] Twitter authentication failed:', data.error);
       throw new Error(data.error || 'Failed to authenticate with Twitter');
