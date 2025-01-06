@@ -93,12 +93,12 @@ async def initialize_oauth(
         
         # For Twitter, handle OAuth 1.0a and 2.0 separately
         if platform == "twitter":
-            auth_urls = await oauth_handler.get_authorization_url()  # This gets both OAuth 1.0a and 2.0 URLs
+            auth_urls = await oauth_handler.get_authorization_url()
             
             if request.use_oauth1:
                 return OAuthInitResponse(
                     authorization_url=auth_urls['oauth1_url'],
-                    state=auth_urls['state'],
+                    state=state,
                     platform=platform
                 )
             else:
