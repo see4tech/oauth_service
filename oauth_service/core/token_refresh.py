@@ -89,14 +89,28 @@ class TokenRefreshService:
                     consumer_key=os.getenv("TWITTER_CONSUMER_KEY"),
                     consumer_secret=os.getenv("TWITTER_CONSUMER_SECRET")
                 )
-                if 'oauth2' in token_data and token_data['oauth2'].get('refresh_token'):
-                    new_token_data = await oauth_handler.refresh_token(
-                        token_data['oauth2']['refresh_token']
-                    )
-                    # Preserve OAuth 1.0a tokens if they exist
-                    if 'oauth1' in token_data:
-                        new_token_data['oauth1'] = token_data['oauth1']
-                    return new_token_data
+                
+                # Check if we have OAuth 2.0 tokens and a refresh token
+                oauth2_data = token_data.get('oauth2', {})
+                refresh_token = oauth2_data.get('refresh_token')
+                
+                if refresh_token:
+                    logger.debug(f"Refreshing OAuth 2.0 token for Twitter user {user_id}")
+                    try:
+                        new_token_data = await oauth_handler.refresh_token(refresh_token)
+                        
+                        # Preserve OAuth 1.0a tokens if they exist
+                        if 'oauth1' in token_data:
+                            new_token_data['oauth1'] = token_data['oauth1']
+                            
+                        logger.debug(f"Successfully refreshed OAuth 2.0 token for Twitter user {user_id}")
+                        return new_token_data
+                    except Exception as e:
+                        logger.error(f"Failed to refresh OAuth 2.0 token: {str(e)}")
+                        return None
+                else:
+                    logger.debug(f"No refresh token available for Twitter user {user_id}")
+                    return None
                     
             elif platform == "linkedin":
                 oauth_handler = LinkedInOAuth(
