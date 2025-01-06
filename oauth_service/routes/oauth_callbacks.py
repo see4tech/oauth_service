@@ -114,8 +114,17 @@ async def oauth_callback(
             
             # Store API key locally
             db = SqliteDB()
-            db.store_user_api_key(user_id, platform, user_api_key)
-            logger.info(f"Stored API key locally for user {user_id} on platform {platform}")
+            # For Twitter, use different platform identifiers for OAuth 1.0a and OAuth 2.0
+            if platform == "twitter":
+                if "oauth1" in token_data:
+                    db.store_user_api_key(user_id, "twitter-oauth1", user_api_key)
+                    logger.info(f"Stored OAuth 1.0a API key locally for user {user_id}")
+                if "oauth2" in token_data:
+                    db.store_user_api_key(user_id, "twitter-oauth2", user_api_key)
+                    logger.info(f"Stored OAuth 2.0 API key locally for user {user_id}")
+            else:
+                db.store_user_api_key(user_id, platform, user_api_key)
+                logger.info(f"Stored API key locally for user {user_id} on platform {platform}")
             
             # Store in external service if configured
             settings = get_settings()
@@ -124,22 +133,48 @@ async def oauth_callback(
             
             if storage_url and api_key:
                 async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        f"{storage_url}/store",
-                        json={
-                            "user_id": user_id,
-                            "platform": platform,
-                            "api_key": user_api_key
-                        },
-                        headers={
-                            "Content-Type": "application/json",
-                            "x-api-key": api_key
-                        }
-                    ) as response:
-                        if not response.ok:
-                            logger.error(f"Failed to store API key in external service: {await response.text()}")
-                        else:
-                            logger.info(f"Successfully stored API key in external service for user {user_id} on platform {platform}")
+                    # For Twitter, store API key twice with different platform identifiers
+                    if platform == "twitter":
+                        platforms_to_store = []
+                        if "oauth1" in token_data:
+                            platforms_to_store.append("twitter-oauth1")
+                        if "oauth2" in token_data:
+                            platforms_to_store.append("twitter-oauth2")
+                        
+                        for platform_id in platforms_to_store:
+                            async with session.post(
+                                f"{storage_url}/store",
+                                json={
+                                    "user_id": user_id,
+                                    "platform": platform_id,
+                                    "api_key": user_api_key
+                                },
+                                headers={
+                                    "Content-Type": "application/json",
+                                    "x-api-key": api_key
+                                }
+                            ) as response:
+                                if not response.ok:
+                                    logger.error(f"Failed to store API key in external service for {platform_id}: {await response.text()}")
+                                else:
+                                    logger.info(f"Successfully stored API key in external service for user {user_id} on platform {platform_id}")
+                    else:
+                        async with session.post(
+                            f"{storage_url}/store",
+                            json={
+                                "user_id": user_id,
+                                "platform": platform,
+                                "api_key": user_api_key
+                            },
+                            headers={
+                                "Content-Type": "application/json",
+                                "x-api-key": api_key
+                            }
+                        ) as response:
+                            if not response.ok:
+                                logger.error(f"Failed to store API key in external service: {await response.text()}")
+                            else:
+                                logger.info(f"Successfully stored API key in external service for user {user_id} on platform {platform}")
         except Exception as e:
             logger.error(f"Error storing API key: {str(e)}")
         

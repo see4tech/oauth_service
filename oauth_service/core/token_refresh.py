@@ -30,7 +30,14 @@ class TokenRefreshService:
 
             # Get user's API key
             db = SqliteDB()
-            user_api_key = db.get_user_api_key(user_id, platform)
+            
+            # For Twitter, use the correct platform identifier based on token type
+            if platform == "twitter":
+                platform_id = "twitter-oauth2" if "oauth2" in new_token_data else "twitter-oauth1"
+                user_api_key = db.get_user_api_key(user_id, platform_id)
+            else:
+                user_api_key = db.get_user_api_key(user_id, platform)
+                
             if not user_api_key:
                 logger.error(f"No API key found for user {user_id} on platform {platform}")
                 return
@@ -48,11 +55,14 @@ class TokenRefreshService:
 
             # Send refresh request with existing API key
             async with aiohttp.ClientSession() as session:
+                # For Twitter, use the correct platform identifier
+                platform_to_use = platform_id if platform == "twitter" else platform
+                
                 async with session.post(
                     f"{storage_url}/refresh",
                     json={
                         "user_id": user_id,
-                        "platform": platform,
+                        "platform": platform_to_use,
                         "api_key": user_api_key,
                         "token_expiration": token_expiration
                     },
@@ -64,7 +74,7 @@ class TokenRefreshService:
                     if not response.ok:
                         logger.error(f"Failed to notify storage service: {await response.text()}")
                     else:
-                        logger.info(f"Successfully notified storage service for user {user_id} on platform {platform}")
+                        logger.info(f"Successfully notified storage service for user {user_id} on platform {platform_to_use}")
         except Exception as e:
             logger.error(f"Error notifying storage service: {str(e)}")
 
