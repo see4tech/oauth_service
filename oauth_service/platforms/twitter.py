@@ -63,11 +63,16 @@ class TwitterOAuth(OAuthBase):
             code_verifier = base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8').rstrip('=')
             code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode('utf-8')).digest()).decode('utf-8').rstrip('=')
             
+            # Add offline.access scope for refresh tokens
             authorization_url, state = self.oauth2_client.authorization_url(
                 'https://twitter.com/i/oauth2/authorize',
                 code_challenge=code_challenge,
-                code_challenge_method='S256'
+                code_challenge_method='S256',
+                response_type='code',
+                access_type='offline'  # Request refresh token
             )
+            
+            logger.debug("Generated OAuth 2.0 authorization URL with offline access")
             
             return {
                 'oauth1_url': oauth1_url,
@@ -95,13 +100,17 @@ class TwitterOAuth(OAuthBase):
                     code=oauth2_code,
                     client_secret=self._decrypted_client_secret,
                     code_verifier=code_verifier,
-                    include_client_id=True
+                    include_client_id=True,
+                    grant_type='authorization_code'
                 )
                 
                 # Log token response for debugging
                 logger.debug(f"OAuth 2.0 token response keys: {list(token.keys())}")
                 logger.debug(f"OAuth 2.0 token response scopes: {token.get('scope', '')}")
                 logger.debug(f"Has refresh_token: {bool(token.get('refresh_token'))}")
+                
+                if not token.get('refresh_token'):
+                    logger.warning("No refresh token received in OAuth 2.0 response")
                 
                 tokens['oauth2'] = {
                     'access_token': token['access_token'],

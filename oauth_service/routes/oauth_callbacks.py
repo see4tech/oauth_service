@@ -81,7 +81,7 @@ async def oauth_callback(
         
         token_manager = TokenManager()
         
-        # For Twitter, handle OAuth 1.0a and 2.0 separately based on version
+        # For Twitter, handle OAuth 1.0a and 2.0 separately
         if platform == "twitter":
             try:
                 # Get OAuth 1.0a parameters
@@ -124,9 +124,21 @@ async def oauth_callback(
                         oauth2_code=code,
                         code_verifier=code_verifier
                     )
+                    
+                    # Validate OAuth 2.0 token data
                     if not token_data or 'oauth2' not in token_data:
                         logger.error("Failed to get OAuth 2.0 tokens")
                         return create_html_response(error="Failed to get OAuth 2.0 tokens", platform=platform, version=version)
+                    
+                    # Log OAuth 2.0 token structure
+                    oauth2_data = token_data['oauth2']
+                    logger.debug(f"OAuth 2.0 token data structure: {list(oauth2_data.keys())}")
+                    logger.debug(f"Has refresh_token: {bool(oauth2_data.get('refresh_token'))}")
+                    logger.debug(f"Expires in: {oauth2_data.get('expires_in')}")
+                    logger.debug(f"Expires at: {datetime.fromtimestamp(oauth2_data.get('expires_at', 0)).strftime('%Y-%m-%d %H:%M:%S')}")
+                    
+                    if not oauth2_data.get('refresh_token'):
+                        logger.warning("No refresh token received in OAuth 2.0 response. Token data: %s", list(oauth2_data.keys()))
                 else:
                     logger.error("Invalid OAuth version or missing parameters")
                     return create_html_response(error="Invalid OAuth version or missing parameters", platform=platform, version=version)
@@ -138,6 +150,14 @@ async def oauth_callback(
                     token_data=token_data
                 )
                 logger.debug(f"Successfully stored tokens with structure: {list(token_data.keys())}")
+                
+                # Verify stored tokens
+                stored_tokens = await token_manager.get_token(platform, user_id)
+                if stored_tokens:
+                    logger.debug(f"Verified stored token structure: {list(stored_tokens.keys())}")
+                    if 'oauth2' in stored_tokens:
+                        logger.debug(f"Verified OAuth 2.0 token keys: {list(stored_tokens['oauth2'].keys())}")
+                        logger.debug(f"Stored refresh token present: {bool(stored_tokens['oauth2'].get('refresh_token'))}")
                 
             except Exception as e:
                 logger.error(f"Error processing Twitter callback: {str(e)}")
