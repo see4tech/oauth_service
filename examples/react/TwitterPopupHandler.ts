@@ -51,28 +51,51 @@ export class TwitterPopupHandler {
     return data;
   }
 
-  static openAuthWindow(url: string, isOAuth1: boolean = false): Window | null {
+  static openAuthWindow(url: string, isOAuth1: boolean): Window | null {
     const width = 600;
-    const height = 700;
+    const height = 800;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
-    const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,location=no`;
-    
-    const authWindow = window.open(url, `Twitter ${isOAuth1 ? 'OAuth 1.0a' : 'OAuth 2.0'} Auth`, features);
-    
-    if (authWindow) {
-      // Add message listener to the parent window
-      window.addEventListener('message', (event) => {
-        if (event.origin !== window.location.origin) {
-          return;
+
+    const popup = window.open(
+      url,
+      'Twitter Auth',
+      `width=${width},height=${height},left=${left},top=${top},` +
+      'toolbar=no,menubar=no,scrollbars=yes,resizable=yes,status=no'
+    );
+
+    // Start monitoring the popup
+    if (popup) {
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkClosed);
+          // Notify the parent that the window was closed manually
+          window.postMessage({
+            type: 'TWITTER_AUTH_WINDOW_CLOSED',
+            manual: true
+          }, window.location.origin);
         }
-        
-        if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
-          window.postMessage(event.data, window.location.origin);
-        }
-      });
+      }, 500);
+
+      // Store the interval ID to clear it later
+      (popup as any).__checkClosedInterval = checkClosed;
     }
-    
-    return authWindow;
+
+    return popup;
+  }
+
+  static closeAuthWindow(window: Window | null) {
+    if (window) {
+      // Clear the check interval if it exists
+      if ((window as any).__checkClosedInterval) {
+        clearInterval((window as any).__checkClosedInterval);
+      }
+      
+      try {
+        window.close();
+      } catch (e) {
+        console.error('Failed to close auth window:', e);
+      }
+    }
   }
 }

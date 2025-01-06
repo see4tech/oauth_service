@@ -76,9 +76,8 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
         }
 
         if (event.data.type === 'TWITTER_AUTH_CALLBACK') {
-            if (authWindow && !authWindow.closed) {
-                authWindow.close();
-            }
+            // Close the window using our handler
+            TwitterPopupHandler.closeAuthWindow(authWindow);
             setAuthWindow(null);
             setIsLoading(false);
             
@@ -87,22 +86,20 @@ const TwitterAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: {
             } else {
                 onSuccess?.(event.data);
             }
-        } else if (event.data.type === 'TWITTER_AUTH_WINDOW_STUCK') {
-            // Handle stuck window
+        } else if (event.data.type === 'TWITTER_AUTH_WINDOW_CLOSED') {
+            // Handle manual window close
+            setAuthWindow(null);
             setIsLoading(false);
-            if (authWindow) {
-                try {
-                    authWindow.close();
-                } catch (e) {
-                    console.error('Failed to close auth window:', e);
-                }
-                setAuthWindow(null);
-            }
+            setCurrentFlow(null);
         }
     };
 
     window.addEventListener('message', messageHandler);
-    return () => window.removeEventListener('message', messageHandler);
+    return () => {
+        // Clean up: close window and remove listener
+        TwitterPopupHandler.closeAuthWindow(authWindow);
+        window.removeEventListener('message', messageHandler);
+    };
   }, [authWindow, onSuccess, onError]);
 
   const handleOAuth2Login = async () => {
