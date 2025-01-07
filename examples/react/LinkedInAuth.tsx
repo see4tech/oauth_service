@@ -39,23 +39,23 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
         setAuthWindow(null);
         setIsLoading(false);
 
-        if (event.data.error) {
-          console.error('LinkedIn auth error:', event.data.error);
-          onError?.(new Error(event.data.error));
-          toast.error('LinkedIn authorization failed');
-        } else {
+        if (event.data.success && event.data.platform === 'linkedin') {
           console.log('LinkedIn auth successful');
           setAuthCompleted(true);
           setLocalIsConnected(true);
           onSuccess(event.data);
           toast.success('LinkedIn authorization successful');
+        } else if (event.data.error) {
+          console.error('LinkedIn auth error:', event.data.error);
+          onError?.(new Error(event.data.error));
+          toast.error('LinkedIn authorization failed');
         }
       } else if (event.data.type === 'OAUTH_WINDOW_CLOSED') {
         // Handle manual window close
         setAuthWindow(null);
         setIsLoading(false);
         if (!authCompleted) {
-          onError?.(new Error('Authentication window was closed'));
+          console.log('Authentication window was closed by user');
         }
       }
     };
@@ -116,9 +116,6 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
           throw new Error('Could not open OAuth window');
         }
         setAuthWindow(newWindow);
-        
-        onSuccess({ authorized: true, platform: 'linkedin' });
-        setLocalIsConnected(true);
       } else {
         throw new Error('No authorization URL received');
       }

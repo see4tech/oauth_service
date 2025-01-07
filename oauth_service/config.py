@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     LOG_FILE: str = "oauth_service.log"
+    
+    # Frontend URLs (comma-separated)
+    FRONTEND_URLS: str  # Required environment variable, no default
+    
+    @property
+    def frontend_origins(self) -> List[str]:
+        """Get list of allowed frontend origins."""
+        return [url.strip() for url in self.FRONTEND_URLS.split(',')]
 
     @property
     def oauth_credentials(self) -> Dict:

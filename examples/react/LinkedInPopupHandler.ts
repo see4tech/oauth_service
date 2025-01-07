@@ -1,5 +1,5 @@
 export class LinkedInPopupHandler {
-  static async initializeAuth(userId: string, redirectUri: string) {
+  static async initializeAuth(userId: string | number, redirectUri: string) {
     console.log('Initiating LinkedIn auth with user ID:', userId);
     
     const response = await fetch(`${import.meta.env.VITE_BASE_OAUTH_URL}/oauth/linkedin/init`, {
@@ -9,7 +9,7 @@ export class LinkedInPopupHandler {
         'x-api-key': import.meta.env.VITE_API_KEY
       },
       body: JSON.stringify({
-        user_id: userId,
+        user_id: String(userId), // Convert userId to string
         redirect_uri: redirectUri,
         frontend_callback_url: redirectUri,
         scopes: ['openid', 'profile', 'w_member_social']

@@ -5,6 +5,7 @@ from cryptography.fernet import Fernet
 from oauth_service.core import TokenManager
 from oauth_service.utils.crypto import FernetEncryption
 from oauth_service.utils.key_manager import KeyManager
+from oauth_service.settings import Settings
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_environment():
@@ -53,3 +54,15 @@ def mock_tokens():
             'access_token_secret': 'test_oauth1_secret'
         }
     }
+
+@pytest.fixture
+def test_settings():
+    return Settings(
+        SECRET_KEY="test_secret",
+        ENCRYPTION_KEY="test_encryption_key",
+        JWT_SECRET="test_jwt_secret",
+        API_KEY="test_api_key",
+        API_KEY_STORAGE="http://test-storage",
+        FRONTEND_URL="http://test-frontend",
+        # ... other required settings
+    )
