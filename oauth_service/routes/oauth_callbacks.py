@@ -6,21 +6,16 @@ from ..utils.logger import get_logger
 from .oauth_routes import get_oauth_handler, get_code_verifier
 from ..core.db import SqliteDB
 from ..config import get_settings
+from ..api.api_key_storage import APIKeyStorage
+from ..utils.crypto import generate_api_key
 import json
 import os
 import base64
-import secrets
 import aiohttp
 from datetime import datetime
-from ..api.api_key_storage import APIKeyStorage
-from ..utils.crypto import generate_api_key
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
-
-def generate_api_key() -> str:
-    """Generate a secure API key."""
-    return f"user_{secrets.token_urlsafe(32)}"
 
 def init_twitter_oauth(user_id: str, frontend_callback_url: str) -> dict:
     """Initialize Twitter OAuth flow."""
