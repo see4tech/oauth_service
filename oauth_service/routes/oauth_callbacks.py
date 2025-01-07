@@ -56,6 +56,11 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
         # Get the correct URL based on OAuth version
         auth_url = auth_data['oauth1_url'] if use_oauth1 else auth_data['oauth2_url']
         
+        # Store code verifier if this is OAuth 2.0
+        if not use_oauth1 and 'code_verifier' in auth_data:
+            logger.debug(f"Storing code verifier for state: {state}")
+            await store_code_verifier(state, auth_data['code_verifier'])
+        
         # Manually append state to URL
         separator = '&' if '?' in auth_url else '?'
         auth_url = f"{auth_url}{separator}state={state}"
