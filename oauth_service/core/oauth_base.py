@@ -16,7 +16,8 @@ class OAuthBase(ABC):
         self.callback_url = callback_url
         self.crypto = FernetEncryption()
         self._client_secret = self.crypto.encrypt(client_secret)
-        self.platform_name = self.__class__.__name__.lower()
+        # Extract base platform name without 'OAuth' suffix
+        self.platform_name = self.__class__.__name__.lower().replace('oauth', '')
 
     def generate_state(self, user_id: str, frontend_callback_url: str) -> str:
         """
@@ -87,8 +88,7 @@ class OAuthBase(ABC):
             state_platform = state_data.get('platform', '')
             
             # Verify platform matches (case-insensitive)
-            # Note: state platform will have 'oauth' suffix
-            if not state_platform.lower().startswith(self.platform_name.lower()):
+            if state_platform.lower() != self.platform_name.lower():
                 logger.warning(f"Platform mismatch. Expected: {self.platform_name}, Got: {state_platform}")
                 return None
                 
