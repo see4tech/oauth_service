@@ -83,16 +83,24 @@ class OAuthBase(ABC):
                 logger.error("Invalid state data: missing required fields")
                 return None
             
-            # Verify timestamp (optional: add expiration check)
-            timestamp = int(state_data['timestamp'])
-            current_time = int(datetime.utcnow().timestamp())
-            age = current_time - timestamp
-            
-            logger.debug(f"State age: {age} seconds")
-            
-            # Verify not expired (1 hour)
-            if age > 3600:
-                logger.warning(f"State expired. Age: {age} seconds")
+            # Convert timestamp to int if it's a string
+            try:
+                timestamp = int(state_data['timestamp'])
+                current_time = int(datetime.utcnow().timestamp())
+                
+                # Calculate absolute time difference
+                time_diff = abs(current_time - timestamp)
+                logger.debug(f"State timestamp: {timestamp}")
+                logger.debug(f"Current time: {current_time}")
+                logger.debug(f"Time difference: {time_diff} seconds")
+                
+                # Verify not expired (1 hour)
+                if time_diff > 3600:
+                    logger.warning(f"State expired. Time difference: {time_diff} seconds")
+                    return None
+                    
+            except ValueError as e:
+                logger.error(f"Error processing timestamp: {str(e)}")
                 return None
             
             # Get platform from state

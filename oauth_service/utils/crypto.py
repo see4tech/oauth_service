@@ -103,7 +103,7 @@ def generate_oauth_state(user_id: str, frontend_callback_url: str, platform: str
             'user_id': user_id,
             'frontend_callback_url': frontend_callback_url,
             'platform': platform,
-            'timestamp': str(int(time.time()))  # Add timestamp for additional security
+            'timestamp': int(time.time())  # Current Unix timestamp
         }
         
         # Convert to JSON and encode to bytes
@@ -114,6 +114,7 @@ def generate_oauth_state(user_id: str, frontend_callback_url: str, platform: str
         state = base64.urlsafe_b64encode(state_bytes).decode('utf-8')
         
         logger.debug(f"Generated OAuth state for user {user_id} and platform {platform}")
+        logger.debug(f"State data: {state_data}")
         return state
         
     except Exception as e:
