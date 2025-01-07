@@ -145,7 +145,51 @@ async def oauth_callback(
                             version=version,
                             auto_close=True
                         )
-                    # Process OAuth 1.0a...
+                    
+                    # Verify state to get user_id
+                    state_data = oauth.verify_state(state)
+                    if not state_data:
+                        return create_html_response(
+                            error="Invalid state",
+                            platform=platform,
+                            version=version,
+                            auto_close=True
+                        )
+                    
+                    user_id = state_data['user_id']
+                    logger.info(f"Processing Twitter OAuth 1.0a callback for user_id: {user_id}")
+                    
+                    # Process OAuth 1.0a tokens
+                    tokens = await oauth.get_access_token(
+                        oauth1_verifier=oauth_verifier
+                    )
+                    
+                    if not tokens or 'oauth1' not in tokens:
+                        return create_html_response(
+                            error="Failed to get OAuth 1.0a tokens",
+                            platform=platform,
+                            version=version,
+                            auto_close=True
+                        )
+                    
+                    # Generate API key if it doesn't exist
+                    api_key_storage = APIKeyStorage()
+                    existing_api_key = await api_key_storage.get_api_key(user_id, "twitter")
+                    api_key = existing_api_key if existing_api_key else generate_api_key()
+                    
+                    # Store OAuth 1.0a tokens
+                    stored = await api_key_storage.store_api_key(
+                        user_id=user_id,
+                        platform="twitter-oauth1",  # Store under twitter-oauth1
+                        api_key=api_key,  # Use same API key
+                        access_token=tokens['oauth1']['access_token'],
+                        access_token_secret=tokens['oauth1']['access_token_secret']  # Include secret for OAuth 1.0a
+                    )
+                    
+                    if not stored:
+                        raise ValueError("Failed to store OAuth 1.0a tokens")
+                    
+                    logger.info(f"Successfully stored OAuth 1.0a tokens for Twitter user {user_id}")
                     success = True
                 else:
                     # Twitter OAuth 2.0 flow
@@ -197,24 +241,25 @@ async def oauth_callback(
                             auto_close=True
                         )
                     
-                    # Generate and store API key
-                    api_key = generate_api_key()
-                    
-                    # Store API key in external service
+                    # Check for existing API key
                     api_key_storage = APIKeyStorage()
+                    existing_api_key = await api_key_storage.get_api_key(user_id, "twitter")
+                    api_key = existing_api_key if existing_api_key else generate_api_key()
+                    
+                    # Store OAuth 2.0 tokens
                     stored = await api_key_storage.store_api_key(
                         user_id=user_id,
-                        platform="twitter",
-                        api_key=api_key,
+                        platform="twitter-oauth2",  # Store under twitter-oauth2
+                        api_key=api_key,  # Use same API key
                         access_token=tokens['oauth2']['access_token'],
                         refresh_token=tokens['oauth2'].get('refresh_token'),
                         expires_in=tokens['oauth2'].get('expires_in', 7200)
                     )
                     
                     if not stored:
-                        raise ValueError("Failed to store API key")
+                        raise ValueError("Failed to store OAuth 2.0 tokens")
                     
-                    logger.info(f"Successfully stored API key for Twitter user {user_id}")
+                    logger.info(f"Successfully stored OAuth 2.0 tokens for Twitter user {user_id}")
                     success = True
             else:
                 # LinkedIn and other OAuth 2.0-only platforms
