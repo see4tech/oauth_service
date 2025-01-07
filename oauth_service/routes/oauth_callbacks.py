@@ -57,15 +57,22 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
         if use_oauth1:
             auth_url = auth_data['oauth1_url']
             # Store request token and secret with user_id
-            if 'oauth1_request_token' in auth_data and 'oauth1_request_token_secret' in auth_data:
+            request_token = auth_data.get('oauth1_request_token')
+            request_token_secret = auth_data.get('oauth1_request_token_secret')
+            
+            if request_token and request_token_secret:
+                logger.debug(f"Got OAuth 1.0a request token: {request_token}")
                 await store_code_verifier(
-                    auth_data['oauth1_request_token'],  # Use request token as key
+                    request_token,  # Use request token as key
                     json.dumps({
                         'user_id': user_id,
-                        'request_token_secret': auth_data['oauth1_request_token_secret']
+                        'request_token_secret': request_token_secret
                     })
                 )
                 logger.debug(f"Stored OAuth 1.0a request token data for user {user_id}")
+            else:
+                logger.error("Missing OAuth 1.0a request tokens in response")
+                raise ValueError("Failed to get OAuth 1.0a request tokens")
         else:
             auth_url = auth_data['oauth2_url']
             # Store code verifier if this is OAuth 2.0
