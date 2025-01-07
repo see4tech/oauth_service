@@ -209,12 +209,15 @@ async def oauth_callback(
                     
                     # Store API key in external service
                     api_key_storage = APIKeyStorage()
+                    
+                    # For OAuth 1.0a, combine access token and secret in a format we can parse later
+                    combined_token = f"{tokens['oauth1']['access_token']}:{tokens['oauth1']['access_token_secret']}"
+                    
                     stored = await api_key_storage.store_api_key(
                         user_id=user_id,
                         platform="twitter-oauth1",  # Specific platform for OAuth 1.0a
                         api_key=api_key,
-                        access_token=tokens['oauth1']['access_token'],
-                        access_token_secret=tokens['oauth1']['access_token_secret'],  # OAuth 1.0a specific
+                        access_token=combined_token,
                         expires_in=0  # OAuth 1.0a tokens don't expire
                     )
                     
