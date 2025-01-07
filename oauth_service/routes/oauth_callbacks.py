@@ -54,12 +54,24 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
         auth_data = await oauth.get_authorization_url()
         
         # Get the correct URL based on OAuth version
-        auth_url = auth_data['oauth1_url'] if use_oauth1 else auth_data['oauth2_url']
-        
-        # Store code verifier if this is OAuth 2.0
-        if not use_oauth1 and 'code_verifier' in auth_data:
-            logger.debug(f"Storing code verifier for state: {state}")
-            await store_code_verifier(state, auth_data['code_verifier'])
+        if use_oauth1:
+            auth_url = auth_data['oauth1_url']
+            # Store request token and secret with user_id
+            if 'oauth1_request_token' in auth_data and 'oauth1_request_token_secret' in auth_data:
+                await store_code_verifier(
+                    auth_data['oauth1_request_token'],  # Use request token as key
+                    json.dumps({
+                        'user_id': user_id,
+                        'request_token_secret': auth_data['oauth1_request_token_secret']
+                    })
+                )
+                logger.debug(f"Stored OAuth 1.0a request token data for user {user_id}")
+        else:
+            auth_url = auth_data['oauth2_url']
+            # Store code verifier if this is OAuth 2.0
+            if 'code_verifier' in auth_data:
+                logger.debug(f"Storing code verifier for state: {state}")
+                await store_code_verifier(state, auth_data['code_verifier'])
         
         # Manually append state to URL
         separator = '&' if '?' in auth_url else '?'
@@ -146,16 +158,28 @@ async def oauth_callback(
                             auto_close=True
                         )
                     
-                    # For OAuth 1.0a, we need to extract user_id from the frontend_callback_url parameter
+                    # Get stored request token data
+                    stored_data = await get_code_verifier(oauth_token)
+                    if not stored_data:
+                        return create_html_response(
+                            error="No request token data found",
+                            platform=platform,
+                            version=version,
+                            auto_close=True
+                        )
+                    
                     try:
-                        # Parse the query parameters
-                        query_params = dict(request.query_params)
-                        user_id = query_params.get('user_id')
+                        token_data = json.loads(stored_data)
+                        user_id = token_data['user_id']
+                        request_token_secret = token_data['request_token_secret']
                         
-                        if not user_id:
-                            raise ValueError("No user_id found in callback parameters")
-                            
                         logger.info(f"Processing Twitter OAuth 1.0a callback for user_id: {user_id}")
+                        
+                        # Set request token and secret
+                        oauth.oauth1_handler.request_token = {
+                            'oauth_token': oauth_token,
+                            'oauth_token_secret': request_token_secret
+                        }
                         
                         # Process OAuth 1.0a tokens
                         tokens = await oauth.get_access_token(
