@@ -86,11 +86,10 @@ async def initialize_oauth(
         if platform == "linkedin":
             callback_url = urljoin(base_url, f"/oauth/{platform}/callback")  # No version suffix for LinkedIn
         elif platform == "twitter":
-            # For Twitter, don't append version twice
-            callback_url = urljoin(base_url, f"/oauth/twitter/callback/2")
+            # For Twitter, append version based on OAuth version
+            version = "1" if request.use_oauth1 else "2"
+            callback_url = urljoin(base_url, f"/oauth/twitter/callback/{version}")
             logger.debug(f"Twitter callback URL: {callback_url}")
-            if not request.use_oauth1:
-                callback_url = callback_url.rstrip('/2')  # Remove any trailing /2
         else:
             callback_url = urljoin(base_url, f"/oauth/{platform}/callback/{'1' if request.use_oauth1 else '2'}")
         
@@ -98,46 +97,31 @@ async def initialize_oauth(
         oauth_handler = await get_oauth_handler(platform, callback_url)
         logger.debug(f"Initialized OAuth handler for {platform} with callback URL: {callback_url}")
         
-        # Generate state with the correct callback URL
-        state = oauth_handler.generate_state(
-            user_id=request.user_id,
-            frontend_callback_url=callback_url
-        )
-        
-        # Handle platform-specific OAuth initialization
+        # Get authorization URL
         if platform == "twitter":
-            auth_urls = await oauth_handler.get_authorization_url()
-            
-            if request.use_oauth1:
-                return OAuthInitResponse(
-                    authorization_url=auth_urls['oauth1_url'],
-                    state=state,
-                    platform=platform
-                )
-            else:
-                # Store code verifier if present
-                if 'code_verifier' in auth_urls:
-                    await store_code_verifier(state, auth_urls['code_verifier'])
-                
-                oauth2_url = auth_urls['oauth2_url']
-                separator = '&' if '?' in oauth2_url else '?'
-                oauth2_url = f"{oauth2_url}{separator}state={state}"
-                
-                return OAuthInitResponse(
-                    authorization_url=oauth2_url,
-                    state=state,
-                    platform=platform,
-                    additional_params={'headers': auth_urls.get('headers')}
-                )
+            # Special handling for Twitter
+            auth_data = init_twitter_oauth(
+                user_id=request.user_id,
+                frontend_callback_url=request.frontend_callback_url,
+                use_oauth1=request.use_oauth1
+            )
+            return OAuthInitResponse(**auth_data)
         else:
-            # For other platforms (LinkedIn, Facebook, etc.)
-            authorization_url = await oauth_handler.get_authorization_url(state=state)
-            logger.debug(f"Generated authorization URL for {platform}: {authorization_url}")
+            # Standard OAuth 2.0 flow for other platforms
+            state = generate_oauth_state(
+                user_id=request.user_id,
+                frontend_callback_url=request.frontend_callback_url,
+                platform=platform
+            )
+            
+            authorization_url = await oauth_handler.get_authorization_url(
+                state=state,
+                scopes=request.scopes
+            )
             
             return OAuthInitResponse(
                 authorization_url=authorization_url,
-                state=state,
-                platform=platform
+                state=state
             )
             
     except Exception as e:
