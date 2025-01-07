@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 callback_router = APIRouter()
 settings = get_settings()
 
-def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth1: bool = False) -> dict:
+async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth1: bool = False) -> dict:
     """Initialize Twitter OAuth flow."""
     try:
         settings = get_settings()
@@ -50,8 +50,11 @@ def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth1: boo
             platform="twitteroauth"
         )
         
-        # Get authorization URL WITHOUT passing state parameter
-        auth_url = oauth.get_authorization_url()
+        # Get authorization URL and await it since it's async
+        auth_data = await oauth.get_authorization_url()
+        
+        # Get the correct URL based on OAuth version
+        auth_url = auth_data['oauth2_url'] if not use_oauth1 else auth_data['oauth1_url']
         
         # Manually append state to URL
         separator = '&' if '?' in auth_url else '?'
@@ -61,7 +64,8 @@ def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth1: boo
         
         return {
             "authorization_url": auth_url,
-            "state": state
+            "state": state,
+            "code_verifier": auth_data.get('code_verifier')  # Include code_verifier for OAuth 2.0
         }
     except Exception as e:
         logger.error(f"Error initializing OAuth for twitter: {str(e)}")

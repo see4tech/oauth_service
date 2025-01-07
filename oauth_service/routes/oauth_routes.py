@@ -87,7 +87,7 @@ async def initialize_oauth(
         # For Twitter, use the settings callback URL as base
         if platform == "twitter":
             # Special handling for Twitter
-            auth_data = init_twitter_oauth(
+            auth_data = await init_twitter_oauth(
                 user_id=request.user_id,
                 frontend_callback_url=request.frontend_callback_url,
                 use_oauth1=request.use_oauth1
@@ -109,23 +109,28 @@ async def initialize_oauth(
         
         # Initialize OAuth handler with correct callback URL
         oauth_handler = await get_oauth_handler(platform, callback_url)
-        logger.debug(f"Initialized OAuth handler for {platform} with callback URL: {callback_url}")
         
-        # Standard OAuth 2.0 flow for other platforms
+        # Generate state parameter
         state = generate_oauth_state(
             user_id=request.user_id,
             frontend_callback_url=request.frontend_callback_url,
-            platform=platform
+            platform=f"{platform}oauth"
         )
         
-        authorization_url = await oauth_handler.get_authorization_url(
-            state=state,
-            scopes=request.scopes
-        )
+        # Get authorization URL
+        auth_data = await oauth_handler.get_authorization_url()
+        
+        # Get the correct URL based on OAuth version
+        auth_url = auth_data['oauth2_url'] if not request.use_oauth1 else auth_data['oauth1_url']
+        
+        # Append state to URL
+        separator = '&' if '?' in auth_url else '?'
+        auth_url = f"{auth_url}{separator}state={state}"
         
         return OAuthInitResponse(
-            authorization_url=authorization_url,
+            authorization_url=auth_url,
             state=state,
+            code_verifier=auth_data.get('code_verifier'),
             platform=platform
         )
         
