@@ -20,13 +20,19 @@ callback_router = APIRouter()
 def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth1: bool = False) -> dict:
     """Initialize Twitter OAuth flow."""
     try:
+        settings = get_settings()  # Get settings instance
+        
         # Append correct version to callback URL
         callback_url = settings.TWITTER_CALLBACK_URL + ("/1" if use_oauth1 else "/2")
+        logger.debug(f"Using Twitter callback URL from settings: {settings.TWITTER_CALLBACK_URL}")
+        logger.debug(f"Final callback URL with version: {callback_url}")
         
         oauth = TwitterOAuth(
             client_id=settings.TWITTER_CLIENT_ID,
             client_secret=settings.TWITTER_CLIENT_SECRET,
-            redirect_uri=callback_url,
+            consumer_key=settings.TWITTER_CONSUMER_KEY,        # Add consumer key
+            consumer_secret=settings.TWITTER_CONSUMER_SECRET,  # Add consumer secret
+            callback_url=callback_url,
         )
         
         # Generate and encrypt state

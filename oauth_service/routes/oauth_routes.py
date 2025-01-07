@@ -12,6 +12,7 @@ from ..models.oauth_models import (
 from ..utils.logger import get_logger
 from ..config import get_settings
 from fastapi.responses import RedirectResponse, JSONResponse
+from .oauth_callbacks import init_twitter_oauth
 import json
 from urllib.parse import urlparse, urljoin
 
@@ -78,26 +79,7 @@ async def initialize_oauth(
     request: OAuthInitRequest
 ) -> OAuthInitResponse:
     try:
-        # Parse the base callback URL
-        parsed_url = urlparse(request.frontend_callback_url)
-        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        
-        # Create version-specific callback URLs
-        if platform == "linkedin":
-            callback_url = urljoin(base_url, f"/oauth/{platform}/callback")  # No version suffix for LinkedIn
-        elif platform == "twitter":
-            # For Twitter, append version based on OAuth version
-            version = "1" if request.use_oauth1 else "2"
-            callback_url = urljoin(base_url, f"/oauth/twitter/callback/{version}")
-            logger.debug(f"Twitter callback URL: {callback_url}")
-        else:
-            callback_url = urljoin(base_url, f"/oauth/{platform}/callback/{'1' if request.use_oauth1 else '2'}")
-        
-        # Initialize OAuth handler with correct callback URL
-        oauth_handler = await get_oauth_handler(platform, callback_url)
-        logger.debug(f"Initialized OAuth handler for {platform} with callback URL: {callback_url}")
-        
-        # Get authorization URL
+        # For Twitter, use the settings callback URL as base
         if platform == "twitter":
             # Special handling for Twitter
             auth_data = init_twitter_oauth(
@@ -106,24 +88,38 @@ async def initialize_oauth(
                 use_oauth1=request.use_oauth1
             )
             return OAuthInitResponse(**auth_data)
+            
+        # For other platforms, use the frontend callback URL as base
+        parsed_url = urlparse(request.frontend_callback_url)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        
+        # Create version-specific callback URLs
+        if platform == "linkedin":
+            callback_url = urljoin(base_url, f"/oauth/{platform}/callback")  # No version suffix for LinkedIn
         else:
-            # Standard OAuth 2.0 flow for other platforms
-            state = generate_oauth_state(
-                user_id=request.user_id,
-                frontend_callback_url=request.frontend_callback_url,
-                platform=platform
-            )
-            
-            authorization_url = await oauth_handler.get_authorization_url(
-                state=state,
-                scopes=request.scopes
-            )
-            
-            return OAuthInitResponse(
-                authorization_url=authorization_url,
-                state=state
-            )
-            
+            callback_url = urljoin(base_url, f"/oauth/{platform}/callback/{'1' if request.use_oauth1 else '2'}")
+        
+        # Initialize OAuth handler with correct callback URL
+        oauth_handler = await get_oauth_handler(platform, callback_url)
+        logger.debug(f"Initialized OAuth handler for {platform} with callback URL: {callback_url}")
+        
+        # Standard OAuth 2.0 flow for other platforms
+        state = generate_oauth_state(
+            user_id=request.user_id,
+            frontend_callback_url=request.frontend_callback_url,
+            platform=platform
+        )
+        
+        authorization_url = await oauth_handler.get_authorization_url(
+            state=state,
+            scopes=request.scopes
+        )
+        
+        return OAuthInitResponse(
+            authorization_url=authorization_url,
+            state=state
+        )
+        
     except Exception as e:
         logger.error(f"Error initializing OAuth for {platform}: {str(e)}")
         raise HTTPException(
