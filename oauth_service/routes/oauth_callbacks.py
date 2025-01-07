@@ -51,7 +51,7 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
         )
         
         # Get authorization URL and await it since it's async
-        auth_data = await oauth.get_authorization_url()
+        auth_data = await oauth.get_authorization_url(use_oauth1=use_oauth1)
         
         # Get the correct URL based on OAuth version
         auth_url = auth_data['oauth1_url'] if use_oauth1 else auth_data['oauth2_url']
@@ -71,15 +71,17 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
                 logger.error("No oauth_token found in auth_data")
                 raise ValueError("Failed to get OAuth 1.0a request token")
         
-        # Manually append state to URL
-        separator = '&' if '?' in auth_url else '?'
-        auth_url = f"{auth_url}{separator}state={state}"
+        # For OAuth 1.0a, don't append state as it uses oauth_token
+        if not use_oauth1:
+            # Manually append state to URL only for OAuth 2.0
+            separator = '&' if '?' in auth_url else '?'
+            auth_url = f"{auth_url}{separator}state={state}"
         
         logger.debug(f"Generated authorization URL: {auth_url}")
         
         return {
             "authorization_url": auth_url,
-            "state": state,
+            "state": state if not use_oauth1 else None,
             "code_verifier": auth_data.get('code_verifier')  # Include code_verifier for OAuth 2.0
         }
     except Exception as e:
