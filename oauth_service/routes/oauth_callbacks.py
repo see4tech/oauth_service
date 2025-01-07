@@ -286,6 +286,46 @@ async def linkedin_callback(
             logger.info(f"Successfully stored API key for user {user_id}")
             success = True
             
+            # Return success response with code and state for frontend
+            message_type = "LINKEDIN_AUTH_CALLBACK"
+            html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>LinkedIn OAuth Callback</title>
+                </head>
+                <body>
+                    <h2>Authentication Successful</h2>
+                    <p>This window will close automatically.</p>
+                    <script>
+                        const message = {{
+                            type: '{message_type}',
+                            success: true,
+                            code: '{code}',
+                            state: '{state}',
+                            platform: 'linkedin'
+                        }};
+                        
+                        if (window.opener) {{
+                            window.opener.postMessage(message, '*');
+                            console.log('Message sent:', message);
+                        }}
+                        
+                        // Close window immediately
+                        window.close();
+                        
+                        // Fallback if window.close() doesn't work
+                        setTimeout(() => {{
+                            window.location.href = 'about:blank';
+                            window.close();
+                        }}, 100);
+                    </script>
+                </body>
+                </html>
+            """
+            
+            return HTMLResponse(content=html_content)
+            
         except Exception as e:
             logger.error(f"Error in LinkedIn callback: {str(e)}")
             return create_html_response(
@@ -293,13 +333,6 @@ async def linkedin_callback(
                 platform="linkedin",
                 auto_close=True
             )
-        
-        # Return success response
-        return create_html_response(
-            platform="linkedin",
-            auto_close=True,
-            success=success
-        )
         
     except Exception as e:
         logger.error(f"LinkedIn callback error: {str(e)}")
