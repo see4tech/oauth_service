@@ -57,25 +57,36 @@ class OAuthBase(ABC):
         Verify state and return user_id and frontend_callback_url.
         
         Args:
-            state: Encrypted state string from OAuth callback
+            state: Base64 encoded state string from OAuth callback
             
         Returns:
-            Optional[Dict]: Decrypted state data or None if invalid
+            Optional[Dict]: Decoded state data or None if invalid
         """
         try:
             logger.debug(f"Verifying state for platform {self.platform_name}")
             logger.debug(f"Received state: {state[:30]}...")
             
-            # Decrypt the state
-            decrypted = self.crypto.decrypt(state)
-            logger.debug(f"Decrypted state: {decrypted}")
+            # Decode base64
+            try:
+                state_bytes = base64.urlsafe_b64decode(state.encode('utf-8'))
+                state_json = state_bytes.decode('utf-8')
+                state_data = json.loads(state_json)
+            except Exception as e:
+                logger.error(f"Error decoding state: {str(e)}")
+                return None
             
-            # Parse JSON
-            state_data = json.loads(decrypted)
+            logger.debug(f"Decoded state data: {state_data}")
             
-            # Verify timestamp
-            timestamp = datetime.fromtimestamp(state_data['timestamp'])
-            age = (datetime.utcnow() - timestamp).total_seconds()
+            # Verify required fields
+            required_fields = ['user_id', 'frontend_callback_url', 'platform', 'timestamp']
+            if not all(field in state_data for field in required_fields):
+                logger.error("Invalid state data: missing required fields")
+                return None
+            
+            # Verify timestamp (optional: add expiration check)
+            timestamp = int(state_data['timestamp'])
+            current_time = int(datetime.utcnow().timestamp())
+            age = current_time - timestamp
             
             logger.debug(f"State age: {age} seconds")
             
@@ -87,8 +98,8 @@ class OAuthBase(ABC):
             # Get platform from state
             state_platform = state_data.get('platform', '')
             
-            # Verify platform matches (support both with and without 'oauth' suffix)
-            if state_platform != self.platform_name and state_platform != self.platform_name.replace('oauth', ''):
+            # Verify platform matches (case-insensitive)
+            if state_platform.lower() != self.platform_name.replace('oauth', '').lower():
                 logger.warning(f"Platform mismatch. Expected: {self.platform_name}, Got: {state_platform}")
                 return None
                 
@@ -99,7 +110,6 @@ class OAuthBase(ABC):
             
         except Exception as e:
             logger.error(f"Error verifying state: {str(e)}")
-            logger.error(f"State verification failed for platform {self.platform_name}")
             return None
 
     @abstractmethod
