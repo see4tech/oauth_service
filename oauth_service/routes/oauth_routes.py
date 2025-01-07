@@ -46,6 +46,8 @@ async def get_oauth_handler(platform: str, callback_url: Optional[str] = None) -
             return TwitterOAuth(
                 client_id=settings.TWITTER_CLIENT_ID,
                 client_secret=settings.TWITTER_CLIENT_SECRET,
+                consumer_key=settings.TWITTER_CONSUMER_KEY,
+                consumer_secret=settings.TWITTER_CONSUMER_SECRET,
                 callback_url=callback_url or settings.TWITTER_CALLBACK_URL
             )
         elif platform == "linkedin":
@@ -86,18 +88,8 @@ async def initialize_oauth(
         else:
             callback_url = urljoin(base_url, f"/oauth/{platform}/callback/{'1' if request.use_oauth1 else '2'}")
         
-        # Initialize OAuth handler with correct callback URL and credentials
-        if platform == "twitter":
-            oauth_handler = TwitterOAuth(
-                client_id=settings.TWITTER_CLIENT_ID,
-                client_secret=settings.TWITTER_CLIENT_SECRET,
-                consumer_key=settings.TWITTER_CONSUMER_KEY,
-                consumer_secret=settings.TWITTER_CONSUMER_SECRET,
-                callback_url=callback_url
-            )
-        else:
-            oauth_handler = await get_oauth_handler(platform, callback_url)
-            
+        # Initialize OAuth handler with correct callback URL
+        oauth_handler = await get_oauth_handler(platform, callback_url)
         logger.debug(f"Initialized OAuth handler for {platform} with callback URL: {callback_url}")
         
         # Generate state with the correct callback URL
