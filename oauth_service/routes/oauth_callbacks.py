@@ -164,14 +164,17 @@ async def oauth_callback(
                     
                     # Store API key in external service
                     api_key_storage = APIKeyStorage()
-                    await api_key_storage.store_api_key(
+                    stored = await api_key_storage.store_api_key(
                         user_id=user_id,
-                        platform=platform,
+                        platform="linkedin",
                         api_key=api_key,
                         access_token=tokens['access_token'],
                         refresh_token=tokens.get('refresh_token'),
                         expires_in=tokens.get('expires_in', 3600)
                     )
+                    
+                    if not stored:
+                        raise ValueError("Failed to store API key")
                     
                     logger.info(f"Successfully stored API key for user {user_id}")
                     success = True
@@ -268,7 +271,7 @@ async def linkedin_callback(
             
             # Store API key in external service
             api_key_storage = APIKeyStorage()
-            await api_key_storage.store_api_key(
+            stored = await api_key_storage.store_api_key(
                 user_id=user_id,
                 platform="linkedin",
                 api_key=api_key,
@@ -277,11 +280,14 @@ async def linkedin_callback(
                 expires_in=tokens.get('expires_in', 3600)
             )
             
+            if not stored:
+                raise ValueError("Failed to store API key")
+            
             logger.info(f"Successfully stored API key for user {user_id}")
             success = True
             
         except Exception as e:
-            logger.error(f"Error exchanging code for tokens: {str(e)}")
+            logger.error(f"Error in LinkedIn callback: {str(e)}")
             return create_html_response(
                 error=str(e),
                 platform="linkedin",

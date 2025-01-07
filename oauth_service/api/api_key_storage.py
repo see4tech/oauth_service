@@ -31,14 +31,24 @@ class APIKeyStorage:
                     "expires_in": expires_in
                 }
                 
-                async with session.post(f"{self.api_url}/store", json=data) as response:
+                headers = {
+                    "Content-Type": "application/json",
+                    "x-api-key": self.settings.API_KEY  # Add the service API key
+                }
+                
+                async with session.post(
+                    f"{self.api_url}/store", 
+                    json=data,
+                    headers=headers
+                ) as response:
                     if response.status != 200:
-                        logger.error(f"Failed to store API key. Status: {response.status}")
-                        return False
+                        response_text = await response.text()
+                        logger.error(f"Failed to store API key. Status: {response.status}, Response: {response_text}")
+                        raise ValueError(f"Failed to store API key: {response_text}")
                     
                     logger.info(f"Successfully stored API key for user {user_id} and platform {platform}")
                     return True
                     
         except Exception as e:
             logger.error(f"Error storing API key: {str(e)}")
-            return False 
+            raise  # Re-raise the exception to be handled by the caller 
