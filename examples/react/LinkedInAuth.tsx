@@ -14,36 +14,20 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
   const [isLoading, setIsLoading] = useState(false);
   const [localIsConnected, setLocalIsConnected] = useState(isConnected);
   const authWindowRef = useRef<Window | null>(null);
-  const checkWindowIntervalRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    setLocalIsConnected(isConnected);
-  }, [isConnected]);
-
-  const clearWindowCheck = () => {
-    if (checkWindowIntervalRef.current) {
-      window.clearInterval(checkWindowIntervalRef.current);
-      checkWindowIntervalRef.current = null;
-    }
-  };
-
-  const cleanup = useCallback(() => {
-    clearWindowCheck();
-    LinkedInPopupHandler.closeAuthWindow(authWindowRef.current);
-    authWindowRef.current = null;
-    setIsLoading(false);
-  }, []);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) {
-        console.warn('Received message from unauthorized origin:', event.origin);
-        return;
-      }
-
+      console.log('Received message:', event.data);
+      
       if (event.data?.type === 'LINKEDIN_AUTH_CALLBACK') {
-        console.log('Received LinkedIn callback:', event.data);
+        // Always try to close the window
+        if (authWindowRef.current) {
+          authWindowRef.current.close();
+          authWindowRef.current = null;
+        }
         
+        setIsLoading(false);
+
         if (event.data.success) {
           console.log('LinkedIn auth successful');
           setLocalIsConnected(true);
@@ -54,62 +38,70 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
           onError?.(new Error(event.data.error));
           toast.error('LinkedIn authorization failed');
         }
-        
-        cleanup();
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => {
       window.removeEventListener('message', handleMessage);
-      cleanup();
+      // Cleanup on unmount
+      if (authWindowRef.current) {
+        authWindowRef.current.close();
+        authWindowRef.current = null;
+      }
     };
-  }, [onSuccess, onError, cleanup]);
+  }, [onSuccess, onError]);
 
   const handleLogin = async () => {
-    const userString = localStorage.getItem('user');
-    if (!userString) {
-      console.error('No user found in localStorage');
-      onError?.(new Error('No user found'));
-      return;
-    }
-
-    const user = JSON.parse(userString);
-    const userId = user.id;
-
-    if (isLoading) return;
-
     try {
+      const userString = localStorage.getItem('user');
+      if (!userString) {
+        throw new Error('No user found');
+      }
+
+      const user = JSON.parse(userString);
+      const userId = user.id;
+
+      if (isLoading) return;
       setIsLoading(true);
-      console.log('Initiating LinkedIn auth with user ID:', userId);
 
       const authData = await LinkedInPopupHandler.initializeAuth(userId, redirectUri);
       
-      if (authData.authorization_url) {
-        // Close any existing window
-        cleanup();
-        
-        // Open new window
-        const newWindow = LinkedInPopupHandler.openAuthWindow(authData.authorization_url);
-        if (!newWindow) {
-          throw new Error('Could not open OAuth window');
-        }
-        
-        authWindowRef.current = newWindow;
-        
-        // Start checking if window is closed
-        checkWindowIntervalRef.current = window.setInterval(() => {
-          if (authWindowRef.current?.closed) {
-            cleanup();
-          }
-        }, 1000);
-      } else {
+      if (!authData.authorization_url) {
         throw new Error('No authorization URL received');
       }
+
+      // Close any existing window
+      if (authWindowRef.current) {
+        authWindowRef.current.close();
+      }
+
+      // Open new window
+      const newWindow = window.open(
+        authData.authorization_url,
+        'LinkedIn Auth',
+        'width=600,height=600'
+      );
+
+      if (!newWindow) {
+        throw new Error('Could not open OAuth window');
+      }
+
+      authWindowRef.current = newWindow;
+
+      // Check if window is closed manually
+      const checkWindow = setInterval(() => {
+        if (newWindow.closed) {
+          clearInterval(checkWindow);
+          setIsLoading(false);
+          authWindowRef.current = null;
+        }
+      }, 1000);
+
     } catch (error) {
       console.error('LinkedIn auth error:', error);
       onError?.(error as Error);
-      cleanup();
+      setIsLoading(false);
     }
   };
 

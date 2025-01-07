@@ -327,45 +327,33 @@ def create_html_response(
             <title>OAuth Callback</title>
         </head>
         <body>
+            <h2>{error and 'Authentication Failed' or 'Authentication Successful'}</h2>
+            <p>{error or 'This window will close automatically.'}</p>
             <script>
-                // Execute immediately
-                (function() {{
-                    if (window.opener) {{
-                        const message = {{
-                            type: '{message_type}',
-                            success: {json.dumps(success and not error)},
-                            error: {json.dumps(error)},
-                            platform: {json.dumps(platform)},
-                            version: {json.dumps(version)}
-                        }};
-                        
-                        try {{
-                            window.opener.postMessage(message, '*');
-                            console.log('Sent message to opener:', message);
-                        }} catch (e) {{
-                            console.error('Error sending message:', e);
-                        }}
-                        
-                        // Force close after a tiny delay
-                        setTimeout(() => window.close(), 100);
-                    }}
-                }})();
+                const message = {{
+                    type: '{message_type}',
+                    success: {json.dumps(success and not error)},
+                    error: {json.dumps(error)},
+                    platform: {json.dumps(platform)},
+                    version: {json.dumps(version)}
+                }};
+                
+                if (window.opener) {{
+                    window.opener.postMessage(message, '*');
+                    console.log('Message sent:', message);
+                }}
+                
+                // Close window immediately
+                window.close();
+                
+                // Fallback if window.close() doesn't work
+                setTimeout(() => {{
+                    window.location.href = 'about:blank';
+                    window.close();
+                }}, 100);
             </script>
-            <div>
-                <h2>{error and 'Authentication Failed' or 'Authentication Successful'}</h2>
-                <p>{error or 'This window will close automatically.'}</p>
-            </div>
         </body>
         </html>
     """
-    
-    message_data = {
-        'type': message_type,
-        'success': success and not error,
-        'error': error,
-        'platform': platform,
-        'version': version
-    }
-    logger.debug(f"Sending message to frontend: {message_data}")
     
     return HTMLResponse(content=html_content)
