@@ -1,8 +1,10 @@
 import secrets
 from cryptography.fernet import Fernet
-from typing import Optional
+from typing import Optional, Dict
 import os
 import base64
+import json
+import time
 from .logger import get_logger
 from ..config import get_settings
 
@@ -90,5 +92,57 @@ class Crypto:
         return self.fernet.decrypt(encrypted_data.encode()).decode()
 
 def generate_api_key() -> str:
-    """Generate a secure API key."""
-    return f"user_{secrets.token_urlsafe(32)}"
+    """Generate a random API key."""
+    return base64.urlsafe_b64encode(os.urandom(32)).decode('utf-8')
+
+def generate_oauth_state(user_id: str, frontend_callback_url: str, platform: str) -> str:
+    """Generate and encrypt OAuth state parameter."""
+    try:
+        # Create state data
+        state_data = {
+            'user_id': user_id,
+            'frontend_callback_url': frontend_callback_url,
+            'platform': platform,
+            'timestamp': str(int(time.time()))  # Add timestamp for additional security
+        }
+        
+        # Convert to JSON and encode to bytes
+        state_json = json.dumps(state_data)
+        state_bytes = state_json.encode('utf-8')
+        
+        # Base64 encode for URL safety
+        state = base64.urlsafe_b64encode(state_bytes).decode('utf-8')
+        
+        logger.debug(f"Generated OAuth state for user {user_id} and platform {platform}")
+        return state
+        
+    except Exception as e:
+        logger.error(f"Error generating OAuth state: {str(e)}")
+        raise
+
+def verify_oauth_state(state: str) -> Dict:
+    """Verify and decrypt OAuth state parameter."""
+    try:
+        # Decode base64
+        state_bytes = base64.urlsafe_b64decode(state.encode('utf-8'))
+        state_json = state_bytes.decode('utf-8')
+        state_data = json.loads(state_json)
+        
+        # Verify required fields
+        required_fields = ['user_id', 'frontend_callback_url', 'platform', 'timestamp']
+        if not all(field in state_data for field in required_fields):
+            logger.error("Invalid state data: missing required fields")
+            return None
+        
+        # Verify timestamp (optional: add expiration check)
+        # timestamp = int(state_data['timestamp'])
+        # if time.time() - timestamp > 3600:  # 1 hour expiration
+        #     logger.error("State expired")
+        #     return None
+        
+        logger.debug(f"Verified OAuth state for user {state_data['user_id']}")
+        return state_data
+        
+    except Exception as e:
+        logger.error(f"Error verifying OAuth state: {str(e)}")
+        return None
