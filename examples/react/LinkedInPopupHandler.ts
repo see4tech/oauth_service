@@ -9,7 +9,7 @@ export class LinkedInPopupHandler {
         'x-api-key': import.meta.env.VITE_API_KEY
       },
       body: JSON.stringify({
-        user_id: String(userId), // Convert userId to string
+        user_id: String(userId),
         redirect_uri: redirectUri,
         frontend_callback_url: redirectUri,
         scopes: ['openid', 'profile', 'w_member_social']
@@ -34,18 +34,30 @@ export class LinkedInPopupHandler {
     const top = window.screenY + (window.outerHeight - height) / 2;
     const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no`;
     
-    const authWindow = window.open(url, 'LinkedIn Auth', features);
-    
-    window.addEventListener('message', (event) => {
-      if (event.origin !== window.location.origin) {
-        return;
+    try {
+      const popup = window.open(url, '_blank', features);
+      
+      // Force focus on the popup
+      if (popup) {
+        popup.focus();
       }
       
-      if (event.data.type === 'LINKEDIN_AUTH_CALLBACK') {
-        window.postMessage(event.data, window.location.origin);
-      }
-    });
+      return popup;
+    } catch (error) {
+      console.error('Error opening popup:', error);
+      return null;
+    }
+  }
+
+  static closeAuthWindow(window: Window | null) {
+    if (!window) return;
     
-    return authWindow;
+    try {
+      if (!window.closed) {
+        window.close();
+      }
+    } catch (error) {
+      console.error('Error closing window:', error);
+    }
   }
 }

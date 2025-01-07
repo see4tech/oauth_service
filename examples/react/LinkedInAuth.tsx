@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { LinkedInPopupHandler } from "./LinkedInPopupHandler";
 import { LinkedInTokenExchange } from "./LinkedInTokenExchange";
 import { toast } from "sonner";
@@ -12,37 +12,40 @@ interface LinkedInAuthProps {
 
 const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: LinkedInAuthProps) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [authWindow, setAuthWindow] = useState<Window | null>(null);
-  const [countdown, setCountdown] = useState<number | null>(null);
   const [localIsConnected, setLocalIsConnected] = useState(isConnected);
-  const [authCompleted, setAuthCompleted] = useState(false);
+  const authWindowRef = useRef<Window | null>(null);
+  const checkWindowIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     setLocalIsConnected(isConnected);
   }, [isConnected]);
 
+  const clearWindowCheck = () => {
+    if (checkWindowIntervalRef.current) {
+      window.clearInterval(checkWindowIntervalRef.current);
+      checkWindowIntervalRef.current = null;
+    }
+  };
+
+  const cleanup = useCallback(() => {
+    clearWindowCheck();
+    LinkedInPopupHandler.closeAuthWindow(authWindowRef.current);
+    authWindowRef.current = null;
+    setIsLoading(false);
+  }, []);
+
   useEffect(() => {
-    const messageHandler = async (event: MessageEvent) => {
-      // We only care about messages from our domains
+    const handleMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) {
-        console.warn('[Parent] Received message from unauthorized origin:', event.origin);
+        console.warn('Received message from unauthorized origin:', event.origin);
         return;
       }
 
-      console.log('Received message:', event.data);
-
-      if (event.data.type === 'LINKEDIN_AUTH_CALLBACK') {
-        // Close the window first
-        if (authWindow && !authWindow.closed) {
-          console.log('Closing auth window');
-          authWindow.close();
-        }
-        setAuthWindow(null);
-        setIsLoading(false);
-
-        if (event.data.success && event.data.platform === 'linkedin') {
+      if (event.data?.type === 'LINKEDIN_AUTH_CALLBACK') {
+        console.log('Received LinkedIn callback:', event.data);
+        
+        if (event.data.success) {
           console.log('LinkedIn auth successful');
-          setAuthCompleted(true);
           setLocalIsConnected(true);
           onSuccess(event.data);
           toast.success('LinkedIn authorization successful');
@@ -51,30 +54,17 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
           onError?.(new Error(event.data.error));
           toast.error('LinkedIn authorization failed');
         }
+        
+        cleanup();
       }
     };
 
-    window.addEventListener('message', messageHandler);
-    return () => window.removeEventListener('message', messageHandler);
-  }, [authWindow, onSuccess, onError, authCompleted]);
-
-  useEffect(() => {
-    if (!authCompleted || countdown === null) return;
-    
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-    
-    if (countdown === 0 && authWindow) {
-      console.log('Countdown finished, closing window');
-      authWindow.close();
-      setAuthWindow(null);
-      setIsLoading(false);
-      setCountdown(null);
-      setAuthCompleted(false);
-    }
-  }, [countdown, authWindow, authCompleted]);
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      cleanup();
+    };
+  }, [onSuccess, onError, cleanup]);
 
   const handleLogin = async () => {
     const userString = localStorage.getItem('user');
@@ -90,27 +80,36 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
     if (isLoading) return;
 
     try {
-      console.log('Initiating LinkedIn auth with user ID:', userId);
       setIsLoading(true);
+      console.log('Initiating LinkedIn auth with user ID:', userId);
 
       const authData = await LinkedInPopupHandler.initializeAuth(userId, redirectUri);
-      console.log('LinkedIn auth response:', authData);
       
       if (authData.authorization_url) {
-        console.log('Auth initialization successful:', authData);
+        // Close any existing window
+        cleanup();
         
+        // Open new window
         const newWindow = LinkedInPopupHandler.openAuthWindow(authData.authorization_url);
         if (!newWindow) {
           throw new Error('Could not open OAuth window');
         }
-        setAuthWindow(newWindow);
+        
+        authWindowRef.current = newWindow;
+        
+        // Start checking if window is closed
+        checkWindowIntervalRef.current = window.setInterval(() => {
+          if (authWindowRef.current?.closed) {
+            cleanup();
+          }
+        }, 1000);
       } else {
         throw new Error('No authorization URL received');
       }
     } catch (error) {
       console.error('LinkedIn auth error:', error);
       onError?.(error as Error);
-      setIsLoading(false);
+      cleanup();
     }
   };
 
@@ -122,16 +121,7 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
         ${isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}
         ${localIsConnected ? 'bg-green-600 hover:bg-green-700' : ''}`}
     >
-      {isLoading ? (
-        <>
-          <span className="mr-2">Conectando...</span>
-          {countdown !== null && <span>({countdown}s)</span>}
-        </>
-      ) : (
-        <>
-          {localIsConnected ? 'Reconectar LinkedIn' : 'Conectar LinkedIn'}
-        </>
-      )}
+      {isLoading ? 'Conectando...' : (localIsConnected ? 'Reconectar LinkedIn' : 'Conectar LinkedIn')}
     </button>
   );
 };
