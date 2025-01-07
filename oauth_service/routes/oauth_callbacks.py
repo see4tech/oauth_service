@@ -170,10 +170,51 @@ async def oauth_callback(
                         
                     logger.debug(f"Found code verifier for state: {bool(code_verifier)}")
                     
+                    # Verify state to get user_id
+                    state_data = oauth.verify_state(state)
+                    if not state_data:
+                        return create_html_response(
+                            error="Invalid state",
+                            platform=platform,
+                            version=version,
+                            auto_close=True
+                        )
+                    
+                    user_id = state_data['user_id']
+                    logger.info(f"Processing Twitter OAuth 2.0 callback for user_id: {user_id}")
+                    
+                    # Exchange code for tokens
                     tokens = await oauth.get_access_token(
                         oauth2_code=code,
                         code_verifier=code_verifier
                     )
+                    
+                    if not tokens or 'oauth2' not in tokens:
+                        return create_html_response(
+                            error="Failed to get OAuth 2.0 tokens",
+                            platform=platform,
+                            version=version,
+                            auto_close=True
+                        )
+                    
+                    # Generate and store API key
+                    api_key = generate_api_key()
+                    
+                    # Store API key in external service
+                    api_key_storage = APIKeyStorage()
+                    stored = await api_key_storage.store_api_key(
+                        user_id=user_id,
+                        platform="twitter",
+                        api_key=api_key,
+                        access_token=tokens['oauth2']['access_token'],
+                        refresh_token=tokens['oauth2'].get('refresh_token'),
+                        expires_in=tokens['oauth2'].get('expires_in', 7200)
+                    )
+                    
+                    if not stored:
+                        raise ValueError("Failed to store API key")
+                    
+                    logger.info(f"Successfully stored API key for Twitter user {user_id}")
                     success = True
             else:
                 # LinkedIn and other OAuth 2.0-only platforms
