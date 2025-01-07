@@ -51,7 +51,7 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
         )
         
         # Get authorization URL and await it since it's async
-        auth_data = await oauth.get_authorization_url(use_oauth1=use_oauth1)
+        auth_data = await oauth.get_authorization_url()
         
         # Get the correct URL based on OAuth version
         auth_url = auth_data['oauth1_url'] if use_oauth1 else auth_data['oauth2_url']
@@ -63,7 +63,14 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
         
         # For OAuth 1.0a, store the request token with user_id
         if use_oauth1:
-            oauth_token = auth_data.get('oauth_token')
+            # For OAuth 1.0a, we need to extract the oauth_token from the URL
+            oauth_token = None
+            if 'oauth1_url' in auth_data:
+                from urllib.parse import urlparse, parse_qs
+                parsed = urlparse(auth_data['oauth1_url'])
+                query_params = parse_qs(parsed.query)
+                oauth_token = query_params.get('oauth_token', [None])[0]
+            
             if oauth_token:
                 logger.debug(f"Storing user_id {user_id} with request token {oauth_token}")
                 await store_code_verifier(oauth_token, user_id)  # Reuse code_verifier storage for user_id
