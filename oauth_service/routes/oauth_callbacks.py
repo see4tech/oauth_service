@@ -321,18 +321,6 @@ def create_html_response(
     # Determine message type based on platform
     message_type = f"{platform.upper()}_AUTH_CALLBACK" if platform else "OAUTH_CALLBACK"
     
-    # Get the frontend origins from settings
-    settings = get_settings()
-    frontend_origins = settings.frontend_origins
-    
-    # Verify at least one frontend origin is set
-    if not frontend_origins:
-        logger.error("FRONTEND_URLS not set in environment")
-        raise ValueError("FRONTEND_URLS configuration is required")
-    
-    # Create a JavaScript array of allowed origins
-    allowed_origins_js = json.dumps(frontend_origins)
-    
     html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -342,7 +330,6 @@ def create_html_response(
                 let countdown = 10;
                 let countdownInterval;
                 let processComplete = {json.dumps(auto_close)};
-                const allowedOrigins = {allowed_origins_js};
                 
                 function closeWindow() {{
                     if (window.opener) {{
@@ -353,16 +340,9 @@ def create_html_response(
                             platform: {json.dumps(platform)},
                             version: {json.dumps(version)}
                         }};
-                        
-                        // Try each allowed origin
-                        for (const origin of allowedOrigins) {{
-                            try {{
-                                window.opener.postMessage(message, origin);
-                                console.log('Sent message to frontend:', message, 'to origin:', origin);
-                            }} catch (e) {{
-                                console.warn('Failed to send message to origin:', origin, e);
-                            }}
-                        }}
+                        // Send message to opener window
+                        window.opener.postMessage(message, '*');
+                        console.log('Sent message to opener:', message);
                     }}
                     window.close();
                 }}

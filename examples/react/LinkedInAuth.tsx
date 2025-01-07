@@ -23,6 +23,7 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
 
   useEffect(() => {
     const messageHandler = async (event: MessageEvent) => {
+      // We only care about messages from our domains
       if (event.origin !== window.location.origin) {
         console.warn('[Parent] Received message from unauthorized origin:', event.origin);
         return;
@@ -50,24 +51,11 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
           onError?.(new Error(event.data.error));
           toast.error('LinkedIn authorization failed');
         }
-      } else if (event.data.type === 'OAUTH_WINDOW_CLOSED') {
-        // Handle manual window close
-        setAuthWindow(null);
-        setIsLoading(false);
-        if (!authCompleted) {
-          console.log('Authentication window was closed by user');
-        }
       }
     };
 
     window.addEventListener('message', messageHandler);
-    return () => {
-      window.removeEventListener('message', messageHandler);
-      if (authWindow && !authWindow.closed) {
-        console.log('Cleaning up auth window');
-        authWindow.close();
-      }
-    };
+    return () => window.removeEventListener('message', messageHandler);
   }, [authWindow, onSuccess, onError, authCompleted]);
 
   useEffect(() => {
