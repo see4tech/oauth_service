@@ -184,7 +184,7 @@ async def oauth_callback(
                     # Exchange verifier for tokens
                     tokens = await oauth.get_access_token(
                         oauth1_verifier=oauth_verifier,
-                        oauth1_token=oauth_token  # Pass the oauth_token as well
+                        oauth_token=oauth_token  # Changed from oauth1_token to oauth_token
                     )
                     
                     if not tokens or 'oauth1' not in tokens:
