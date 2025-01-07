@@ -181,11 +181,20 @@ async def oauth_callback(
                             
                     logger.info(f"Processing Twitter OAuth 1.0a callback for user_id: {user_id}")
                     
+                    # Set up the request token for the OAuth handler
+                    oauth.oauth1_handler.request_token = {
+                        'oauth_token': oauth_token,
+                        'oauth_token_secret': ''  # Twitter doesn't use token secret in the callback
+                    }
+                    
                     # Exchange verifier for tokens
-                    tokens = await oauth.get_access_token(
-                        oauth1_verifier=oauth_verifier,
-                        oauth_token=oauth_token  # Changed from oauth1_token to oauth_token
-                    )
+                    access_token, access_token_secret = oauth.oauth1_handler.get_access_token(oauth_verifier)
+                    tokens = {
+                        'oauth1': {
+                            'access_token': access_token,
+                            'access_token_secret': access_token_secret
+                        }
+                    }
                     
                     if not tokens or 'oauth1' not in tokens:
                         return create_html_response(
