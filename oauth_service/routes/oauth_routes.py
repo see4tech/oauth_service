@@ -87,7 +87,8 @@ async def initialize_oauth(
             callback_url = urljoin(base_url, f"/oauth/{platform}/callback")  # No version suffix for LinkedIn
         elif platform == "twitter":
             # For Twitter, don't append version twice
-            callback_url = urljoin(base_url, f"/oauth/{platform}/callback/{'1' if request.use_oauth1 else '2'}")
+            callback_url = urljoin(base_url, f"/oauth/twitter/callback/2")
+            logger.debug(f"Twitter callback URL: {callback_url}")
             if not request.use_oauth1:
                 callback_url = callback_url.rstrip('/2')  # Remove any trailing /2
         else:

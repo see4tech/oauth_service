@@ -72,7 +72,7 @@ class TwitterOAuth(OAuthBase):
             extra_params = {
                 'response_type': 'code',
                 'client_id': self.client_id,
-                'redirect_uri': f"{self.callback_url}/2",
+                'redirect_uri': self.callback_url,  # Don't modify the callback URL here
                 'scope': 'tweet.read tweet.write users.read offline.access',
                 'code_challenge': code_challenge,
                 'code_challenge_method': 'S256',
@@ -93,9 +93,11 @@ class TwitterOAuth(OAuthBase):
             
             logger.debug("Generated OAuth 2.0 authorization URL with parameters:")
             logger.debug(f"- Authorization URL: {oauth2_url}")
-            logger.debug(f"- Scopes: tweet.read tweet.write users.read offline.access")
-            logger.debug(f"- Code challenge method: S256")
+            logger.debug(f"- Scopes: {extra_params['scope']}")
+            logger.debug(f"- Code challenge method: {extra_params['code_challenge_method']}")
             logger.debug(f"- Redirect URI: {extra_params['redirect_uri']}")
+            
+            logger.debug(f"Twitter redirect URI for auth: {self.callback_url}")
             
             return {
                 'oauth1_url': oauth1_url,
@@ -128,7 +130,7 @@ class TwitterOAuth(OAuthBase):
                 token_data = {
                     'code': oauth2_code,
                     'grant_type': 'authorization_code',
-                    'redirect_uri': f"{self.callback_url}/2",
+                    'redirect_uri': self.callback_url,  # Use the callback URL as-is
                     'code_verifier': code_verifier
                 }
                 
