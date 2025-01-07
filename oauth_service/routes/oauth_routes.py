@@ -3,16 +3,10 @@ from typing import Optional, Dict, List
 from pydantic import BaseModel, Field
 from ..core import TokenManager
 from ..core.db import SqliteDB
-from ..core.oauth_base import OAuthBase
-from ..platforms import TwitterOAuth, LinkedInOAuth, InstagramOAuth, FacebookOAuth
-from ..models.oauth_models import (
-    OAuthInitRequest, OAuthInitResponse, OAuthCallbackRequest,
-    TokenResponse, PostContent, PostResponse, MediaUploadResponse, UserProfile
-)
 from ..utils.logger import get_logger
 from ..config import get_settings
 from fastapi.responses import RedirectResponse, JSONResponse
-from .oauth_callbacks import init_twitter_oauth
+from .oauth_utils import get_oauth_handler, store_code_verifier, get_code_verifier
 import json
 from urllib.parse import urlparse, urljoin
 

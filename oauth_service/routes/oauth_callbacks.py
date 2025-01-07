@@ -3,11 +3,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional, Dict
 from ..core import TokenManager
 from ..utils.logger import get_logger
-from .oauth_routes import get_oauth_handler, get_code_verifier
+from .oauth_utils import get_oauth_handler, get_code_verifier
 from ..core.db import SqliteDB
 from ..config import get_settings
 from ..api.api_key_storage import APIKeyStorage
 from ..utils.crypto import generate_api_key
+from ..platforms import TwitterOAuth
 import json
 import os
 import base64
@@ -16,6 +17,7 @@ from datetime import datetime
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
+settings = get_settings()
 
 def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth1: bool = False) -> dict:
     """Initialize Twitter OAuth flow."""
