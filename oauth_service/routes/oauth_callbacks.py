@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional, Dict
 from ..core import TokenManager
 from ..utils.logger import get_logger
-from .oauth_utils import get_oauth_handler, get_code_verifier
+from .oauth_utils import get_oauth_handler, get_code_verifier, store_code_verifier
 from ..core.db import SqliteDB
 from ..config import get_settings
 from ..api.api_key_storage import APIKeyStorage
