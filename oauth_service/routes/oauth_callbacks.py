@@ -66,7 +66,11 @@ async def oauth_callback(
     error: Optional[str] = None,
     error_description: Optional[str] = None
 ) -> HTMLResponse:
-    """Handle OAuth callback from providers"""
+    """Handle OAuth callback for platforms that use versioned callbacks (Twitter)"""
+    if platform == "linkedin":
+        # Redirect LinkedIn callbacks to the dedicated endpoint
+        return RedirectResponse(url=f"/oauth/linkedin/callback?{request.query_params}")
+    
     try:
         logger.info(f"Received callback for platform: {platform}, version: {version}")
         logger.info(f"Code present: {bool(code)}")
@@ -189,6 +193,82 @@ async def oauth_callback(
             error=str(e),
             platform=platform,
             version=version,
+            auto_close=True
+        )
+
+# Add a new route specifically for LinkedIn callbacks
+@callback_router.get("/linkedin/callback")
+async def linkedin_callback(
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    error_description: Optional[str] = None
+) -> HTMLResponse:
+    """Handle LinkedIn OAuth callback"""
+    try:
+        logger.info("Received LinkedIn callback")
+        logger.info(f"Code present: {bool(code)}")
+        logger.info(f"State present: {bool(state)}")
+        logger.debug(f"Actual state value received: {state}")
+        
+        # Handle OAuth errors
+        if error:
+            logger.error(f"OAuth error: {error}")
+            logger.error(f"Error description: {error_description}")
+            return create_html_response(
+                error=error_description or error,
+                platform="linkedin",
+                auto_close=True
+            )
+
+        if not code or not state:
+            return create_html_response(
+                error="Missing OAuth parameters",
+                platform="linkedin",
+                auto_close=True
+            )
+        
+        # Initialize OAuth handler
+        oauth_handler = await get_oauth_handler("linkedin")
+        
+        # Verify state
+        logger.info(f"Attempting to verify state: {state}")
+        state_data = oauth_handler.verify_state(state)
+        if not state_data:
+            return create_html_response(
+                error="Invalid state",
+                platform="linkedin",
+                auto_close=True
+            )
+        
+        logger.info(f"State verification successful. State data: {state_data}")
+        logger.info(f"Processing callback for user_id: {state_data['user_id']}")
+        
+        # Exchange code for tokens
+        try:
+            tokens = await oauth_handler.get_access_token(code)
+            success = True
+        except Exception as e:
+            logger.error(f"Error exchanging code for tokens: {str(e)}")
+            return create_html_response(
+                error=str(e),
+                platform="linkedin",
+                auto_close=True
+            )
+        
+        # Return success response
+        return create_html_response(
+            platform="linkedin",
+            auto_close=True,
+            success=success
+        )
+        
+    except Exception as e:
+        logger.error(f"LinkedIn callback error: {str(e)}")
+        return create_html_response(
+            error=str(e),
+            platform="linkedin",
             auto_close=True
         )
 
