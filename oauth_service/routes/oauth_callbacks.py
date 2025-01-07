@@ -13,6 +13,7 @@ import os
 import base64
 import aiohttp
 from datetime import datetime
+from urllib.parse import urlencode
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
@@ -316,44 +317,18 @@ def create_html_response(
     auto_close: bool = False,
     success: bool = False
 ) -> HTMLResponse:
-    """Create HTML response for OAuth callback."""
+    """Instead of trying to close the window, redirect to frontend with status."""
+    settings = get_settings()
+    frontend_url = settings.FRONTEND_URL
     
-    message_type = f"{platform.upper()}_AUTH_CALLBACK" if platform else "OAUTH_CALLBACK"
+    # Create query parameters for frontend
+    params = {
+        'status': 'success' if success and not error else 'error',
+        'platform': platform or '',
+        'error': error or '',
+    }
     
-    html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>OAuth Callback</title>
-        </head>
-        <body>
-            <h2>{error and 'Authentication Failed' or 'Authentication Successful'}</h2>
-            <p>{error or 'This window will close automatically.'}</p>
-            <script>
-                const message = {{
-                    type: '{message_type}',
-                    success: {json.dumps(success and not error)},
-                    error: {json.dumps(error)},
-                    platform: {json.dumps(platform)},
-                    version: {json.dumps(version)}
-                }};
-                
-                if (window.opener) {{
-                    window.opener.postMessage(message, '*');
-                    console.log('Message sent:', message);
-                }}
-                
-                // Close window immediately
-                window.close();
-                
-                // Fallback if window.close() doesn't work
-                setTimeout(() => {{
-                    window.location.href = 'about:blank';
-                    window.close();
-                }}, 100);
-            </script>
-        </body>
-        </html>
-    """
+    # Build redirect URL
+    redirect_url = f"{frontend_url}/oauth/callback?{urlencode(params)}"
     
-    return HTMLResponse(content=html_content)
+    return RedirectResponse(url=redirect_url)
