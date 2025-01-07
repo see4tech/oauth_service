@@ -43,7 +43,7 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
             callback_url=callback_url
         )
         
-        # Generate and encrypt state
+        # Generate and encrypt state - we'll use this for both OAuth 1.0a and 2.0
         state = generate_oauth_state(
             user_id=user_id,
             frontend_callback_url=frontend_callback_url,
@@ -88,7 +88,7 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
         
         return {
             "authorization_url": auth_url,
-            "state": state if not use_oauth1 else None,
+            "state": state,  # Always return state for both OAuth 1.0a and 2.0
             "code_verifier": auth_data.get('code_verifier')  # Include code_verifier for OAuth 2.0
         }
     except Exception as e:
