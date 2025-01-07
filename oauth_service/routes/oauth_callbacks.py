@@ -12,6 +12,8 @@ import base64
 import secrets
 import aiohttp
 from datetime import datetime
+from ..api.api_key_storage import APIKeyStorage
+from ..utils.crypto import generate_api_key
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
@@ -210,9 +212,7 @@ async def linkedin_callback(
         logger.info("Received LinkedIn callback")
         logger.info(f"Code present: {bool(code)}")
         logger.info(f"State present: {bool(state)}")
-        logger.debug(f"Actual state value received: {state}")
         
-        # Handle OAuth errors
         if error:
             logger.error(f"OAuth error: {error}")
             logger.error(f"Error description: {error_description}")
@@ -243,12 +243,30 @@ async def linkedin_callback(
             )
         
         logger.info(f"State verification successful. State data: {state_data}")
-        logger.info(f"Processing callback for user_id: {state_data['user_id']}")
+        user_id = state_data['user_id']
+        logger.info(f"Processing callback for user_id: {user_id}")
         
-        # Exchange code for tokens
         try:
+            # Exchange code for tokens
             tokens = await oauth_handler.get_access_token(code)
+            
+            # Generate and store API key
+            api_key = generate_api_key()
+            
+            # Store API key in external service
+            api_key_storage = APIKeyStorage()
+            await api_key_storage.store_api_key(
+                user_id=user_id,
+                platform="linkedin",
+                api_key=api_key,
+                access_token=tokens['access_token'],
+                refresh_token=tokens.get('refresh_token'),
+                expires_in=tokens.get('expires_in', 3600)
+            )
+            
+            logger.info(f"Successfully stored API key for user {user_id}")
             success = True
+            
         except Exception as e:
             logger.error(f"Error exchanging code for tokens: {str(e)}")
             return create_html_response(
