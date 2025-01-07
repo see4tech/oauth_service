@@ -54,7 +54,7 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
         auth_data = await oauth.get_authorization_url()
         
         # Get the correct URL based on OAuth version
-        auth_url = auth_data['oauth2_url'] if not use_oauth1 else auth_data['oauth1_url']
+        auth_url = auth_data['oauth1_url'] if use_oauth1 else auth_data['oauth2_url']
         
         # Manually append state to URL
         separator = '&' if '?' in auth_url else '?'
