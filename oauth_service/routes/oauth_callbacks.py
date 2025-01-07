@@ -17,13 +17,16 @@ from datetime import datetime
 logger = get_logger(__name__)
 callback_router = APIRouter()
 
-def init_twitter_oauth(user_id: str, frontend_callback_url: str) -> dict:
+def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth1: bool = False) -> dict:
     """Initialize Twitter OAuth flow."""
     try:
+        # Append correct version to callback URL
+        callback_url = settings.TWITTER_CALLBACK_URL + ("/1" if use_oauth1 else "/2")
+        
         oauth = TwitterOAuth(
             client_id=settings.TWITTER_CLIENT_ID,
             client_secret=settings.TWITTER_CLIENT_SECRET,
-            redirect_uri=settings.TWITTER_CALLBACK_URL + "/2",  # Append /2 for OAuth 2.0
+            redirect_uri=callback_url,
         )
         
         # Generate and encrypt state
@@ -41,6 +44,7 @@ def init_twitter_oauth(user_id: str, frontend_callback_url: str) -> dict:
         auth_url = f"{auth_url}{separator}state={state}"
         
         logger.debug(f"Generated Twitter OAuth URL: {auth_url}")
+        logger.debug(f"Using callback URL: {callback_url}")
         
         return {
             "authorization_url": auth_url,
