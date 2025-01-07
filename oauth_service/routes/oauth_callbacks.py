@@ -47,7 +47,7 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
         state = generate_oauth_state(
             user_id=user_id,
             frontend_callback_url=frontend_callback_url,
-            platform="twitteroauth"
+            platform="twitter"
         )
         
         # Get authorization URL and await it since it's async
