@@ -327,113 +327,30 @@ def create_html_response(
         <head>
             <title>OAuth Callback</title>
             <script>
-                let countdown = 10;
-                let countdownInterval;
-                let processComplete = {json.dumps(auto_close)};
-                
-                function closeWindow() {{
-                    if (window.opener) {{
-                        const message = {{
-                            type: '{message_type}',
-                            success: {json.dumps(success and not error)},
-                            error: {json.dumps(error)},
-                            platform: {json.dumps(platform)},
-                            version: {json.dumps(version)}
-                        }};
-                        // Send message to opener window
-                        window.opener.postMessage(message, '*');
-                        console.log('Sent message to opener:', message);
-                    }}
+                // Send message and close immediately
+                if (window.opener) {{
+                    const message = {{
+                        type: '{message_type}',
+                        success: {json.dumps(success and not error)},
+                        error: {json.dumps(error)},
+                        platform: {json.dumps(platform)},
+                        version: {json.dumps(version)}
+                    }};
+                    window.opener.postMessage(message, '*');
+                    console.log('Sent message to opener:', message);
+                    // Close immediately
                     window.close();
                 }}
-                
-                function updateCountdown() {{
-                    const countdownElement = document.getElementById('countdown');
-                    countdownElement.textContent = countdown;
-                    if (countdown <= 0) {{
-                        clearInterval(countdownInterval);
-                        closeWindow();
-                    }}
-                    countdown--;
-                }}
-                
-                function cancelAutoClose() {{
-                    clearInterval(countdownInterval);
-                    document.getElementById('countdown-container').style.display = 'none';
-                }}
-                
-                window.onload = function() {{
-                    if (processComplete) {{
-                        document.getElementById('status-message').style.display = 'block';
-                        document.getElementById('countdown-container').style.display = 'block';
-                        document.getElementById('close-button').style.display = 'block';
-                        countdownInterval = setInterval(updateCountdown, 1000);
-                    }}
-                }};
             </script>
-            <style>
-                body {{ 
-                    font-family: Arial; 
-                    text-align: center; 
-                    padding-top: 50px;
-                    background-color: #f5f5f5;
-                }}
-                .container {{
-                    max-width: 400px;
-                    margin: 0 auto;
-                    padding: 20px;
-                    background-color: white;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                }}
-                .success {{ color: #10B981; }}
-                .error {{ color: #EF4444; }}
-                .button {{
-                    margin: 10px;
-                    padding: 8px 16px;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 14px;
-                }}
-                .close-button {{
-                    background-color: #3B82F6;
-                    color: white;
-                    display: none;
-                }}
-                .cancel-button {{
-                    background-color: #6B7280;
-                    color: white;
-                }}
-                #status-message, #countdown-container {{
-                    display: none;
-                }}
-            </style>
         </head>
         <body>
             <div class="container">
-                <h2 class="{error and 'error' or 'success'}">
-                    {error and 'Authentication Failed' or 'Authentication in Progress...'}
+                <h2>
+                    {error and 'Authentication Failed' or 'Authentication Successful'}
                 </h2>
-                <div id="status-message">
-                    <h2 class="{error and 'error' or 'success'}">
-                        {error and 'Authentication Failed' or 'Authentication Successful'}
-                    </h2>
-                    <p>
-                        {error or 'You can close this window now.'}
-                    </p>
-                </div>
-                <div id="countdown-container">
-                    <p>
-                        Window will close automatically in <span id="countdown">10</span> seconds.
-                    </p>
-                    <button class="button cancel-button" onclick="cancelAutoClose()">
-                        Cancel Auto-Close
-                    </button>
-                </div>
-                <button id="close-button" class="button close-button" onclick="closeWindow()">
-                    Close Window Now
-                </button>
+                <p>
+                    {error or 'This window will close automatically.'}
+                </p>
             </div>
         </body>
         </html>
