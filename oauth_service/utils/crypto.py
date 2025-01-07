@@ -102,8 +102,7 @@ def generate_oauth_state(user_id: str, frontend_callback_url: str, platform: str
         state_data = {
             'user_id': user_id,
             'frontend_callback_url': frontend_callback_url,
-            'platform': platform,
-            'timestamp': int(time.time())  # Current Unix timestamp
+            'platform': platform
         }
         
         # Convert to JSON and encode to bytes

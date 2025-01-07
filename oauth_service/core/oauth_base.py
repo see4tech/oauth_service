@@ -78,29 +78,9 @@ class OAuthBase(ABC):
             logger.debug(f"Decoded state data: {state_data}")
             
             # Verify required fields
-            required_fields = ['user_id', 'frontend_callback_url', 'platform', 'timestamp']
+            required_fields = ['user_id', 'frontend_callback_url', 'platform']
             if not all(field in state_data for field in required_fields):
                 logger.error("Invalid state data: missing required fields")
-                return None
-            
-            # Convert timestamp to int if it's a string
-            try:
-                timestamp = int(state_data['timestamp'])
-                current_time = int(datetime.utcnow().timestamp())
-                
-                # Calculate absolute time difference
-                time_diff = abs(current_time - timestamp)
-                logger.debug(f"State timestamp: {timestamp}")
-                logger.debug(f"Current time: {current_time}")
-                logger.debug(f"Time difference: {time_diff} seconds")
-                
-                # Verify not expired (1 hour)
-                if time_diff > 3600:
-                    logger.warning(f"State expired. Time difference: {time_diff} seconds")
-                    return None
-                    
-            except ValueError as e:
-                logger.error(f"Error processing timestamp: {str(e)}")
                 return None
             
             # Get platform from state
