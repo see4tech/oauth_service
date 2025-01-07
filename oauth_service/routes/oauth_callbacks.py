@@ -7,7 +7,7 @@ from .oauth_utils import get_oauth_handler, get_code_verifier
 from ..core.db import SqliteDB
 from ..config import get_settings
 from ..api.api_key_storage import APIKeyStorage
-from ..utils.crypto import generate_api_key
+from ..utils.crypto import generate_api_key, generate_oauth_state
 from ..platforms import TwitterOAuth
 import json
 import os
@@ -22,19 +22,25 @@ settings = get_settings()
 def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth1: bool = False) -> dict:
     """Initialize Twitter OAuth flow."""
     try:
-        settings = get_settings()  # Get settings instance
+        settings = get_settings()
         
-        # Append correct version to callback URL
-        callback_url = settings.TWITTER_CALLBACK_URL + ("/1" if use_oauth1 else "/2")
-        logger.debug(f"Using Twitter callback URL from settings: {settings.TWITTER_CALLBACK_URL}")
-        logger.debug(f"Final callback URL with version: {callback_url}")
+        # Get base callback URL from settings
+        base_callback_url = settings.TWITTER_CALLBACK_URL.rstrip('/')  # Remove any trailing slash
+        
+        # Append version to callback URL
+        callback_url = f"{base_callback_url}/{'1' if use_oauth1 else '2'}"
+        
+        logger.debug(f"Twitter OAuth initialization:")
+        logger.debug(f"Base callback URL from settings: {base_callback_url}")
+        logger.debug(f"OAuth version: {'1.0a' if use_oauth1 else '2.0'}")
+        logger.debug(f"Final callback URL: {callback_url}")
         
         oauth = TwitterOAuth(
             client_id=settings.TWITTER_CLIENT_ID,
             client_secret=settings.TWITTER_CLIENT_SECRET,
-            consumer_key=settings.TWITTER_CONSUMER_KEY,        # Add consumer key
-            consumer_secret=settings.TWITTER_CONSUMER_SECRET,  # Add consumer secret
-            callback_url=callback_url,
+            consumer_key=settings.TWITTER_CONSUMER_KEY,
+            consumer_secret=settings.TWITTER_CONSUMER_SECRET,
+            callback_url=callback_url
         )
         
         # Generate and encrypt state
@@ -45,14 +51,13 @@ def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth1: boo
         )
         
         # Get authorization URL WITHOUT passing state parameter
-        auth_url = oauth.get_authorization_url()  # Remove state parameter from here
+        auth_url = oauth.get_authorization_url()
         
         # Manually append state to URL
         separator = '&' if '?' in auth_url else '?'
         auth_url = f"{auth_url}{separator}state={state}"
         
-        logger.debug(f"Generated Twitter OAuth URL: {auth_url}")
-        logger.debug(f"Using callback URL: {callback_url}")
+        logger.debug(f"Generated authorization URL: {auth_url}")
         
         return {
             "authorization_url": auth_url,
