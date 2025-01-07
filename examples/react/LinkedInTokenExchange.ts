@@ -32,11 +32,15 @@ export class LinkedInTokenExchange {
     }
 
     const data = await response.json();
+    
     if (data.success) {
-      console.log('LinkedIn authentication successful');
-      return { success: true };
+      localStorage.setItem('linkedin_access_token', JSON.stringify(data));
+      console.log('LinkedIn tokens stored in localStorage');
     } else {
-      throw new Error('Authentication failed');
+      console.error('LinkedIn authentication failed:', data.error);
+      throw new Error(data.error || 'Failed to authenticate with LinkedIn');
     }
+    
+    return data;
   }
 }

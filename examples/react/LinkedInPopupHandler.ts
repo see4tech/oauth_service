@@ -11,7 +11,7 @@ export class LinkedInPopupHandler {
       body: JSON.stringify({
         user_id: userId,
         redirect_uri: redirectUri,
-        frontend_callback_url: window.location.origin,
+        frontend_callback_url: redirectUri,
         scopes: ['openid', 'profile', 'w_member_social']
       }),
     });
@@ -36,7 +36,6 @@ export class LinkedInPopupHandler {
     
     const authWindow = window.open(url, 'LinkedIn Auth', features);
     
-    // Add message listener to the parent window
     window.addEventListener('message', (event) => {
       if (event.origin !== window.location.origin) {
         return;
