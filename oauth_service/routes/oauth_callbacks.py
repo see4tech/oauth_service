@@ -62,9 +62,14 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
             await store_code_verifier(state, auth_data['code_verifier'])
         
         # For OAuth 1.0a, store the request token with user_id
-        if use_oauth1 and 'oauth_token' in auth_data:
-            logger.debug(f"Storing user_id {user_id} with request token {auth_data['oauth_token']}")
-            await store_code_verifier(auth_data['oauth_token'], user_id)  # Reuse code_verifier storage for user_id
+        if use_oauth1:
+            oauth_token = auth_data.get('oauth_token')
+            if oauth_token:
+                logger.debug(f"Storing user_id {user_id} with request token {oauth_token}")
+                await store_code_verifier(oauth_token, user_id)  # Reuse code_verifier storage for user_id
+            else:
+                logger.error("No oauth_token found in auth_data")
+                raise ValueError("Failed to get OAuth 1.0a request token")
         
         # Manually append state to URL
         separator = '&' if '?' in auth_url else '?'
@@ -141,6 +146,8 @@ async def oauth_callback(
                 oauth_token = request.query_params.get('oauth_token')
                 oauth_verifier = request.query_params.get('oauth_verifier')
                 
+                logger.debug(f"OAuth 1.0a parameters - token: {oauth_token}, verifier: {oauth_verifier}")
+                
                 if version == "1":
                     # Twitter OAuth 1.0a flow
                     if not oauth_token or not oauth_verifier:
@@ -153,6 +160,8 @@ async def oauth_callback(
                     
                     # Get user_id from stored request token
                     user_id = await get_code_verifier(oauth_token)  # Reuse code_verifier storage
+                    logger.debug(f"Retrieved user_id from token storage: {user_id}")
+                    
                     if not user_id:
                         return create_html_response(
                             error="Could not find user_id for request token",
@@ -165,7 +174,8 @@ async def oauth_callback(
                     
                     # Exchange verifier for tokens
                     tokens = await oauth.get_access_token(
-                        oauth1_verifier=oauth_verifier
+                        oauth1_verifier=oauth_verifier,
+                        oauth1_token=oauth_token  # Pass the oauth_token as well
                     )
                     
                     if not tokens or 'oauth1' not in tokens:
