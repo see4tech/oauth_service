@@ -92,7 +92,10 @@ async def initialize_oauth(
                 frontend_callback_url=request.frontend_callback_url,
                 use_oauth1=request.use_oauth1
             )
-            return OAuthInitResponse(**auth_data)
+            return OAuthInitResponse(
+                **auth_data,
+                platform=platform
+            )
             
         # For other platforms, use the frontend callback URL as base
         parsed_url = urlparse(request.frontend_callback_url)
@@ -122,7 +125,8 @@ async def initialize_oauth(
         
         return OAuthInitResponse(
             authorization_url=authorization_url,
-            state=state
+            state=state,
+            platform=platform
         )
         
     except Exception as e:
