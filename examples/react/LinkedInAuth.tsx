@@ -14,9 +14,9 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }) 
         return;
       }
 
-      if (event.data.type === 'TWITTER_AUTH_CALLBACK') { // Change this to OAUTH_CALLBACK
+      if (event.data.type === 'LINKEDIN_AUTH_CALLBACK') {
         // Close the window using our handler
-        TwitterPopupHandler.closeAuthWindow(authWindow);
+        OAuthPopupHandler.closeAuthWindow(authWindow);
         setAuthWindow(null);
         setIsLoading(false);
         
@@ -25,7 +25,7 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }) 
         } else {
           onSuccess?.(event.data);
         }
-      } else if (event.data.type === 'TWITTER_AUTH_WINDOW_CLOSED') { // Change this to OAUTH_WINDOW_CLOSED
+      } else if (event.data.type === 'OAUTH_WINDOW_CLOSED') {
         // Handle manual window close
         setAuthWindow(null);
         setIsLoading(false);
@@ -35,7 +35,7 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }) 
     window.addEventListener('message', messageHandler);
     return () => {
       // Clean up: close window and remove listener
-      TwitterPopupHandler.closeAuthWindow(authWindow);
+      OAuthPopupHandler.closeAuthWindow(authWindow);
       window.removeEventListener('message', messageHandler);
     };
   }, [authWindow, onSuccess, onError]);

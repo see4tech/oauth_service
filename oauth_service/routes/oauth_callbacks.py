@@ -281,6 +281,9 @@ def create_html_response(
 ) -> HTMLResponse:
     """Create HTML response for OAuth callback."""
     
+    # Determine message type based on platform
+    message_type = f"{platform.upper()}_AUTH_CALLBACK" if platform else "OAUTH_CALLBACK"
+    
     html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -294,7 +297,7 @@ def create_html_response(
                 function closeWindow() {{
                     if (window.opener) {{
                         window.opener.postMessage({{
-                            type: 'TWITTER_AUTH_CALLBACK',
+                            type: '{message_type}',
                             success: {json.dumps(success and not error)},
                             error: {json.dumps(error)},
                             platform: {json.dumps(platform)},
