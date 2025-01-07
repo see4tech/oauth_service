@@ -87,7 +87,8 @@ class OAuthBase(ABC):
             state_platform = state_data.get('platform', '')
             
             # Verify platform matches (case-insensitive)
-            if state_platform.lower() != self.platform_name.replace('oauth', '').lower():
+            # Note: state platform will have 'oauth' suffix
+            if not state_platform.lower().startswith(self.platform_name.lower()):
                 logger.warning(f"Platform mismatch. Expected: {self.platform_name}, Got: {state_platform}")
                 return None
                 
