@@ -61,6 +61,11 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
             logger.debug(f"Storing code verifier for state: {state}")
             await store_code_verifier(state, auth_data['code_verifier'])
         
+        # For OAuth 1.0a, store the request token with user_id
+        if use_oauth1 and 'oauth_token' in auth_data:
+            logger.debug(f"Storing user_id {user_id} with request token {auth_data['oauth_token']}")
+            await store_code_verifier(auth_data['oauth_token'], user_id)  # Reuse code_verifier storage for user_id
+        
         # Manually append state to URL
         separator = '&' if '?' in auth_url else '?'
         auth_url = f"{auth_url}{separator}state={state}"
@@ -146,63 +151,50 @@ async def oauth_callback(
                             auto_close=True
                         )
                     
-                    # For OAuth 1.0a, we need to extract user_id from the frontend_callback_url parameter
-                    try:
-                        # Parse the query parameters from the request URL
-                        query_params = dict(request.query_params)
-                        user_id = query_params.get('user_id')
-                        
-                        if not user_id:
-                            return create_html_response(
-                                error="Missing user_id parameter",
-                                platform=platform,
-                                version=version,
-                                auto_close=True
-                            )
-                            
-                        logger.info(f"Processing Twitter OAuth 1.0a callback for user_id: {user_id}")
-                        
-                        # Exchange verifier for tokens
-                        tokens = await oauth.get_access_token(
-                            oauth1_verifier=oauth_verifier
-                        )
-                        
-                        if not tokens or 'oauth1' not in tokens:
-                            return create_html_response(
-                                error="Failed to get OAuth 1.0a tokens",
-                                platform=platform,
-                                version=version,
-                                auto_close=True
-                            )
-                        
-                        # Generate and store API key
-                        api_key = generate_api_key()
-                        
-                        # Store API key in external service
-                        api_key_storage = APIKeyStorage()
-                        stored = await api_key_storage.store_api_key(
-                            user_id=user_id,
-                            platform="twitter-oauth1",  # Specific platform for OAuth 1.0a
-                            api_key=api_key,
-                            access_token=tokens['oauth1']['access_token'],
-                            access_token_secret=tokens['oauth1']['access_token_secret'],  # OAuth 1.0a specific
-                            expires_in=0  # OAuth 1.0a tokens don't expire
-                        )
-                        
-                        if not stored:
-                            raise ValueError("Failed to store API key")
-                        
-                        logger.info(f"Successfully stored API key for Twitter OAuth 1.0a user {user_id}")
-                        success = True
-                        
-                    except Exception as e:
-                        logger.error(f"Error processing OAuth 1.0a callback: {str(e)}")
+                    # Get user_id from stored request token
+                    user_id = await get_code_verifier(oauth_token)  # Reuse code_verifier storage
+                    if not user_id:
                         return create_html_response(
-                            error=str(e),
+                            error="Could not find user_id for request token",
                             platform=platform,
                             version=version,
                             auto_close=True
                         )
+                            
+                    logger.info(f"Processing Twitter OAuth 1.0a callback for user_id: {user_id}")
+                    
+                    # Exchange verifier for tokens
+                    tokens = await oauth.get_access_token(
+                        oauth1_verifier=oauth_verifier
+                    )
+                    
+                    if not tokens or 'oauth1' not in tokens:
+                        return create_html_response(
+                            error="Failed to get OAuth 1.0a tokens",
+                            platform=platform,
+                            version=version,
+                            auto_close=True
+                        )
+                    
+                    # Generate and store API key
+                    api_key = generate_api_key()
+                    
+                    # Store API key in external service
+                    api_key_storage = APIKeyStorage()
+                    stored = await api_key_storage.store_api_key(
+                        user_id=user_id,
+                        platform="twitter-oauth1",  # Specific platform for OAuth 1.0a
+                        api_key=api_key,
+                        access_token=tokens['oauth1']['access_token'],
+                        access_token_secret=tokens['oauth1']['access_token_secret'],  # OAuth 1.0a specific
+                        expires_in=0  # OAuth 1.0a tokens don't expire
+                    )
+                    
+                    if not stored:
+                        raise ValueError("Failed to store API key")
+                    
+                    logger.info(f"Successfully stored API key for Twitter OAuth 1.0a user {user_id}")
+                    success = True
                 else:
                     # Twitter OAuth 2.0 flow
                     if not code or not state:
