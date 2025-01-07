@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { TwitterPopupHandler } from "./TwitterPopupHandler"; // Rename this to OAuthPopupHandler
+import { OAuthPopupHandler } from "./OAuthPopupHandler"; // Updated import
 import { LinkedInTokenExchange } from "./LinkedInTokenExchange";
 
 const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }) => {
@@ -45,10 +45,10 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }) 
 
     try {
       setIsLoading(true);
-      const authData = await TwitterPopupHandler.initializeAuth(userId, redirectUri, false);
+      const authData = await OAuthPopupHandler.initializeAuth(userId, redirectUri, 'linkedin');
       
       if (authData.authorization_url) {
-        const newWindow = TwitterPopupHandler.openAuthWindow(authData.authorization_url, false);
+        const newWindow = OAuthPopupHandler.openAuthWindow(authData.authorization_url, 'linkedin');
         if (!newWindow) {
           throw new Error('Could not open OAuth window');
         }
@@ -64,7 +64,13 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }) 
   };
 
   return (
-    // ... rest of the component
+    <button
+      onClick={handleLogin}
+      disabled={isLoading}
+      className="oauth-button linkedin-button"
+    >
+      {isLoading ? 'Connecting...' : 'Connect LinkedIn'}
+    </button>
   );
 };
 

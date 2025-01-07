@@ -80,14 +80,24 @@ async def initialize_oauth(
         parsed_url = urlparse(request.frontend_callback_url)
         base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
         
-        # Create version-specific callback URLs, but handle LinkedIn differently
+        # Create version-specific callback URLs
         if platform == "linkedin":
             callback_url = urljoin(base_url, f"/oauth/{platform}/callback")  # No version suffix for LinkedIn
         else:
             callback_url = urljoin(base_url, f"/oauth/{platform}/callback/{'1' if request.use_oauth1 else '2'}")
         
-        # Initialize OAuth handler with correct callback URL
-        oauth_handler = await get_oauth_handler(platform, callback_url)
+        # Initialize OAuth handler with correct callback URL and credentials
+        if platform == "twitter":
+            oauth_handler = TwitterOAuth(
+                client_id=settings.TWITTER_CLIENT_ID,
+                client_secret=settings.TWITTER_CLIENT_SECRET,
+                consumer_key=settings.TWITTER_CONSUMER_KEY,
+                consumer_secret=settings.TWITTER_CONSUMER_SECRET,
+                callback_url=callback_url
+            )
+        else:
+            oauth_handler = await get_oauth_handler(platform, callback_url)
+            
         logger.debug(f"Initialized OAuth handler for {platform} with callback URL: {callback_url}")
         
         # Generate state with the correct callback URL
