@@ -4,6 +4,10 @@ from pydantic import BaseModel, Field
 from ..core import TokenManager
 from ..core.db import SqliteDB
 from ..core.oauth_base import OAuthBase
+from ..platforms.twitter import TwitterOAuth
+from ..platforms.linkedin import LinkedInOAuth
+from ..platforms.facebook import FacebookOAuth
+from ..platforms.instagram import InstagramOAuth
 from ..models.oauth_models import (
     OAuthInitRequest, OAuthInitResponse, OAuthCallbackRequest,
     TokenResponse, PostContent, PostResponse, MediaUploadResponse, UserProfile

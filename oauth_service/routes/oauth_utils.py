@@ -1,7 +1,10 @@
 from typing import Optional, Dict
 from fastapi import HTTPException
 from ..core.oauth_base import OAuthBase
-from ..platforms import TwitterOAuth, LinkedInOAuth, InstagramOAuth, FacebookOAuth
+from ..platforms.twitter import TwitterOAuth
+from ..platforms.linkedin import LinkedInOAuth
+from ..platforms.facebook import FacebookOAuth
+from ..platforms.instagram import InstagramOAuth
 from ..utils.logger import get_logger
 from ..config import get_settings
 
