@@ -110,12 +110,22 @@ async def oauth_callback(
         try:
             if platform == "twitter":
                 # Twitter-specific handling with OAuth 1.0a and 2.0
-                # Get the callback URL that matches what was used in the request
-                callback_url = str(request.url).split('?')[0]
-                logger.debug(f"Callback URL: {callback_url}")
+                settings = get_settings()
+                
+                # Get base callback URL from settings and append version
+                base_callback_url = settings.TWITTER_CALLBACK_URL.rstrip('/')
+                callback_url = f"{base_callback_url}/{version}"
+                
+                logger.debug(f"Using callback URL for token exchange: {callback_url}")
                 
                 # Initialize OAuth handler with the same callback URL
-                oauth_handler = await get_oauth_handler(platform, callback_url)
+                oauth = TwitterOAuth(
+                    client_id=settings.TWITTER_CLIENT_ID,
+                    client_secret=settings.TWITTER_CLIENT_SECRET,
+                    consumer_key=settings.TWITTER_CONSUMER_KEY,
+                    consumer_secret=settings.TWITTER_CONSUMER_SECRET,
+                    callback_url=callback_url
+                )
                 
                 # Get OAuth 1.0a parameters
                 oauth_token = request.query_params.get('oauth_token')
@@ -144,7 +154,18 @@ async def oauth_callback(
                     
                     # Get code verifier for PKCE
                     code_verifier = await get_code_verifier(state)
-                    tokens = await oauth_handler.get_access_token(
+                    if not code_verifier:
+                        logger.error("Code verifier not found for state")
+                        return create_html_response(
+                            error="Code verifier not found",
+                            platform=platform,
+                            version=version,
+                            auto_close=True
+                        )
+                        
+                    logger.debug(f"Found code verifier for state: {bool(code_verifier)}")
+                    
+                    tokens = await oauth.get_access_token(
                         oauth2_code=code,
                         code_verifier=code_verifier
                     )
