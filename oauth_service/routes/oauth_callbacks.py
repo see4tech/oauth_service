@@ -318,7 +318,6 @@ def create_html_response(
 ) -> HTMLResponse:
     """Create HTML response for OAuth callback."""
     
-    # Determine message type based on platform
     message_type = f"{platform.upper()}_AUTH_CALLBACK" if platform else "OAUTH_CALLBACK"
     
     html_content = f"""
@@ -326,31 +325,35 @@ def create_html_response(
         <html>
         <head>
             <title>OAuth Callback</title>
-            <script>
-                // Send message and close immediately
-                if (window.opener) {{
-                    const message = {{
-                        type: '{message_type}',
-                        success: {json.dumps(success and not error)},
-                        error: {json.dumps(error)},
-                        platform: {json.dumps(platform)},
-                        version: {json.dumps(version)}
-                    }};
-                    window.opener.postMessage(message, '*');
-                    console.log('Sent message to opener:', message);
-                    // Close immediately
-                    window.close();
-                }}
-            </script>
         </head>
         <body>
-            <div class="container">
-                <h2>
-                    {error and 'Authentication Failed' or 'Authentication Successful'}
-                </h2>
-                <p>
-                    {error or 'This window will close automatically.'}
-                </p>
+            <script>
+                // Execute immediately
+                (function() {{
+                    if (window.opener) {{
+                        const message = {{
+                            type: '{message_type}',
+                            success: {json.dumps(success and not error)},
+                            error: {json.dumps(error)},
+                            platform: {json.dumps(platform)},
+                            version: {json.dumps(version)}
+                        }};
+                        
+                        try {{
+                            window.opener.postMessage(message, '*');
+                            console.log('Sent message to opener:', message);
+                        }} catch (e) {{
+                            console.error('Error sending message:', e);
+                        }}
+                        
+                        // Force close after a tiny delay
+                        setTimeout(() => window.close(), 100);
+                    }}
+                }})();
+            </script>
+            <div>
+                <h2>{error and 'Authentication Failed' or 'Authentication Successful'}</h2>
+                <p>{error or 'This window will close automatically.'}</p>
             </div>
         </body>
         </html>
