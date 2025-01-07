@@ -319,7 +319,24 @@ def create_html_response(
 ) -> HTMLResponse:
     """Instead of trying to close the window, redirect to frontend with status."""
     settings = get_settings()
-    frontend_url = settings.FRONTEND_URL
+    
+    # Debug logging
+    logger.debug(f"Settings loaded. Available settings: {vars(settings)}")
+    logger.debug(f"FRONTEND_URLS setting: {getattr(settings, 'FRONTEND_URLS', 'Not found')}")
+    
+    try:
+        frontend_urls = settings.frontend_origins
+        if not frontend_urls:
+            raise ValueError("No frontend URLs configured")
+        frontend_url = frontend_urls[0]
+    except Exception as e:
+        logger.error(f"Error getting frontend URL: {str(e)}")
+        # Fallback to a default URL in development, or raise error in production
+        if settings.ENVIRONMENT == "development":
+            frontend_url = "http://localhost:3000"
+            logger.warning(f"Using fallback frontend URL: {frontend_url}")
+        else:
+            raise ValueError(f"FRONTEND_URLS must be configured in {settings.ENVIRONMENT} environment")
     
     # Create query parameters for frontend
     params = {
@@ -330,5 +347,6 @@ def create_html_response(
     
     # Build redirect URL
     redirect_url = f"{frontend_url}/oauth/callback?{urlencode(params)}"
+    logger.debug(f"Generated redirect URL: {redirect_url}")
     
     return RedirectResponse(url=redirect_url)
