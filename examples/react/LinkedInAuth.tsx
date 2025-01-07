@@ -23,20 +23,39 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
 
   useEffect(() => {
     const messageHandler = async (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) {
+        console.warn('[Parent] Received message from unauthorized origin:', event.origin);
+        return;
+      }
+
       console.log('Received message:', event.data);
 
       if (event.data.type === 'LINKEDIN_AUTH_CALLBACK') {
-        const tokens = event.data;
-        console.log('LinkedIn tokens received:', tokens);
-        
-        onSuccess(tokens);
-        setAuthCompleted(true);
-        setCountdown(5);
-        toast.success('LinkedIn autorización exitosa. La ventana se cerrará en 5 segundos.');
-
+        // Close the window first
         if (authWindow && !authWindow.closed) {
           console.log('Closing auth window');
           authWindow.close();
+        }
+        setAuthWindow(null);
+        setIsLoading(false);
+
+        if (event.data.error) {
+          console.error('LinkedIn auth error:', event.data.error);
+          onError?.(new Error(event.data.error));
+          toast.error('LinkedIn authorization failed');
+        } else {
+          console.log('LinkedIn auth successful');
+          setAuthCompleted(true);
+          setLocalIsConnected(true);
+          onSuccess(event.data);
+          toast.success('LinkedIn authorization successful');
+        }
+      } else if (event.data.type === 'OAUTH_WINDOW_CLOSED') {
+        // Handle manual window close
+        setAuthWindow(null);
+        setIsLoading(false);
+        if (!authCompleted) {
+          onError?.(new Error('Authentication window was closed'));
         }
       }
     };
@@ -44,33 +63,12 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
     window.addEventListener('message', messageHandler);
     return () => {
       window.removeEventListener('message', messageHandler);
-    };
-  }, [authWindow, onSuccess]);
-
-  useEffect(() => {
-    if (!authWindow) return;
-
-    const checkWindow = setInterval(() => {
-      if (authWindow.closed) {
-        console.log('Auth window was closed by user');
-        clearInterval(checkWindow);
-        setAuthWindow(null);
-        setIsLoading(false);
-        
-        if (!authCompleted) {
-          onError?.(new Error('Authentication window was closed'));
-        }
-      }
-    }, 500);
-
-    return () => {
-      clearInterval(checkWindow);
       if (authWindow && !authWindow.closed) {
         console.log('Cleaning up auth window');
         authWindow.close();
       }
     };
-  }, [authWindow, onError, authCompleted]);
+  }, [authWindow, onSuccess, onError, authCompleted]);
 
   useEffect(() => {
     if (!authCompleted || countdown === null) return;
