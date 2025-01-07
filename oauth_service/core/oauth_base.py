@@ -58,7 +58,7 @@ class OAuthBase(ABC):
         Verify state and return user_id and frontend_callback_url.
         
         Args:
-            state: Encrypted state string from OAuth callback
+            state: Base64 encoded state string from OAuth callback
             
         Returns:
             Optional[Dict]: Decoded state data or None if invalid
@@ -67,12 +67,13 @@ class OAuthBase(ABC):
             logger.debug(f"Verifying state for platform {self.platform_name}")
             logger.debug(f"Received state: {state[:30]}...")
             
-            # Decrypt state using Fernet
+            # Decode base64
             try:
-                decrypted_state = self.crypto.decrypt(state)
-                state_data = json.loads(decrypted_state)
+                state_bytes = base64.urlsafe_b64decode(state.encode('utf-8'))
+                state_json = state_bytes.decode('utf-8')
+                state_data = json.loads(state_json)
             except Exception as e:
-                logger.error(f"Error decrypting state: {str(e)}")
+                logger.error(f"Error decoding state: {str(e)}")
                 return None
             
             logger.debug(f"Decoded state data: {state_data}")
