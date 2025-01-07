@@ -1,57 +1,44 @@
-from fastapi import APIRouter, Request, HTTPException
-from pydantic import BaseModel, Field
-import os
-from api.db.db_connection import get_db_connection
-from api.utils.logger import logger
+from typing import Optional
+import aiohttp
+from ..utils.logger import get_logger
+from ..config import get_settings
 
-router = APIRouter()
+logger = get_logger(__name__)
 
-class ValidateApiKeyRequest(BaseModel):
-    user_id: str = Field(..., description="User ID")
-    platform: str = Field(..., description="Platform name")
-    api_key: str = Field(..., description="User's API key")
+class APIKeyStorage:
+    def __init__(self):
+        self.settings = get_settings()
+        self.api_url = self.settings.API_KEY_STORAGE
 
-class ApiKeyResponse(BaseModel):
-    api_key: str
-
-@router.post("/validate", response_model=ApiKeyResponse)
-async def validate_api_key(request: Request):
-    """Validate user's API key."""
-    # Validate the x-api-key header
-    api_key = request.headers.get("x-api-key")
-    if not api_key or api_key != os.getenv("API_KEY"):
-        raise HTTPException(status_code=401, detail="Invalid API key")
-
-    try:
-        body = await request.json()
+    async def store_api_key(
+        self,
+        user_id: str,
+        platform: str,
+        api_key: str,
+        access_token: str,
+        refresh_token: Optional[str] = None,
+        expires_in: Optional[int] = None
+    ) -> bool:
+        """Store API key and tokens in external storage service."""
         try:
-            data = ValidateApiKeyRequest(**body)
+            async with aiohttp.ClientSession() as session:
+                data = {
+                    "user_id": user_id,
+                    "platform": platform,
+                    "api_key": api_key,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "expires_in": expires_in
+                }
+                
+                async with session.post(f"{self.api_url}/store", json=data) as response:
+                    if response.status != 200:
+                        logger.error(f"Failed to store API key. Status: {response.status}")
+                        return False
+                    
+                    logger.info(f"Successfully stored API key for user {user_id} and platform {platform}")
+                    return True
+                    
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid request body: {str(e)}")
-
-        async with get_db_connection() as conn:
-            query = """
-                SELECT api_key
-                FROM user_api_keys
-                WHERE user_id = $1 AND platform = $2 AND api_key = $3
-            """
-            row = await conn.fetchrow(
-                query,
-                data.user_id,
-                data.platform,
-                data.api_key
-            )
-
-            if not row:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"API key not found for user {data.user_id} on platform {data.platform}"
-                )
-
-            return {"api_key": row["api_key"]}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error validating API key: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error") 
+            logger.error(f"Error storing API key: {str(e)}")
+            return False 
