@@ -436,4 +436,13 @@ def create_html_response(
         </html>
     """
     
+    message_data = {
+        'type': message_type,
+        'success': success and not error,
+        'error': error,
+        'platform': platform,
+        'version': version
+    }
+    logger.debug(f"Sending message to frontend: {message_data}")
+    
     return HTMLResponse(content=html_content)
