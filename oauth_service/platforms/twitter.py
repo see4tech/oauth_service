@@ -535,3 +535,43 @@ class TwitterOAuth(OAuthBase):
         except Exception as e:
             logger.error(f"Error in OAuth 1.0a token exchange: {str(e)}")
             raise
+    
+    async def post_tweet(self, access_token: str, text: str, oauth_version: str = "oauth2") -> Dict:
+        """Post a tweet using either OAuth 1.0a or 2.0."""
+        try:
+            if oauth_version == "oauth2":
+                # OAuth 2.0 tweet endpoint
+                url = "https://api.twitter.com/2/tweets"
+                headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                }
+                data = {"text": text}
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, headers=headers, json=data) as response:
+                        if response.status != 201:
+                            error_text = await response.text()
+                            raise ValueError(f"Failed to post tweet: {error_text}")
+                        return await response.json()
+                            
+            else:  # OAuth 1.0a
+                # Create OAuth1 session with access token
+                auth = OAuth1Session(
+                    self._consumer_key,
+                    client_secret=self._decrypted_consumer_secret,
+                    resource_owner_key=access_token['access_token'],
+                    resource_owner_secret=access_token['access_token_secret']
+                )
+                
+                url = "https://api.twitter.com/1.1/statuses/update.json"
+                data = {"status": text}
+                
+                response = await auth.post(url, data=data)
+                if response.status != 200:
+                    raise ValueError(f"Failed to post tweet: {await response.text()}")
+                return await response.json()
+                
+        except Exception as e:
+            logger.error(f"Error posting tweet: {str(e)}")
+            raise
