@@ -187,7 +187,11 @@ async def linkedin_callback(
             
             # Store API key in external service first
             api_key_storage = APIKeyStorage()
-            stored = await api_key_storage.store_api_key(**external_storage_payload)
+            stored = await api_key_storage.store_api_key(
+                user_id=user_id,
+                platform="linkedin",
+                api_key=api_key
+            )
             
             if not stored:
                 raise ValueError("Failed to store API key in external service")
@@ -439,7 +443,11 @@ async def twitter_oauth1_callback(
         
         # Store API key in external service
         api_key_storage = APIKeyStorage()
-        stored = await api_key_storage.store_api_key(**external_storage_payload)
+        stored = await api_key_storage.store_api_key(
+            user_id=user_id,
+            platform=platform_with_version,
+            api_key=api_key
+        )
         if not stored:
             raise ValueError("Failed to store API key in external service")
         logger.info(f"Successfully stored API key in external service for {platform_with_version}")
@@ -553,7 +561,11 @@ async def twitter_oauth2_callback(
         
         # Store API key in external service
         api_key_storage = APIKeyStorage()
-        stored = await api_key_storage.store_api_key(**external_storage_payload)
+        stored = await api_key_storage.store_api_key(
+            user_id=user_id,
+            platform=platform_with_version,
+            api_key=api_key
+        )
         if not stored:
             raise ValueError("Failed to store API key in external service")
         logger.info(f"Successfully stored API key in external service for {platform_with_version}")
