@@ -151,9 +151,9 @@ async def linkedin_callback(
             
             # Generate and store API key
             api_key = generate_api_key()
-            logger.debug(f"Generated new API key: {api_key}")
+            logger.debug(f"Generated new API key for external storage: {api_key}")
             
-            # Store API key in external service
+            # Store API key in external service first
             api_key_storage = APIKeyStorage()
             stored = await api_key_storage.store_api_key(
                 user_id=user_id,
@@ -164,18 +164,26 @@ async def linkedin_callback(
                 expires_in=tokens.get('expires_in', 3600)
             )
             
-            # Also store in local database
+            if not stored:
+                raise ValueError("Failed to store API key in external service")
+            
+            # Store the SAME api_key locally
             try:
                 db = SqliteDB()
                 db.store_user_api_key(user_id, platform="linkedin", api_key=api_key)
-                logger.debug(f"Stored API key in local database for user {user_id}")
+                logger.debug(f"Stored API key in local database - User: {user_id}, Key: {api_key}")
+                
+                # Verify the stored key
+                stored_key = db.get_user_api_key(user_id, "linkedin")
+                logger.debug(f"Verified stored key in database: {stored_key}")
+                
+                if stored_key != api_key:
+                    logger.error("Stored key verification failed - mismatch between stored and original")
             except Exception as e:
                 logger.error(f"Failed to store API key in local database: {str(e)}")
+                raise
             
-            if not stored:
-                raise ValueError("Failed to store API key")
-            
-            logger.info(f"Successfully stored API key for user {user_id}")
+            logger.info(f"Successfully stored API key for user {user_id} in both external and local storage")
             success = True
             
             # Return success response with code and state for frontend
