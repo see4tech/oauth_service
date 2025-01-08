@@ -425,6 +425,49 @@ async def twitter_oauth1_callback(
             token_data={'oauth1': token_data}
         )
         
+        # Generate and store API key
+        api_key = generate_api_key()
+        logger.info("=== API Key Generation ===")
+        logger.info(f"Generated API key: {api_key}")
+        
+        # Store with oauth1 suffix
+        platform_with_version = "twitter-oauth1"
+        
+        # Prepare payload for external storage
+        external_storage_payload = {
+            "user_id": user_id,
+            "platform": platform_with_version,  # Use versioned platform name
+            "api_key": api_key,
+            "access_token": token_data['access_token'],
+            "access_token_secret": token_data['access_token_secret']
+        }
+        
+        # Store API key in external service
+        api_key_storage = APIKeyStorage()
+        stored = await api_key_storage.store_api_key(**external_storage_payload)
+        if not stored:
+            raise ValueError("Failed to store API key in external service")
+        logger.info(f"Successfully stored API key in external service for {platform_with_version}")
+        
+        # Store the SAME api_key locally
+        try:
+            logger.info("=== Local Database Storage ===")
+            logger.info(f"Attempting to store in SQLite - User ID: {user_id}, Platform: {platform_with_version}, API Key: {api_key}")
+            
+            db = SqliteDB()
+            db.store_user_api_key(user_id, platform=platform_with_version, api_key=api_key)
+            logger.info(f"Successfully stored API key in local database for {platform_with_version}")
+            
+            # Verify the stored key
+            stored_key = db.get_user_api_key(user_id, platform_with_version)
+            logger.info("=== Local Storage Verification ===")
+            logger.info(f"Original API Key: {api_key}")
+            logger.info(f"Stored API Key: {stored_key}")
+            logger.info(f"Keys match: {stored_key == api_key}")
+        except Exception as e:
+            logger.error(f"Failed to store API key in local database: {str(e)}")
+            raise
+        
         return create_html_response(
             platform="twitter",
             version="1",
