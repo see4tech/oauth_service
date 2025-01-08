@@ -93,6 +93,17 @@ async def lifespan(app: FastAPI):
     
     logger.info("Shutting down OAuth Service")
 
+# First, initialize FastAPI app
+app = FastAPI(
+    title="OAuth Service",
+    description="A comprehensive OAuth implementation supporting multiple platforms",
+    version="1.0.0",
+    docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
+    redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
+    lifespan=lifespan
+)
+
+# Then, add the middleware
 @app.middleware("http")
 async def validate_api_key(request: Request, call_next):
     """Validate API key from header."""
@@ -158,16 +169,6 @@ async def validate_api_key(request: Request, call_next):
             status_code=500,
             content={"detail": "Internal server error"}
         )
-
-# Initialize FastAPI app
-app = FastAPI(
-    title="OAuth Service",
-    description="A comprehensive OAuth implementation supporting multiple platforms",
-    version="1.0.0",
-    docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
-    redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
-    lifespan=lifespan
-)
 
 # Add security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
