@@ -11,6 +11,8 @@ import os
 import hashlib
 from datetime import datetime
 from urllib.parse import urlencode
+from ..db.sqlite_db import SqliteDB
+from ..utils.api_key_generator import generate_api_key
 
 logger = get_logger(__name__)
 
