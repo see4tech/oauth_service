@@ -94,14 +94,44 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down OAuth Service")
 
 # At the top, after imports and settings initialization
-async def get_api_key(api_key_header: str = Security(api_key_header)) -> str:
-    """Dependency to validate global API key."""
-    if api_key_header == settings.API_KEY:
-        return api_key_header
-    raise HTTPException(
-        status_code=HTTP_403_FORBIDDEN, 
-        detail="Could not validate API key"
-    )
+async def get_api_key(request: Request, api_key_header: str = Security(api_key_header)) -> str:
+    """Dependency to validate API key."""
+    try:
+        # Skip validation for OAuth callbacks and initialization
+        if "/callback" in request.url.path or request.url.path.endswith("/init"):
+            return api_key_header
+            
+        # Check if it's a user-specific endpoint
+        if request.method == "POST":
+            try:
+                body = await request.json()
+                user_id = body.get("user_id")
+                
+                if user_id and "twitter" in request.url.path:
+                    db = SqliteDB()
+                    oauth1_key = db.get_user_api_key(user_id, "twitter-oauth1")
+                    oauth2_key = db.get_user_api_key(user_id, "twitter-oauth2")
+                    
+                    if api_key_header in [oauth1_key, oauth2_key]:
+                        return api_key_header
+                        
+            except json.JSONDecodeError:
+                pass
+                
+        # Fall back to global API key check
+        if api_key_header == settings.API_KEY:
+            return api_key_header
+            
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN,
+            detail="Could not validate API key"
+        )
+    except Exception as e:
+        logger.error(f"Error in API key validation: {str(e)}")
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN,
+            detail="Could not validate API key"
+        )
 
 # Initialize FastAPI app
 app = FastAPI(
