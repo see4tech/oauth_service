@@ -436,7 +436,7 @@ async def twitter_oauth1_callback(
         # Prepare payload for external storage
         external_storage_payload = {
             "user_id": user_id,
-            "platform": platform_with_version,  # Use versioned platform name
+            "platform": platform_with_version,  # "twitter-oauth1"
             "api_key": api_key,
             "access_token": token_data['access_token'],
             "refresh_token": None,  # OAuth 1.0a doesn't use refresh tokens
