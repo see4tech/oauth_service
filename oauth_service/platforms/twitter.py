@@ -18,6 +18,7 @@ class TwitterOAuth(OAuthBase):
     """Twitter OAuth implementation supporting both OAuth 1.0a and OAuth 2.0."""
     
     def __init__(self, client_id: str, client_secret: str, callback_url: str, consumer_key: str = None, consumer_secret: str = None):
+        """Initialize Twitter OAuth with both OAuth 1.0a and 2.0 credentials."""
         super().__init__(client_id, client_secret, callback_url)
         self.rate_limiter = RateLimiter(platform="twitter")
         
@@ -31,26 +32,13 @@ class TwitterOAuth(OAuthBase):
         # For OAuth 1.0a, use raw secrets as they come from settings
         self._decrypted_consumer_secret = self._consumer_secret
         
-        # Modify callback URL to include version
-        if callback_url.endswith('/callback'):
-            base_callback = callback_url
-        else:
-            base_callback = callback_url.rstrip('/') + '/callback'
-            
-        oauth1_callback = base_callback + '/1'
-        oauth2_callback = base_callback + '/2'
-        
-        # OAuth 1.0a setup
-        self.oauth1_handler = tweepy.OAuthHandler(
-            self._consumer_key,
-            self._decrypted_consumer_secret,
-            oauth1_callback
-        )
+        # Store the callback URL exactly as provided - don't modify it
+        self.callback_url = callback_url
         
         # OAuth 2.0 setup with offline.access scope for refresh tokens
         self.oauth2_client = OAuth2Session(
             client_id=self.client_id,
-            redirect_uri=oauth2_callback,
+            redirect_uri=callback_url,  # Use the exact callback URL
             scope=['tweet.read', 'tweet.write', 'users.read', 'offline.access']
         )
     
