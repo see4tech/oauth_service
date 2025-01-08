@@ -48,33 +48,18 @@ class TokenManager:
                 return {"access_token": "test_token", "token_type": "Bearer"}
             raise
     
-    async def store_token(self, platform: str, user_id: str, token_data: Dict):
-        """Store token data for a user."""
+    async def store_token(self, platform: str, user_id: str, token_data: Dict) -> None:
+        """Store token data in the database."""
         try:
-            # For Twitter, handle OAuth 1.0a and 2.0 tokens separately
-            if platform == "twitter":
-                # Get existing token data if any
-                existing_data = await self.get_token(platform, user_id) or {}
-                
-                # Log the token structure before update
-                logger.debug(f"Existing token data structure for user {user_id}: {list(existing_data.keys())}")
-                logger.debug(f"New token data structure: {list(token_data.keys())}")
-                
-                # Update with new token data while preserving existing tokens
-                if 'oauth1' in token_data:
-                    existing_data['oauth1'] = token_data['oauth1']
-                if 'oauth2' in token_data:
-                    existing_data['oauth2'] = token_data['oauth2']
-                    logger.debug(f"Storing OAuth 2.0 token with keys: {list(token_data['oauth2'].keys())}")
-                    
-                # Store the combined token data
-                token_data = existing_data
+            logger.info(f"=== Storing OAuth Token ===")
+            logger.info(f"Platform: {platform}")
+            logger.info(f"User ID: {user_id}")
+            logger.info(f"Token data keys: {list(token_data.keys())}")
             
-            # Encrypt and store token data
-            encrypted_data = self.encrypt_token_data(token_data)
-            self.db.store_token(user_id, platform, encrypted_data)
-            logger.debug(f"Successfully stored token for user {user_id} on platform {platform}")
-            
+            # Store token data
+            db = SqliteDB()
+            db.store_token(user_id, platform, json.dumps(token_data))
+            logger.info("Successfully stored OAuth token")
         except Exception as e:
             logger.error(f"Error storing token: {str(e)}")
             raise

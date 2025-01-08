@@ -150,6 +150,15 @@ async def linkedin_callback(
             tokens = await oauth_handler.get_access_token(code)
             logger.debug(f"Received tokens from LinkedIn: {tokens}")
             
+            # Store OAuth tokens first
+            token_manager = TokenManager()
+            await token_manager.store_token(
+                platform="linkedin",
+                user_id=user_id,
+                token_data=tokens
+            )
+            logger.info(f"Stored OAuth tokens for user {user_id}")
+            
             # Generate and store API key
             api_key = generate_api_key()
             logger.info("=== API Key Generation ===")
