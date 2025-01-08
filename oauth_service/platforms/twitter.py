@@ -490,3 +490,41 @@ class TwitterOAuth(OAuthBase):
         except Exception as e:
             logger.error(f"Error initializing OAuth 1.0a: {str(e)}")
             raise
+    
+    async def get_oauth1_access_token(self, oauth_token: str, oauth_verifier: str) -> Dict:
+        """Exchange OAuth 1.0a verifier for access token."""
+        try:
+            logger.debug("=== Twitter OAuth 1.0a Token Exchange ===")
+            logger.debug(f"OAuth token: {oauth_token[:10]}...")
+            logger.debug(f"OAuth verifier: {oauth_verifier[:10]}...")
+            
+            # Create OAuth1Session with request token
+            oauth = tweepy.OAuth1UserHandler(
+                consumer_key=self._consumer_key,
+                consumer_secret=self._decrypted_consumer_secret,
+                callback=self.callback_url
+            )
+            
+            # Set the request token
+            oauth.request_token = {
+                'oauth_token': oauth_token,
+                'oauth_token_secret': oauth_verifier
+            }
+            
+            try:
+                # Get the access token
+                access_token, access_token_secret = oauth.get_access_token(oauth_verifier)
+                logger.debug("Successfully obtained OAuth 1.0a access tokens")
+                
+                return {
+                    'access_token': access_token,
+                    'access_token_secret': access_token_secret
+                }
+                
+            except Exception as e:
+                logger.error(f"Error getting access token: {str(e)}")
+                raise
+                
+        except Exception as e:
+            logger.error(f"Error in OAuth 1.0a token exchange: {str(e)}")
+            raise
