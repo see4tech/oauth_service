@@ -13,6 +13,7 @@ import os
 import hashlib
 from datetime import datetime
 from urllib.parse import urlencode
+from requests_oauthlib import OAuth1Session
 
 logger = get_logger(__name__)
 
@@ -575,3 +576,70 @@ class TwitterOAuth(OAuthBase):
         except Exception as e:
             logger.error(f"Error posting tweet: {str(e)}")
             raise
+    
+    async def post_tweet_with_media(self, user_id: str, text: str, image_url: str) -> Dict:
+        """Post tweet with media using both API versions."""
+        try:
+            # Get tokens for both versions
+            token_manager = TokenManager()
+            tokens = await token_manager.get_token("twitter", user_id)
+            
+            # 1. Upload media using v1.1 API with OAuth 1.0a tokens
+            oauth1_tokens = tokens.get('oauth1')
+            media_id = await self._upload_media_v1(oauth1_tokens, image_url)
+            
+            # 2. Post tweet with media using v2 API with OAuth 2.0 tokens
+            oauth2_tokens = tokens.get('oauth2')
+            return await self._post_tweet_v2(oauth2_tokens['access_token'], text, media_id)
+            
+        except Exception as e:
+            logger.error(f"Error posting tweet with media: {str(e)}")
+            raise
+    
+    async def _upload_media_v1(self, oauth1_tokens: Dict, image_url: str) -> str:
+        """Upload media using Twitter v1.1 API."""
+        # Create OAuth1Session with tokens
+        auth = OAuth1Session(
+            self._consumer_key,
+            client_secret=self._decrypted_consumer_secret,
+            resource_owner_key=oauth1_tokens['access_token'],
+            resource_owner_secret=oauth1_tokens['access_token_secret']
+        )
+        
+        # Download image
+        async with aiohttp.ClientSession() as session:
+            async with session.get(image_url) as response:
+                image_data = await response.read()
+        
+        # Upload to Twitter
+        upload_url = "https://upload.twitter.com/1.1/media/upload.json"
+        files = {'media': image_data}
+        
+        # Make the request
+        response = auth.post(upload_url, files=files)
+        if response.status_code != 200:
+            raise ValueError(f"Failed to upload media: {response.text}")
+        
+        media_data = response.json()
+        return media_data['media_id_string']
+    
+    async def _post_tweet_v2(self, access_token: str, text: str, media_id: str) -> Dict:
+        """Post tweet with media using Twitter v2 API."""
+        url = "https://api.twitter.com/2/tweets"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "text": text,
+            "media": {
+                "media_ids": [media_id]
+            }
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=data) as response:
+                if response.status != 201:
+                    error_text = await response.text()
+                    raise ValueError(f"Failed to post tweet: {error_text}")
+                return await response.json()

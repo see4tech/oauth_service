@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, File, UploadFile, Request, Query, Body
 from typing import Optional, Dict, List
 from pydantic import BaseModel, Field
 from ..core import TokenManager
@@ -468,3 +468,50 @@ async def store_oauth_token(platform: str, token_data: dict):
     except Exception as e:
         logger.error(f"Error storing OAuth token: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/oauth/twitter/post")
+async def post_twitter_content(
+    request: Request,
+    user_id: str = Body(...),
+    content: Dict = Body(...),
+    x_api_key: str = Header(..., alias="x-api-key")
+):
+    """Post content to Twitter."""
+    try:
+        # Get both stored API keys for validation
+        db = SqliteDB()
+        oauth1_key = db.get_user_api_key(user_id, "twitter-oauth1")
+        oauth2_key = db.get_user_api_key(user_id, "twitter-oauth2")
+        
+        # Check if provided key matches either stored key
+        if not (x_api_key == oauth1_key or x_api_key == oauth2_key):
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        # Initialize Twitter OAuth handler
+        oauth_handler = await get_oauth_handler("twitter")
+        
+        # Check if we have an image to upload
+        if "image_url" in content:
+            # Use combined method for media upload and tweet
+            response = await oauth_handler.post_tweet_with_media(
+                user_id=user_id,
+                text=content["text"],
+                image_url=content["image_url"]
+            )
+        else:
+            # Simple text-only tweet using OAuth 2.0
+            token_manager = TokenManager()
+            tokens = await token_manager.get_token("twitter", user_id)
+            oauth2_token = tokens.get('oauth2', {}).get('access_token')
+            
+            response = await oauth_handler.post_tweet(
+                access_token=oauth2_token,
+                text=content["text"],
+                oauth_version="oauth2"
+            )
+        
+        return {"success": True, "response": response}
+        
+    except Exception as e:
+        logger.error(f"Error posting to Twitter: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
