@@ -93,7 +93,17 @@ async def lifespan(app: FastAPI):
     
     logger.info("Shutting down OAuth Service")
 
-# First, initialize FastAPI app
+# At the top, after imports and settings initialization
+async def get_api_key(api_key_header: str = Security(api_key_header)) -> str:
+    """Dependency to validate global API key."""
+    if api_key_header == settings.API_KEY:
+        return api_key_header
+    raise HTTPException(
+        status_code=HTTP_403_FORBIDDEN, 
+        detail="Could not validate API key"
+    )
+
+# Initialize FastAPI app
 app = FastAPI(
     title="OAuth Service",
     description="A comprehensive OAuth implementation supporting multiple platforms",
@@ -260,16 +270,6 @@ async def general_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error"}
-    )
-
-# Add this after the initial imports
-async def get_api_key(api_key_header: str = Security(api_key_header)) -> str:
-    """Dependency to validate global API key."""
-    if api_key_header == settings.API_KEY:
-        return api_key_header
-    raise HTTPException(
-        status_code=HTTP_403_FORBIDDEN, 
-        detail="Could not validate API key"
     )
 
 # Run the application
