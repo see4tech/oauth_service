@@ -71,7 +71,7 @@ class TwitterOAuth(OAuthBase):
             extra_params = {
                 'response_type': 'code',
                 'client_id': self.client_id,
-                'redirect_uri': self.callback_url,  # Don't modify the callback URL here
+                'redirect_uri': self.oauth2_callback,  # Use the OAuth 2.0 specific callback
                 'scope': 'tweet.read tweet.write users.read offline.access',
                 'code_challenge': code_challenge,
                 'code_challenge_method': 'S256',
