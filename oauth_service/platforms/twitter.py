@@ -119,6 +119,8 @@ class TwitterOAuth(OAuthBase):
                              oauth1_verifier: Optional[str] = None,
                              code_verifier: Optional[str] = None) -> Dict:
         """Exchange authorization codes for access tokens."""
+        tokens = {}  # Initialize tokens dictionary
+        
         try:
             logger.debug("Starting OAuth 2.0 token exchange")
             logger.debug(f"Code verifier present: {bool(code_verifier)}")
@@ -170,7 +172,9 @@ class TwitterOAuth(OAuthBase):
                     }
                     
                     logger.debug(f"OAuth 2.0 tokens obtained successfully. Has refresh token: {bool(tokens['oauth2'].get('refresh_token'))}")
-            
+                    
+                    return tokens  # Return tokens here for OAuth 2.0
+                
         except Exception as e:
             logger.error(f"Error exchanging OAuth 2.0 code: {str(e)}")
             raise
