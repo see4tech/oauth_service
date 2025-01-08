@@ -126,7 +126,7 @@ class TwitterOAuth(OAuthBase):
             token_data = {
                 'code': oauth2_code,
                 'grant_type': 'authorization_code',
-                'redirect_uri': self.callback_url,  # Use the same callback URL as authorization
+                'redirect_uri': self.oauth2_callback,  # Use OAuth 2.0 specific callback
                 'code_verifier': code_verifier
             }
             
