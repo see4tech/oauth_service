@@ -151,6 +151,7 @@ async def linkedin_callback(
             
             # Generate and store API key
             api_key = generate_api_key()
+            logger.debug(f"Generated new API key: {api_key}")
             
             # Store API key in external service
             api_key_storage = APIKeyStorage()
@@ -162,6 +163,14 @@ async def linkedin_callback(
                 refresh_token=tokens.get('refresh_token'),
                 expires_in=tokens.get('expires_in', 3600)
             )
+            
+            # Also store in local database
+            try:
+                db = SqliteDB()
+                db.store_user_api_key(user_id, platform="linkedin", api_key=api_key)
+                logger.debug(f"Stored API key in local database for user {user_id}")
+            except Exception as e:
+                logger.error(f"Failed to store API key in local database: {str(e)}")
             
             if not stored:
                 raise ValueError("Failed to store API key")

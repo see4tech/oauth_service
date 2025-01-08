@@ -228,6 +228,7 @@ class SqliteDB:
         try:
             with self._lock:
                 cursor = self.conn.cursor()
+                logger.debug(f"Storing API key in database - User: {user_id}, Platform: {platform}, Key: {api_key}")
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO user_api_keys (user_id, platform, api_key)
@@ -236,6 +237,18 @@ class SqliteDB:
                     (user_id, platform, api_key)
                 )
                 self.conn.commit()
+                logger.debug("API key stored successfully in database")
+                
+                # Verify storage
+                cursor.execute(
+                    """
+                    SELECT api_key FROM user_api_keys
+                    WHERE user_id = ? AND platform = ?
+                    """,
+                    (user_id, platform)
+                )
+                stored_key = cursor.fetchone()
+                logger.debug(f"Verified stored key: {stored_key[0] if stored_key else None}")
         except Exception as e:
             logger.error(f"Error storing API key: {str(e)}")
             raise
