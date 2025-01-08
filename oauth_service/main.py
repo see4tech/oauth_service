@@ -113,33 +113,67 @@ def normalize_api_key(api_key: Optional[str]) -> Optional[str]:
     if not api_key:
         return None
     
-    try:
-        # If the key ends with '=', it might be base64 encoded
-        if api_key.endswith('='):
-            # Try to decode if it's base64
-            decoded = base64.b64decode(api_key).decode('utf-8')
-            logger.debug("Successfully decoded base64 API key")
-            return decoded
-    except Exception:
-        # If decoding fails, return original key
-        pass
+    original_key = api_key
+    logger.debug(f"Normalizing API key: {api_key[:4]}...{api_key[-4:] if api_key else None}")
     
-    return api_key
+    try:
+        # First try: direct base64 decode
+        if api_key.endswith('='):
+            try:
+                # Add padding if needed
+                padding_needed = len(api_key) % 4
+                if padding_needed:
+                    api_key += '=' * (4 - padding_needed)
+                
+                decoded = base64.b64decode(api_key).decode('utf-8')
+                logger.debug(f"Successfully decoded base64 key: {decoded[:4]}...{decoded[-4:] if decoded else None}")
+                return decoded
+            except Exception as e:
+                logger.debug(f"First base64 decode attempt failed: {str(e)}")
+        
+        # Second try: URL-safe base64 decode
+        try:
+            decoded = base64.urlsafe_b64decode(api_key).decode('utf-8')
+            logger.debug(f"Successfully decoded URL-safe base64 key: {decoded[:4]}...{decoded[-4:] if decoded else None}")
+            return decoded
+        except Exception as e:
+            logger.debug(f"URL-safe base64 decode attempt failed: {str(e)}")
+        
+        # If all decoding attempts fail, return original
+        logger.debug("Returning original key (no successful decoding)")
+        return original_key
+        
+    except Exception as e:
+        logger.debug(f"Error during key normalization: {str(e)}")
+        return original_key
 
 async def get_api_key(api_key_header: str = Security(api_key_header), request: Request = None):
     """Validate API key from request header."""
     logger.debug("=== API Key Validation Start ===")
     
+    if not api_key_header:
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN,
+            detail="No API key provided"
+        )
+    
     # Normalize both keys
     normalized_header_key = normalize_api_key(api_key_header)
     normalized_settings_key = normalize_api_key(settings.API_KEY)
     
-    logger.debug(f"Received API key header (normalized): {normalized_header_key[:4]}...{normalized_header_key[-4:] if normalized_header_key else None}")
-    logger.debug(f"Configured API key (normalized): {normalized_settings_key[:4]}...{normalized_settings_key[-4:] if normalized_settings_key else None}")
+    logger.debug(f"Original header key: {api_key_header[:4]}...{api_key_header[-4:] if api_key_header else None}")
+    logger.debug(f"Normalized header key: {normalized_header_key[:4]}...{normalized_header_key[-4:] if normalized_header_key else None}")
+    logger.debug(f"Original settings key: {settings.API_KEY[:4]}...{settings.API_KEY[-4:] if settings.API_KEY else None}")
+    logger.debug(f"Normalized settings key: {normalized_settings_key[:4]}...{normalized_settings_key[-4:] if normalized_settings_key else None}")
     
     # First check against global API key
     if normalized_header_key == normalized_settings_key:
         logger.debug("Global API key validation successful")
+        return api_key_header
+    
+    # Try exact match if normalization didn't work
+    if api_key_header == settings.API_KEY:
+        logger.debug("Global API key validation successful (exact match)")
         return api_key_header
 
     try:
@@ -158,21 +192,21 @@ async def get_api_key(api_key_header: str = Security(api_key_header), request: R
                     stored_api_key = db.get_user_api_key(user_id, platform)
                     normalized_stored_key = normalize_api_key(stored_api_key)
                     
+                    logger.debug(f"Original stored key: {stored_api_key[:4]}...{stored_api_key[-4:] if stored_api_key else None}")
+                    logger.debug(f"Normalized stored key: {normalized_stored_key[:4]}...{normalized_stored_key[-4:] if normalized_stored_key else None}")
+                    
                     if normalized_stored_key and normalized_stored_key == normalized_header_key:
                         logger.debug("User-specific API key validation successful")
+                        return api_key_header
+                    # Try exact match
+                    if stored_api_key and stored_api_key == api_key_header:
+                        logger.debug("User-specific API key validation successful (exact match)")
                         return api_key_header
                     logger.debug("User-specific API key mismatch")
             except Exception as e:
                 logger.error(f"Error processing request body: {str(e)}")
     except Exception as e:
         logger.error(f"Error during API key validation: {str(e)}")
-
-    # If we reach here, no valid API key was found
-    if not api_key_header:
-        raise HTTPException(
-            status_code=HTTP_403_FORBIDDEN,
-            detail="No API key provided"
-        )
     
     raise HTTPException(
         status_code=HTTP_403_FORBIDDEN,
