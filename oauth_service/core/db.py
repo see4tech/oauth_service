@@ -266,38 +266,23 @@ class SqliteDB:
             raise
             
     def get_user_api_key(self, user_id: str, platform: str) -> Optional[str]:
-        """Retrieve the API key exactly as stored."""
+        """Get API key for specific user and platform."""
         try:
-            with self._lock:
-                cursor = self.conn.cursor()
-                
-                # Debug: Show all stored API keys
-                cursor.execute("""
-                    SELECT user_id, platform, api_key 
-                    FROM user_api_keys
-                """)
-                all_keys = cursor.fetchall()
-                logger.debug("=== All Stored API Keys ===")
-                for row in all_keys:
-                    logger.debug(f"User: {row[0]}, Platform: {row[1]}, Key: {row[2]}")
-                logger.debug("==========================")
-                
-                # Original query
-                cursor.execute(
-                    """
-                    SELECT api_key FROM user_api_keys
-                    WHERE user_id = ? AND platform = ?
-                    """,
-                    (user_id, platform)
-                )
-                result = cursor.fetchone()
-                if result:
-                    logger.debug(f"Retrieved API key from DB - User: {user_id}, Platform: {platform}, Key: {result[0]}")
-                else:
-                    logger.debug(f"No API key found for User: {user_id}, Platform: {platform}")
-                    logger.debug(f"Searched with user_id: '{user_id}' (type: {type(user_id)})")
-                    logger.debug(f"Searched with platform: '{platform}' (type: {type(platform)})")
-                return result[0] if result else None
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "SELECT api_key FROM user_api_keys WHERE user_id = ? AND platform = ?",
+                (user_id, platform)
+            )
+            result = cursor.fetchone()
+            
+            if result:
+                api_key = result[0]
+                # Only log the specific platform's key
+                logger.debug(f"Retrieved API key from DB - User: {user_id}, Platform: {platform}, Key: {api_key}")
+                return api_key
+            
+            return None
+            
         except Exception as e:
             logger.error(f"Error retrieving API key: {str(e)}")
             return None
