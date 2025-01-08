@@ -55,20 +55,24 @@ class TokenManager:
             raise
     
     async def store_token(self, platform: str, user_id: str, token_data: Dict) -> None:
-        """Store token data in the database."""
+        """Store OAuth tokens for a user."""
         try:
-            logger.info(f"=== Storing OAuth Token ===")
+            logger.info("=== Storing OAuth Token ===")
             logger.info(f"Platform: {platform}")
             logger.info(f"User ID: {user_id}")
             logger.info(f"Token data keys: {list(token_data.keys())}")
             
-            # Encrypt token data before storing
-            encrypted_data = self.encrypt_token_data(token_data)
-            logger.debug("Token data encrypted successfully")
+            # Get existing tokens first
+            existing_tokens = await self.get_token(platform, user_id) or {}
+            
+            # Merge with new tokens
+            existing_tokens.update(token_data)  # This preserves both oauth1 and oauth2
+            
+            # Encrypt merged tokens
+            encrypted_data = self.encrypt_token_data(existing_tokens)
             
             # Store encrypted token data
             self.db.store_token(user_id, platform, encrypted_data)
-            logger.info("Successfully stored encrypted OAuth token")
             
             # Verify storage by retrieving and decrypting
             stored_data = await self.get_token(platform, user_id)

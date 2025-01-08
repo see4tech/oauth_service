@@ -426,10 +426,20 @@ async def twitter_oauth1_callback(
             token_data={'oauth1': token_data}
         )
         
-        # Generate and store API key
-        api_key = generate_api_key()
-        logger.info("=== API Key Generation ===")
-        logger.info(f"Generated API key: {api_key}")
+        # Check for existing Twitter API key first
+        db = SqliteDB()
+        existing_api_key = db.get_user_api_key(user_id, "twitter-oauth1")
+
+        if existing_api_key:
+            # Reuse the existing API key for OAuth 2.0
+            api_key = existing_api_key
+            logger.info("=== Reusing Existing Twitter API Key ===")
+            logger.info(f"Using existing API key from OAuth 1.0a: {api_key}")
+        else:
+            # Generate new API key if none exists
+            api_key = generate_api_key()
+            logger.info("=== API Key Generation ===")
+            logger.info(f"Generated new API key: {api_key}")
         
         # Store with oauth1 suffix
         platform_with_version = "twitter-oauth1"
@@ -544,10 +554,20 @@ async def twitter_oauth2_callback(
             token_data={'oauth2': token_data}
         )
         
-        # Generate and store API key
-        api_key = generate_api_key()
-        logger.info("=== API Key Generation ===")
-        logger.info(f"Generated API key: {api_key}")
+        # Check for existing Twitter API key first
+        db = SqliteDB()
+        existing_api_key = db.get_user_api_key(user_id, "twitter-oauth1")
+
+        if existing_api_key:
+            # Reuse the existing API key for OAuth 2.0
+            api_key = existing_api_key
+            logger.info("=== Reusing Existing Twitter API Key ===")
+            logger.info(f"Using existing API key from OAuth 1.0a: {api_key}")
+        else:
+            # Generate new API key if none exists
+            api_key = generate_api_key()
+            logger.info("=== API Key Generation ===")
+            logger.info(f"Generated new API key: {api_key}")
         
         # Store with oauth2 suffix
         platform_with_version = "twitter-oauth2"
