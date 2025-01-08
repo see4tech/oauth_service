@@ -19,6 +19,17 @@ logger = get_logger(__name__)
 callback_router = APIRouter()
 settings = get_settings()
 
+async def get_stored_user_id(oauth_token: str) -> Optional[str]:
+    """Get stored user_id for OAuth 1.0a token."""
+    try:
+        # We're reusing the code_verifier storage for OAuth 1.0a tokens
+        user_id = await get_code_verifier(oauth_token)
+        logger.debug(f"Retrieved user_id {user_id} for OAuth token {oauth_token[:10]}...")
+        return user_id
+    except Exception as e:
+        logger.error(f"Error retrieving user_id for OAuth token: {str(e)}")
+        return None
+
 async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth1: bool = False) -> dict:
     """Initialize Twitter OAuth flow."""
     try:
