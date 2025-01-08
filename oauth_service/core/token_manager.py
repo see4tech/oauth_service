@@ -17,35 +17,31 @@ class TokenManager:
         self.db = SqliteDB()
     
     def encrypt_token_data(self, token_data: Dict) -> str:
-        """
-        Encrypt token data for storage.
-        
-        Args:
-            token_data: Dictionary containing token information
-            
-        Returns:
-            Encrypted token data string
-        """
-        json_data = json.dumps(token_data)
-        return self.fernet.encrypt(json_data.encode()).decode()
+        """Encrypt token data for storage."""
+        try:
+            logger.debug("=== Encrypting Token Data ===")
+            json_data = json.dumps(token_data)
+            logger.debug(f"Token data serialized, length: {len(json_data)}")
+            encrypted = self.fernet.encrypt(json_data.encode())
+            logger.debug(f"Token data encrypted, length: {len(encrypted)}")
+            return encrypted.decode()
+        except Exception as e:
+            logger.error(f"Error encrypting token data: {str(e)}")
+            raise
     
     def decrypt_token_data(self, encrypted_data: str) -> Dict:
-        """
-        Decrypt token data from storage.
-        
-        Args:
-            encrypted_data: Encrypted token string
-            
-        Returns:
-            Dictionary containing decrypted token information
-        """
+        """Decrypt token data from storage."""
         try:
-            json_data = self.fernet.decrypt(encrypted_data.encode()).decode()
-            return json.loads(json_data)
+            logger.debug("=== Decrypting Token Data ===")
+            logger.debug(f"Encrypted data length: {len(encrypted_data)}")
+            decrypted = self.fernet.decrypt(encrypted_data.encode())
+            logger.debug("Successfully decrypted data")
+            json_data = decrypted.decode()
+            token_data = json.loads(json_data)
+            logger.debug(f"Successfully parsed token data with keys: {list(token_data.keys())}")
+            return token_data
         except Exception as e:
-            # Check if this is test data
-            if encrypted_data == "debug_test_token":
-                return {"access_token": "test_token", "token_type": "Bearer"}
+            logger.error(f"Error decrypting token data: {str(e)}")
             raise
     
     async def store_token(self, platform: str, user_id: str, token_data: Dict) -> None:
@@ -56,10 +52,22 @@ class TokenManager:
             logger.info(f"User ID: {user_id}")
             logger.info(f"Token data keys: {list(token_data.keys())}")
             
-            # Store token data
-            db = SqliteDB()
-            db.store_token(user_id, platform, json.dumps(token_data))
-            logger.info("Successfully stored OAuth token")
+            # Encrypt token data before storing
+            encrypted_data = self.encrypt_token_data(token_data)
+            logger.debug("Token data encrypted successfully")
+            
+            # Store encrypted token data
+            self.db.store_token(user_id, platform, encrypted_data)
+            logger.info("Successfully stored encrypted OAuth token")
+            
+            # Verify storage by retrieving and decrypting
+            stored_data = await self.get_token(platform, user_id)
+            if stored_data:
+                logger.info("Successfully verified token storage and retrieval")
+                logger.debug(f"Retrieved token keys: {list(stored_data.keys())}")
+            else:
+                logger.error("Failed to verify token storage")
+            
         except Exception as e:
             logger.error(f"Error storing token: {str(e)}")
             raise
@@ -69,11 +77,15 @@ class TokenManager:
         try:
             encrypted_data = self.db.get_token(user_id, platform)
             if encrypted_data:
-                token_data = self.decrypt_token_data(encrypted_data)
-                logger.debug(f"Retrieved token data structure: {list(token_data.keys())}")
-                if platform == "twitter" and 'oauth2' in token_data:
-                    logger.debug(f"OAuth 2.0 token keys: {list(token_data['oauth2'].keys())}")
-                return token_data
+                logger.debug("Found encrypted token data, attempting to decrypt")
+                try:
+                    token_data = self.decrypt_token_data(encrypted_data)
+                    logger.debug(f"Successfully decrypted token with keys: {list(token_data.keys())}")
+                    return token_data
+                except Exception as decrypt_error:
+                    logger.error(f"Failed to decrypt token: {str(decrypt_error)}")
+                    return None
+            logger.debug(f"No token found for user {user_id} on platform {platform}")
             return None
         except Exception as e:
             logger.error(f"Error retrieving token: {str(e)}")
