@@ -115,64 +115,61 @@ class TwitterOAuth(OAuthBase):
                              oauth1_verifier: Optional[str] = None,
                              code_verifier: Optional[str] = None) -> Dict:
         """Exchange authorization codes for access tokens."""
-        tokens = {}
-        
-        if oauth2_code:
-            try:
-                logger.debug("Starting OAuth 2.0 token exchange")
-                logger.debug(f"Code verifier present: {bool(code_verifier)}")
-                
-                # Create Basic Auth header
-                auth_string = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
-                basic_auth = base64.b64encode(auth_string.encode()).decode()
-                
-                # Set up token exchange parameters
-                token_data = {
-                    'code': oauth2_code,
-                    'grant_type': 'authorization_code',
-                    'redirect_uri': self.callback_url,  # Use the callback URL as-is
-                    'code_verifier': code_verifier
-                }
-                
-                headers = {
-                    'Authorization': f'Basic {basic_auth}',
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
-                
-                logger.debug(f"Token exchange URL: https://api.twitter.com/2/oauth2/token")
-                logger.debug(f"Token exchange data: {token_data}")
-                logger.debug(f"Token exchange headers: {headers}")
-                
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(
-                        'https://api.twitter.com/2/oauth2/token',
-                        data=token_data,
-                        headers=headers
-                    ) as response:
-                        if not response.ok:
-                            error_text = await response.text()
-                            logger.error(f"Token exchange failed with status {response.status}: {error_text}")
-                            raise ValueError(f"Token exchange failed: {error_text}")
-                        
-                        token = await response.json()
-                        
-                        # Log token response for debugging
-                        logger.debug(f"OAuth 2.0 token response keys: {list(token.keys())}")
-                        logger.debug(f"OAuth 2.0 token response scopes: {token.get('scope', '')}")
-                        logger.debug(f"Has refresh_token: {bool(token.get('refresh_token'))}")
-                        
-                        tokens['oauth2'] = {
-                            'access_token': token['access_token'],
-                            'refresh_token': token.get('refresh_token'),
-                            'expires_in': token.get('expires_in', 7200),
-                            'expires_at': token.get('expires_at', datetime.utcnow().timestamp() + token.get('expires_in', 7200))
-                        }
-                        
-                        logger.debug(f"OAuth 2.0 tokens obtained successfully. Has refresh token: {bool(tokens['oauth2'].get('refresh_token'))}")
+        try:
+            logger.debug("Starting OAuth 2.0 token exchange")
+            logger.debug(f"Code verifier present: {bool(code_verifier)}")
             
-            except Exception as e:
-                logger.error(f"Error exchanging OAuth 2.0 code: {str(e)}")
-                raise
+            # Create Basic Auth header
+            auth_string = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
+            basic_auth = base64.b64encode(auth_string.encode()).decode()
+            
+            # Set up token exchange parameters
+            token_data = {
+                'code': oauth2_code,
+                'grant_type': 'authorization_code',
+                'redirect_uri': self.callback_url,  # Use the same callback URL as authorization
+                'code_verifier': code_verifier
+            }
+            
+            headers = {
+                'Authorization': f'Basic {basic_auth}',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+            
+            logger.debug(f"Token exchange URL: https://api.twitter.com/2/oauth2/token")
+            logger.debug(f"Token exchange data: {token_data}")
+            logger.debug(f"Token exchange headers: {headers}")
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    'https://api.twitter.com/2/oauth2/token',
+                    data=token_data,
+                    headers=headers
+                ) as response:
+                    if not response.ok:
+                        error_text = await response.text()
+                        logger.error(f"Token exchange failed with status {response.status}: {error_text}")
+                        raise ValueError(f"Token exchange failed: {error_text}")
+                    
+                    token = await response.json()
+                    
+                    # Log token response for debugging
+                    logger.debug(f"OAuth 2.0 token response keys: {list(token.keys())}")
+                    logger.debug(f"OAuth 2.0 token response scopes: {token.get('scope', '')}")
+                    logger.debug(f"Has refresh_token: {bool(token.get('refresh_token'))}")
+                    
+                    tokens['oauth2'] = {
+                        'access_token': token['access_token'],
+                        'refresh_token': token.get('refresh_token'),
+                        'expires_in': token.get('expires_in', 7200),
+                        'expires_at': token.get('expires_at', datetime.utcnow().timestamp() + token.get('expires_in', 7200))
+                    }
+                    
+                    logger.debug(f"OAuth 2.0 tokens obtained successfully. Has refresh token: {bool(tokens['oauth2'].get('refresh_token'))}")
+            
+        except Exception as e:
+            logger.error(f"Error exchanging OAuth 2.0 code: {str(e)}")
+            raise
         
         if oauth1_verifier:
             try:
