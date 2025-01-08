@@ -484,3 +484,117 @@ async def twitter_oauth1_callback(
             version="1",
             auto_close=True
         )
+
+@callback_router.get("/twitter/callback/2")
+async def twitter_oauth2_callback(
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None
+) -> HTMLResponse:
+    """Handle Twitter OAuth 2.0 callback."""
+    try:
+        logger.info("=== Twitter OAuth 2.0 Callback Start ===")
+        logger.info(f"Code present: {bool(code)}")
+        logger.info(f"State present: {bool(state)}")
+        
+        if not code or not state:
+            return create_html_response(
+                error="Missing OAuth parameters",
+                platform="twitter",
+                version="2",
+                auto_close=True
+            )
+        
+        # Initialize OAuth handler
+        oauth_handler = await get_oauth_handler("twitter")
+        
+        # Verify state and extract user_id
+        state_data = oauth_handler.verify_state(state)
+        if not state_data:
+            return create_html_response(
+                error="Invalid state",
+                platform="twitter",
+                version="2",
+                auto_close=True
+            )
+        
+        user_id = state_data['user_id']
+        logger.info(f"Processing callback for user_id: {user_id}")
+        
+        # Get code verifier
+        code_verifier = await get_code_verifier(state)
+        if not code_verifier:
+            return create_html_response(
+                error="Invalid code verifier",
+                platform="twitter",
+                version="2",
+                auto_close=True
+            )
+        
+        # Exchange code for tokens
+        token_data = await oauth_handler.get_access_token(oauth2_code=code, code_verifier=code_verifier)
+        
+        # Store tokens
+        token_manager = TokenManager()
+        await token_manager.store_token(
+            platform="twitter",
+            user_id=user_id,
+            token_data={'oauth2': token_data}
+        )
+        
+        # Generate and store API key
+        api_key = generate_api_key()
+        logger.info("=== API Key Generation ===")
+        logger.info(f"Generated API key: {api_key}")
+        
+        # Store with oauth2 suffix
+        platform_with_version = "twitter-oauth2"
+        
+        # Prepare payload for external storage
+        external_storage_payload = {
+            "user_id": user_id,
+            "platform": platform_with_version,
+            "api_key": api_key
+        }
+        
+        # Store API key in external service
+        api_key_storage = APIKeyStorage()
+        stored = await api_key_storage.store_api_key(**external_storage_payload)
+        if not stored:
+            raise ValueError("Failed to store API key in external service")
+        logger.info(f"Successfully stored API key in external service for {platform_with_version}")
+        
+        # Store the SAME api_key locally
+        try:
+            logger.info("=== Local Database Storage ===")
+            logger.info(f"Attempting to store in SQLite - User ID: {user_id}, Platform: {platform_with_version}, API Key: {api_key}")
+            
+            db = SqliteDB()
+            db.store_user_api_key(user_id, platform=platform_with_version, api_key=api_key)
+            logger.info(f"Successfully stored API key in local database for {platform_with_version}")
+            
+            # Verify the stored key
+            stored_key = db.get_user_api_key(user_id, platform_with_version)
+            logger.info("=== Local Storage Verification ===")
+            logger.info(f"Original API Key: {api_key}")
+            logger.info(f"Stored API Key: {stored_key}")
+            logger.info(f"Keys match: {stored_key == api_key}")
+        except Exception as e:
+            logger.error(f"Failed to store API key in local database: {str(e)}")
+            raise
+        
+        return create_html_response(
+            platform="twitter",
+            version="2",
+            success=True,
+            auto_close=True
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in Twitter OAuth 2.0 callback: {str(e)}")
+        return create_html_response(
+            error=str(e),
+            platform="twitter",
+            version="2",
+            auto_close=True
+        )
