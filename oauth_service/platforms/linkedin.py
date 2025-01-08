@@ -103,11 +103,15 @@ class LinkedInOAuth(OAuthBase):
                         )
                     
                     data = json.loads(response_text)
-                    return {
+                    token_data = {
                         "access_token": data["access_token"],
+                        "token_type": data.get("token_type", "Bearer"),
                         "expires_in": data.get("expires_in", 3600),
-                        "refresh_token": data.get("refresh_token")
+                        "refresh_token": data.get("refresh_token"),
+                        "scope": data.get("scope"),
+                        "api_key": data.get("api_key")
                     }
+                    return token_data
                     
         except Exception as e:
             logger.error(f"Error exchanging code for token: {str(e)}")

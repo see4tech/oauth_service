@@ -15,8 +15,6 @@ from .core.token_refresh import start_refresh_service, stop_refresh_service
 import asyncio
 from .core.db import SqliteDB
 import requests
-import base64
-from typing import Optional
 
 # Initialize settings and logger
 settings = get_settings()
@@ -108,113 +106,37 @@ async def lifespan(app: FastAPI):
     
     logger.info("Shutting down OAuth Service")
 
-def normalize_api_key(api_key: Optional[str]) -> Optional[str]:
-    """Normalize API key by removing any encoding/padding."""
-    if not api_key:
-        return None
-    
-    original_key = api_key
-    logger.debug(f"Normalizing API key: {api_key[:4]}...{api_key[-4:] if api_key else None}")
-    
-    try:
-        # First try: direct base64 decode
-        if api_key.endswith('='):
-            try:
-                # Add padding if needed
-                padding_needed = len(api_key) % 4
-                if padding_needed:
-                    api_key += '=' * (4 - padding_needed)
-                
-                decoded = base64.b64decode(api_key).decode('utf-8')
-                logger.debug(f"Successfully decoded base64 key: {decoded[:4]}...{decoded[-4:] if decoded else None}")
-                return decoded
-            except Exception as e:
-                logger.debug(f"First base64 decode attempt failed: {str(e)}")
-        
-        # Second try: URL-safe base64 decode
-        try:
-            decoded = base64.urlsafe_b64decode(api_key).decode('utf-8')
-            logger.debug(f"Successfully decoded URL-safe base64 key: {decoded[:4]}...{decoded[-4:] if decoded else None}")
-            return decoded
-        except Exception as e:
-            logger.debug(f"URL-safe base64 decode attempt failed: {str(e)}")
-        
-        # If all decoding attempts fail, return original
-        logger.debug("Returning original key (no successful decoding)")
-        return original_key
-        
-    except Exception as e:
-        logger.debug(f"Error during key normalization: {str(e)}")
-        return original_key
-
 async def get_api_key(api_key_header: str = Security(api_key_header), request: Request = None):
     """Validate API key from request header."""
     logger.debug("=== API Key Validation Start ===")
+    logger.debug(f"Received API key header: {api_key_header[:4]}...{api_key_header[-4:] if api_key_header else None}")
+    logger.debug(f"Configured API key: {settings.API_KEY[:4]}...{settings.API_KEY[-4:] if settings.API_KEY else None}")
     
-    if not api_key_header:
-        raise HTTPException(
-            status_code=HTTP_403_FORBIDDEN,
-            detail="No API key provided"
-        )
-    
-    # First try exact matches before attempting any normalization
+    # Direct comparison with global API key
     if api_key_header == settings.API_KEY:
-        logger.debug("Global API key validation successful (exact match)")
+        logger.debug("Global API key validation successful")
         return api_key_header
 
     try:
-        # Extract user_id and platform from request body for POST requests
         if request and request.method == "POST":
             try:
-                # Read raw body first to verify it's valid JSON
-                raw_body = await request.body()
-                if not raw_body:
-                    logger.debug("No request body found")
-                    raise HTTPException(
-                        status_code=HTTP_403_FORBIDDEN,
-                        detail="Invalid API key"
-                    )
-                
-                try:
-                    body = await request.json()
-                except Exception as e:
-                    logger.error(f"Failed to parse JSON body: {str(e)}")
-                    raise HTTPException(
-                        status_code=HTTP_403_FORBIDDEN,
-                        detail="Invalid API key"
-                    )
-                
+                body = await request.json()
                 user_id = body.get("user_id")
                 path_parts = request.url.path.split("/")
                 platform = path_parts[2] if len(path_parts) > 2 else None
-                
-                logger.debug(f"Checking user-specific API key - User ID: {user_id}, Platform: {platform}")
                 
                 if user_id and platform:
                     db = SqliteDB()
                     stored_api_key = db.get_user_api_key(user_id, platform)
                     
-                    if stored_api_key:
-                        logger.debug(f"Found stored API key for user {user_id} and platform {platform}")
-                        
-                        # Try exact match first
-                        if stored_api_key == api_key_header:
-                            logger.debug("User-specific API key validation successful (exact match)")
-                            return api_key_header
-                        
-                        # Log the key lengths and formats for debugging
-                        logger.debug(f"Stored key length: {len(stored_api_key)}")
-                        logger.debug(f"Header key length: {len(api_key_header)}")
-                        logger.debug(f"Stored key format: {'base64' if '=' in stored_api_key else 'plain'}")
-                        logger.debug(f"Header key format: {'base64' if '=' in api_key_header else 'plain'}")
-                        
-                        logger.debug("User-specific API key mismatch")
-                    else:
-                        logger.debug(f"No stored API key found for user {user_id} and platform {platform}")
-            except HTTPException:
-                raise
+                    # Direct comparison with stored key
+                    if stored_api_key and stored_api_key == api_key_header:
+                        logger.debug("User-specific API key validation successful")
+                        return api_key_header
+                    
+                    logger.debug("User-specific API key mismatch")
             except Exception as e:
-                logger.error(f"Error processing request body: {str(e)}")
+                logger.error(f"Error processing request: {str(e)}")
                 logger.error(f"Request path: {request.url.path}")
                 logger.error(f"Request method: {request.method}")
     except Exception as e:

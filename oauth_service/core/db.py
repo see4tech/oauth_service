@@ -224,122 +224,55 @@ class SqliteDB:
             raise
     
     def store_user_api_key(self, user_id: str, platform: str, api_key: str) -> None:
-        """
-        Store or update a user's API key.
-        
-        Args:
-            user_id (str): Unique identifier for the user
-            platform (str): Platform identifier (e.g., 'twitter', 'linkedin')
-            api_key (str): Generated API key
-        """
+        """Store the API key exactly as received."""
         try:
-            with self._lock:
-                cursor = self.conn.cursor()
-                cursor.execute('''
-                    INSERT OR REPLACE INTO user_api_keys 
-                    (user_id, platform, api_key)
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO user_api_keys (user_id, platform, api_key)
                     VALUES (?, ?, ?)
-                ''', (user_id, platform, api_key))
-                self.conn.commit()
-        except sqlite3.Error as e:
-            logger.error(f"Error storing user API key: {e}")
+                    """,
+                    (user_id, platform, api_key)
+                )
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Error storing API key: {str(e)}")
             raise
             
     def get_user_api_key(self, user_id: str, platform: str) -> Optional[str]:
-        """Get the stored API key for a user and platform."""
+        """Retrieve the API key exactly as stored."""
         try:
-            print(f"\n=== Getting API key for user {user_id} on platform {platform} ===")
-            with self._lock:
-                cursor = self.conn.cursor()
-                
-                # First check if the user exists
-                cursor.execute('''
-                    SELECT COUNT(*) 
-                    FROM user_api_keys 
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT api_key FROM user_api_keys
                     WHERE user_id = ? AND platform = ?
-                ''', (user_id, platform))
-                count = cursor.fetchone()[0]
-                print(f"Found {count} records for user {user_id} on platform {platform}")
-                
-                if count == 0:
-                    print(f"No API key record found for user {user_id} on platform {platform}")
-                    return None
-                
-                # Get the API key
-                cursor.execute('''
-                    SELECT api_key 
-                    FROM user_api_keys 
-                    WHERE user_id = ? AND platform = ?
-                ''', (user_id, platform))
+                    """,
+                    (user_id, platform)
+                )
                 result = cursor.fetchone()
-                
-                if result:
-                    print(f"Successfully retrieved API key")
-                    return result[0]
-                else:
-                    print(f"Failed to retrieve API key for user {user_id}")
-                    return None
-                
+                return result[0] if result else None
         except Exception as e:
-            print(f"Database error getting API key: {str(e)}")
+            logger.error(f"Error retrieving API key: {str(e)}")
             return None
     
     def validate_user_api_key(self, api_key: str, platform: str) -> Optional[str]:
-        """
-        Validate an API key and return the associated user_id.
-        
-        Args:
-            api_key (str): API key to validate
-            platform (str): Platform to validate against
-            
-        Returns:
-            Optional[str]: The user_id associated with the API key or None if invalid
-        """
+        """Validate an API key and return the associated user_id."""
         try:
-            print("\n=== Database API Key Validation ===")
-            print(f"Platform: {platform}")
-            print(f"API key to validate: {api_key}")
-            
             with self._lock:
                 cursor = self.conn.cursor()
-                
-                # Show all API keys for debugging
+                # Direct comparison in SQL
                 cursor.execute('''
-                    SELECT user_id, api_key, created_at, last_used_at
-                    FROM user_api_keys
-                    WHERE platform = ?
-                ''', (platform,))
-                rows = cursor.fetchall()
-                print(f"\nFound {len(rows)} API keys for platform {platform}:")
-                for row in rows:
-                    print(f"- User ID: {row[0]}")
-                    print(f"  API Key: {row[1]}")
-                    print(f"  Created: {row[2]}")
-                    print(f"  Last Used: {row[3]}")
-                print()
-                
-                # Validate the specific API key
-                cursor.execute('''
-                    UPDATE user_api_keys 
-                    SET last_used_at = CURRENT_TIMESTAMP
+                    SELECT user_id FROM user_api_keys
                     WHERE api_key = ? AND platform = ?
-                    RETURNING user_id
                 ''', (api_key, platform))
                 result = cursor.fetchone()
-                self.conn.commit()
-                
-                if result:
-                    print(f"API key validated successfully for user: {result[0]}")
-                else:
-                    print("No matching API key found")
-                    print(f"Provided API key: {api_key}")
-                
-                print("=== Database API Key Validation End ===\n")
                 return result[0] if result else None
-            
-        except sqlite3.Error as e:
-            print(f"Database error validating user API key: {e}")
-            raise
+        except Exception as e:
+            logger.error(f"Error validating API key: {str(e)}")
+            return None
     
     @classmethod
     def get_instance(cls):

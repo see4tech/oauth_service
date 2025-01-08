@@ -20,6 +20,7 @@ from .oauth_callbacks import init_twitter_oauth
 from ..utils.crypto import generate_oauth_state
 import json
 from urllib.parse import urlparse, urljoin
+from ..utils.encryption import encrypt_api_key
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -165,78 +166,54 @@ async def exchange_code(
                 detail="Invalid state parameter"
             )
         
+        # Get user_id from state data
+        user_id = state_data.get('user_id')
+        if not user_id:
+            raise HTTPException(
+                status_code=400,
+                detail="No user_id in state data"
+            )
+
+        token_data = None
+        
         # For Twitter, handle OAuth 1.0a and 2.0 separately
         if platform == "twitter":
-            # Check if this is an OAuth 1.0a callback
             if request.oauth1_verifier:
-                logger.debug("Processing OAuth 1.0a token exchange")
+                # OAuth 1.0a flow
                 token_data = await oauth_handler.get_access_token(
                     oauth1_verifier=request.oauth1_verifier
                 )
-                if not token_data or 'oauth1' not in token_data:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Failed to get OAuth 1.0a tokens"
-                    )
-                oauth1_data = token_data['oauth1']
-                return TokenResponse(
-                    access_token=oauth1_data["access_token"],
-                    token_type="OAuth1",
-                    expires_in=0,  # OAuth 1.0a tokens don't expire
-                    access_token_secret=oauth1_data["access_token_secret"]
-                )
-            # Otherwise, treat as OAuth 2.0
             else:
-                # Get code verifier from storage
+                # OAuth 2.0 flow
                 code_verifier = await get_code_verifier(request.state)
-                if not code_verifier:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Code verifier not found"
-                    )
-                
                 token_data = await oauth_handler.get_access_token(
                     oauth2_code=request.code,
                     code_verifier=code_verifier
                 )
-                if not token_data or 'oauth2' not in token_data:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Failed to get OAuth 2.0 tokens"
-                    )
-                
-                # Store OAuth 1.0a request token if available
-                if 'oauth1_request_token' in token_data and 'oauth1_request_token_secret' in token_data:
-                    logger.debug("Storing OAuth 1.0a request token")
-                    oauth_handler.oauth1_handler.request_token = {
-                        'oauth_token': token_data['oauth1_request_token'],
-                        'oauth_token_secret': token_data['oauth1_request_token_secret']
-                    }
-                
-                oauth2_data = token_data['oauth2']
-                response = TokenResponse(
-                    access_token=oauth2_data["access_token"],
-                    token_type="Bearer",
-                    expires_in=oauth2_data.get("expires_in", 3600),
-                    refresh_token=oauth2_data.get("refresh_token"),
-                    scope=oauth2_data.get("scope")
-                )
-                
-                # Include OAuth 1.0a URL if available
-                if 'oauth1_url' in token_data:
-                    response.oauth1_url = token_data['oauth1_url']
-                
-                return response
         else:
+            # Standard OAuth 2.0 flow for other platforms
             token_data = await oauth_handler.get_access_token(request.code)
-            
+        
+        if not token_data:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to get access token"
+            )
+
+        # Store token data
         token_manager = TokenManager()
         await token_manager.store_token(
             platform=platform,
-            user_id=state_data['user_id'],
+            user_id=user_id,
             token_data=token_data
         )
         
+        # Store the API key as-is if it's in the token data
+        if 'api_key' in token_data:
+            db = SqliteDB()
+            db.store_user_api_key(user_id, platform, token_data['api_key'])
+            logger.debug(f"Stored API key for user {user_id} on platform {platform}")
+
         return TokenResponse(
             access_token=token_data["access_token"],
             token_type=token_data.get("token_type", "Bearer"),
@@ -470,3 +447,21 @@ async def get_profile(
     except Exception as e:
         logger.error(f"Error getting profile from {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{platform}/store_token")
+async def store_oauth_token(platform: str, token_data: dict):
+    try:
+        user_id = token_data.get("user_id")
+        api_key = token_data.get("api_key")
+        
+        if not user_id or not api_key:
+            raise HTTPException(status_code=400, detail="Missing user_id or api_key")
+            
+        # Store the API key as-is
+        db = SqliteDB()
+        db.store_user_api_key(user_id, platform, api_key)
+        
+        return {"status": "success", "message": "API key stored successfully"}
+    except Exception as e:
+        logger.error(f"Error storing OAuth token: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
