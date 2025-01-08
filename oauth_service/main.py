@@ -14,6 +14,7 @@ from .utils.logger import get_logger
 from .core.token_refresh import start_refresh_service, stop_refresh_service
 import asyncio
 from .core.db import SqliteDB
+import requests
 
 # Initialize settings and logger
 settings = get_settings()
@@ -108,58 +109,49 @@ async def lifespan(app: FastAPI):
 async def get_api_key(api_key_header: str = Security(api_key_header), request: Request = None):
     """Validate API key from request header."""
     logger.debug("=== API Key Validation Start ===")
+    logger.debug(f"Received API key header: {api_key_header[:4]}...{api_key_header[-4:] if api_key_header else None}")
+    logger.debug(f"Configured API key: {settings.API_KEY[:4]}...{settings.API_KEY[-4:] if settings.API_KEY else None}")
     
+    # First check against global API key
+    if api_key_header == settings.API_KEY:
+        logger.debug("Global API key validation successful")
+        return api_key_header
+
     try:
         # Extract user_id and platform from request body for POST requests
         if request and request.method == "POST":
             try:
-                logger.debug(f"Request path: {request.url.path}")
-                logger.debug(f"Request method: {request.method}")
-                
                 body = await request.json()
-                logger.debug("Request body received")
-                
                 user_id = body.get("user_id")
                 path_parts = request.url.path.split("/")
                 platform = path_parts[2] if len(path_parts) > 2 else None
                 
-                logger.debug(f"Extracted user_id: {user_id}")
-                logger.debug(f"Extracted platform: {platform}")
+                logger.debug(f"Checking user-specific API key - User ID: {user_id}, Platform: {platform}")
                 
                 if user_id and platform:
-                    # Get stored API key for this user and platform
                     db = SqliteDB()
                     stored_api_key = db.get_user_api_key(user_id, platform)
                     
                     if stored_api_key and stored_api_key == api_key_header:
-                        logger.debug("API key validation successful")
+                        logger.debug("User-specific API key validation successful")
                         return api_key_header
-                    logger.debug("API key mismatch")
+                    logger.debug("User-specific API key mismatch")
             except Exception as e:
-                logger.error(f"Error parsing request body: {str(e)}")
-    
+                logger.error(f"Error processing request body: {str(e)}")
     except Exception as e:
         logger.error(f"Error during API key validation: {str(e)}")
 
-    logger.debug("=== Falling back to global API key validation ===")
-    # Fallback to global API key validation
-    if not settings.API_KEY:
-        logger.debug("No API key configured in settings")
-        return None
+    # If we reach here, no valid API key was found
     if not api_key_header:
-        logger.debug("No API key provided in request")
         raise HTTPException(
             status_code=HTTP_403_FORBIDDEN,
             detail="No API key provided"
         )
-    if api_key_header != settings.API_KEY:
-        logger.debug("API key validation failed")
-        raise HTTPException(
-            status_code=HTTP_403_FORBIDDEN,
-            detail="Invalid API key"
-        )
-    logger.debug("API key validation successful (global)")
-    return api_key_header
+    
+    raise HTTPException(
+        status_code=HTTP_403_FORBIDDEN,
+        detail="Invalid API key"
+    )
 
 # Initialize FastAPI app
 app = FastAPI(
