@@ -65,9 +65,7 @@ class LinkedInOAuth(OAuthBase):
             raise
 
     async def get_access_token(self, code: str) -> Dict:
-        """
-        Exchange authorization code for access token.
-        """
+        """Exchange authorization code for access token."""
         try:
             logger.debug(f"Exchanging code for access token. Code: {code[:10]}...")
             
@@ -109,8 +107,9 @@ class LinkedInOAuth(OAuthBase):
                         "expires_in": data.get("expires_in", 3600),
                         "refresh_token": data.get("refresh_token"),
                         "scope": data.get("scope"),
-                        "api_key": data.get("api_key")
+                        "api_key": data.get("access_token")  # Using access_token as api_key
                     }
+                    logger.debug(f"Prepared token data with API key: {token_data['api_key'][:10]}...")
                     return token_data
                     
         except Exception as e:

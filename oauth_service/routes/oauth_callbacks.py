@@ -98,290 +98,52 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
             detail=f"Failed to initialize Twitter OAuth: {str(e)}"
         )
 
-@callback_router.get("/{platform}/callback/{version}")
+@callback_router.get("/{platform}/callback")
 async def oauth_callback(
     request: Request,
     platform: str,
-    version: str,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
     error_description: Optional[str] = None
-) -> HTMLResponse:
-    """Handle OAuth callback for platforms that use versioned callbacks (Twitter)"""
-    if platform == "linkedin":
-        # Redirect LinkedIn callbacks to the dedicated endpoint
-        return RedirectResponse(url=f"/oauth/linkedin/callback?{request.query_params}")
-    
+):
+    """Handle OAuth callbacks for platforms other than LinkedIn."""
     try:
-        logger.info(f"Received callback for platform: {platform}, version: {version}")
+        # Skip if it's LinkedIn as it has its own handler
+        if platform == "linkedin":
+            raise HTTPException(status_code=404, detail="Not found")
+            
+        logger.info(f"Received {platform.title()} callback")
         logger.info(f"Code present: {bool(code)}")
         logger.info(f"State present: {bool(state)}")
-        logger.debug(f"Actual state value received: {state}")
         
-        # Handle OAuth errors
-        if error:
-            logger.error(f"OAuth error: {error}")
-            logger.error(f"Error description: {error_description}")
-            return create_html_response(
-                error=error_description or error,
-                platform=platform,
-                version=version,
-                auto_close=True
-            )
+        # Initialize OAuth handler
+        oauth_handler = await get_oauth_handler(platform)
+        
+        # Verify state and extract user_id
+        logger.info(f"Attempting to verify state: {state}")
+        state_data = oauth_handler.verify_state(state)
+        if not state_data:
+            raise HTTPException(status_code=400, detail="Invalid state parameter")
+        
+        logger.info(f"State verification successful. State data: {state_data}")
+        
+        user_id = state_data.get('user_id')
+        logger.info(f"Processing callback for user_id: {user_id}")
+        
+        # Exchange code for token
+        token_data = await oauth_handler.get_access_token(code)
+        
+        # Store API key if present
+        if 'api_key' in token_data:
+            logger.debug(f"API key present in token data: {token_data['api_key'][:10]}...")
+            try:
+                db = SqliteDB()
+                db.store_user_api_key(user_id, platform, token_data['api_key'])
+                logger.info(f"Successfully stored API key for user {user_id}")
+            except Exception as e:
+                logger.error(f"Error storing API key: {str(e)}")
 
-        success = False
-        try:
-            if platform == "twitter":
-                # Twitter-specific handling with OAuth 1.0a and 2.0
-                settings = get_settings()
-                
-                # Get base callback URL from settings and append version
-                base_callback_url = settings.TWITTER_CALLBACK_URL.rstrip('/')
-                callback_url = f"{base_callback_url}/{version}"
-                
-                logger.debug(f"Using callback URL for token exchange: {callback_url}")
-                
-                # Initialize OAuth handler with the same callback URL
-                oauth = TwitterOAuth(
-                    client_id=settings.TWITTER_CLIENT_ID,
-                    client_secret=settings.TWITTER_CLIENT_SECRET,
-                    consumer_key=settings.TWITTER_CONSUMER_KEY,
-                    consumer_secret=settings.TWITTER_CONSUMER_SECRET,
-                    callback_url=callback_url
-                )
-                
-                # Get OAuth 1.0a parameters
-                oauth_token = request.query_params.get('oauth_token')
-                oauth_verifier = request.query_params.get('oauth_verifier')
-                
-                logger.debug(f"OAuth 1.0a parameters - token: {oauth_token}, verifier: {oauth_verifier}")
-                
-                if version == "1":
-                    # Twitter OAuth 1.0a flow
-                    if not oauth_token or not oauth_verifier:
-                        return create_html_response(
-                            error="Missing OAuth 1.0a parameters",
-                            platform=platform,
-                            version=version,
-                            auto_close=True
-                        )
-                    
-                    # Get user_id from stored request token
-                    user_id = await get_code_verifier(oauth_token)  # Reuse code_verifier storage
-                    logger.debug(f"Retrieved user_id from token storage: {user_id}")
-                    
-                    if not user_id:
-                        return create_html_response(
-                            error="Could not find user_id for request token",
-                            platform=platform,
-                            version=version,
-                            auto_close=True
-                        )
-                            
-                    logger.info(f"Processing Twitter OAuth 1.0a callback for user_id: {user_id}")
-                    
-                    # Set up the request token for the OAuth handler
-                    oauth.oauth1_handler.request_token = {
-                        'oauth_token': oauth_token,
-                        'oauth_token_secret': ''  # Twitter doesn't use token secret in the callback
-                    }
-                    
-                    # Exchange verifier for tokens
-                    access_token, access_token_secret = oauth.oauth1_handler.get_access_token(oauth_verifier)
-                    tokens = {
-                        'oauth1': {
-                            'access_token': access_token,
-                            'access_token_secret': access_token_secret
-                        }
-                    }
-                    
-                    if not tokens or 'oauth1' not in tokens:
-                        return create_html_response(
-                            error="Failed to get OAuth 1.0a tokens",
-                            platform=platform,
-                            version=version,
-                            auto_close=True
-                        )
-                    
-                    # Generate and store API key
-                    api_key = generate_api_key()
-                    
-                    # Store API key in external service
-                    api_key_storage = APIKeyStorage()
-                    
-                    # For OAuth 1.0a, combine access token and secret in a format we can parse later
-                    combined_token = f"{tokens['oauth1']['access_token']}:{tokens['oauth1']['access_token_secret']}"
-                    
-                    stored = await api_key_storage.store_api_key(
-                        user_id=user_id,
-                        platform="twitter-oauth1",  # Specific platform for OAuth 1.0a
-                        api_key=api_key,
-                        access_token=combined_token,
-                        expires_in=0  # OAuth 1.0a tokens don't expire
-                    )
-                    
-                    if not stored:
-                        raise ValueError("Failed to store API key")
-                    
-                    logger.info(f"Successfully stored API key for Twitter OAuth 1.0a user {user_id}")
-                    success = True
-                else:
-                    # Twitter OAuth 2.0 flow
-                    if not code or not state:
-                        return create_html_response(
-                            error="Missing OAuth 2.0 parameters",
-                            platform=platform,
-                            version=version,
-                            auto_close=True
-                        )
-                    
-                    # Get code verifier for PKCE
-                    code_verifier = await get_code_verifier(state)
-                    if not code_verifier:
-                        logger.error("Code verifier not found for state")
-                        return create_html_response(
-                            error="Code verifier not found",
-                            platform=platform,
-                            version=version,
-                            auto_close=True
-                        )
-                        
-                    logger.debug(f"Found code verifier for state: {bool(code_verifier)}")
-                    
-                    # Verify state to get user_id
-                    state_data = oauth.verify_state(state)
-                    if not state_data:
-                        return create_html_response(
-                            error="Invalid state",
-                            platform=platform,
-                            version=version,
-                            auto_close=True
-                        )
-                    
-                    user_id = state_data['user_id']
-                    logger.info(f"Processing Twitter OAuth 2.0 callback for user_id: {user_id}")
-                    
-                    # Exchange code for tokens
-                    tokens = await oauth.get_access_token(
-                        oauth2_code=code,
-                        code_verifier=code_verifier
-                    )
-                    
-                    if not tokens or 'oauth2' not in tokens:
-                        return create_html_response(
-                            error="Failed to get OAuth 2.0 tokens",
-                            platform=platform,
-                            version=version,
-                            auto_close=True
-                        )
-                    
-                    # Generate and store API key
-                    api_key = generate_api_key()
-                    
-                    # Store API key in external service
-                    api_key_storage = APIKeyStorage()
-                    stored = await api_key_storage.store_api_key(
-                        user_id=user_id,
-                        platform="twitter-oauth2",  # Specific platform for OAuth 2.0
-                        api_key=api_key,
-                        access_token=tokens['oauth2']['access_token'],
-                        refresh_token=tokens['oauth2'].get('refresh_token'),
-                        expires_in=tokens['oauth2'].get('expires_in', 7200)
-                    )
-                    
-                    if not stored:
-                        raise ValueError("Failed to store API key")
-                    
-                    logger.info(f"Successfully stored API key for Twitter OAuth 2.0 user {user_id}")
-                    success = True
-            else:
-                # LinkedIn and other OAuth 2.0-only platforms
-                oauth_handler = await get_oauth_handler(platform)
-                
-                if not code or not state:
-                    return create_html_response(
-                        error="Missing OAuth parameters",
-                        platform=platform,
-                        version=version,
-                        auto_close=True
-                    )
-                
-                # Verify state
-                logger.info(f"Attempting to verify state: {state}")
-                state_data = oauth_handler.verify_state(state)
-                if not state_data:
-                    return create_html_response(
-                        error="Invalid state",
-                        platform=platform,
-                        version=version,
-                        auto_close=True
-                    )
-                
-                logger.info(f"State verification successful. State data: {state_data}")
-                user_id = state_data['user_id']
-                logger.info(f"Processing callback for user_id: {user_id}")
-                
-                try:
-                    # Exchange code for tokens
-                    tokens = await oauth_handler.get_access_token(code)
-                    
-                    # Generate and store API key
-                    api_key = generate_api_key()
-                    
-                    # Store API key in external service
-                    api_key_storage = APIKeyStorage()
-                    stored = await api_key_storage.store_api_key(
-                        user_id=user_id,
-                        platform="linkedin",
-                        api_key=api_key,
-                        access_token=tokens['access_token'],
-                        refresh_token=tokens.get('refresh_token'),
-                        expires_in=tokens.get('expires_in', 3600)
-                    )
-                    
-                    if not stored:
-                        raise ValueError("Failed to store API key")
-                    
-                    logger.info(f"Successfully stored API key for user {user_id}")
-                    success = True
-                    
-                except Exception as e:
-                    logger.error(f"Error exchanging code for tokens: {str(e)}")
-                    return create_html_response(
-                        error=str(e),
-                        platform=platform,
-                        version=version,
-                        auto_close=True
-                    )
-            
-            # Return success response
-            return create_html_response(
-                platform=platform,
-                version=version,
-                auto_close=True,
-                success=success
-            )
-            
-        except Exception as e:
-            logger.error(f"Error processing {platform} callback: {str(e)}")
-            return create_html_response(
-                error=str(e),
-                platform=platform,
-                version=version,
-                auto_close=True
-            )
-            
-    except Exception as e:
-        logger.error(f"Callback error: {str(e)}")
-        return create_html_response(
-            error=str(e),
-            platform=platform,
-            version=version,
-            auto_close=True
-        )
-
-# Add a new route specifically for LinkedIn callbacks
 @callback_router.get("/linkedin/callback")
 async def linkedin_callback(
     request: Request,
