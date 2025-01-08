@@ -34,12 +34,22 @@ class TokenManager:
         try:
             logger.debug("=== Decrypting Token Data ===")
             logger.debug(f"Encrypted data length: {len(encrypted_data)}")
-            decrypted = self.fernet.decrypt(encrypted_data.encode())
-            logger.debug("Successfully decrypted data")
-            json_data = decrypted.decode()
-            token_data = json.loads(json_data)
-            logger.debug(f"Successfully parsed token data with keys: {list(token_data.keys())}")
-            return token_data
+            
+            # First try to parse as JSON (for old unencrypted data)
+            try:
+                token_data = json.loads(encrypted_data)
+                logger.debug("Data was not encrypted, parsed directly as JSON")
+                logger.debug(f"Token data keys: {list(token_data.keys())}")
+                return token_data
+            except json.JSONDecodeError:
+                # If it's not valid JSON, try to decrypt
+                logger.debug("Data appears to be encrypted, attempting to decrypt")
+                decrypted = self.fernet.decrypt(encrypted_data.encode())
+                logger.debug("Successfully decrypted data")
+                json_data = decrypted.decode()
+                token_data = json.loads(json_data)
+                logger.debug(f"Successfully parsed token data with keys: {list(token_data.keys())}")
+                return token_data
         except Exception as e:
             logger.error(f"Error decrypting token data: {str(e)}")
             raise
