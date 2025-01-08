@@ -262,6 +262,16 @@ async def general_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error"}
     )
 
+# Add this after the initial imports
+async def get_api_key(api_key_header: str = Security(api_key_header)) -> str:
+    """Dependency to validate global API key."""
+    if api_key_header == settings.API_KEY:
+        return api_key_header
+    raise HTTPException(
+        status_code=HTTP_403_FORBIDDEN, 
+        detail="Could not validate API key"
+    )
+
 # Run the application
 if __name__ == "__main__":
     log_config = uvicorn.config.LOGGING_CONFIG
