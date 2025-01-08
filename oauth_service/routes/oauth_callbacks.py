@@ -108,7 +108,7 @@ async def linkedin_callback(
 ) -> HTMLResponse:
     """Handle LinkedIn OAuth callback"""
     try:
-        logger.info("Received LinkedIn callback")
+        logger.info("=== LinkedIn OAuth Callback Start ===")
         logger.info(f"Code present: {bool(code)}")
         logger.info(f"State present: {bool(state)}")
         
@@ -148,41 +148,58 @@ async def linkedin_callback(
         try:
             # Exchange code for tokens
             tokens = await oauth_handler.get_access_token(code)
+            logger.debug(f"Received tokens from LinkedIn: {tokens}")
             
             # Generate and store API key
             api_key = generate_api_key()
-            logger.debug(f"Generated new API key for external storage: {api_key}")
+            logger.info("=== API Key Generation ===")
+            logger.info(f"Generated API key: {api_key}")
+            
+            # Prepare payload for external storage
+            external_storage_payload = {
+                "user_id": user_id,
+                "platform": "linkedin",
+                "api_key": api_key,
+                "access_token": tokens['access_token'],
+                "refresh_token": tokens.get('refresh_token'),
+                "expires_in": tokens.get('expires_in', 3600)
+            }
+            logger.info("=== External Storage Request ===")
+            logger.info(f"Full payload being sent to external storage: {external_storage_payload}")
+            logger.info(f"Headers for external storage: x-api-key: {api_key}")
             
             # Store API key in external service first
             api_key_storage = APIKeyStorage()
-            stored = await api_key_storage.store_api_key(
-                user_id=user_id,
-                platform="linkedin",
-                api_key=api_key,
-                access_token=tokens['access_token'],
-                refresh_token=tokens.get('refresh_token'),
-                expires_in=tokens.get('expires_in', 3600)
-            )
+            stored = await api_key_storage.store_api_key(**external_storage_payload)
             
             if not stored:
                 raise ValueError("Failed to store API key in external service")
+            logger.info("Successfully stored API key in external service")
             
             # Store the SAME api_key locally
             try:
+                logger.info("=== Local Database Storage ===")
+                logger.info(f"Attempting to store in SQLite - User ID: {user_id}, Platform: linkedin, API Key: {api_key}")
+                
                 db = SqliteDB()
                 db.store_user_api_key(user_id, platform="linkedin", api_key=api_key)
-                logger.debug(f"Stored API key in local database - User: {user_id}, Key: {api_key}")
+                logger.info("Successfully stored API key in local database")
                 
                 # Verify the stored key
                 stored_key = db.get_user_api_key(user_id, "linkedin")
-                logger.debug(f"Verified stored key in database: {stored_key}")
+                logger.info("=== Local Storage Verification ===")
+                logger.info(f"Original API Key: {api_key}")
+                logger.info(f"Stored API Key: {stored_key}")
+                logger.info(f"Keys match: {stored_key == api_key}")
                 
                 if stored_key != api_key:
                     logger.error("Stored key verification failed - mismatch between stored and original")
+                    logger.error(f"Original length: {len(api_key)}, Stored length: {len(stored_key) if stored_key else 0}")
             except Exception as e:
                 logger.error(f"Failed to store API key in local database: {str(e)}")
                 raise
             
+            logger.info("=== LinkedIn OAuth Flow Complete ===")
             logger.info(f"Successfully stored API key for user {user_id} in both external and local storage")
             success = True
             

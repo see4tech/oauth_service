@@ -228,7 +228,12 @@ class SqliteDB:
         try:
             with self._lock:
                 cursor = self.conn.cursor()
-                logger.debug(f"Storing API key in database - User: {user_id}, Platform: {platform}, Key: {api_key}")
+                logger.info("=== SQLite Storage Operation ===")
+                logger.info(f"Storing API key in database:")
+                logger.info(f"User ID: {user_id}")
+                logger.info(f"Platform: {platform}")
+                logger.info(f"API Key: {api_key}")
+                
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO user_api_keys (user_id, platform, api_key)
@@ -237,18 +242,25 @@ class SqliteDB:
                     (user_id, platform, api_key)
                 )
                 self.conn.commit()
-                logger.debug("API key stored successfully in database")
+                logger.info("API key committed to database")
                 
                 # Verify storage
                 cursor.execute(
                     """
-                    SELECT api_key FROM user_api_keys
+                    SELECT * FROM user_api_keys
                     WHERE user_id = ? AND platform = ?
                     """,
                     (user_id, platform)
                 )
-                stored_key = cursor.fetchone()
-                logger.debug(f"Verified stored key: {stored_key[0] if stored_key else None}")
+                stored_record = cursor.fetchone()
+                if stored_record:
+                    logger.info("=== Stored Record Verification ===")
+                    logger.info(f"Stored User ID: {stored_record[1]}")
+                    logger.info(f"Stored Platform: {stored_record[2]}")
+                    logger.info(f"Stored API Key: {stored_record[3]}")
+                    logger.info(f"Storage timestamp: {stored_record[4]}")
+                else:
+                    logger.error("No record found after storage!")
         except Exception as e:
             logger.error(f"Error storing API key: {str(e)}")
             raise
