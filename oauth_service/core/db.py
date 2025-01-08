@@ -245,6 +245,19 @@ class SqliteDB:
         try:
             with self._lock:
                 cursor = self.conn.cursor()
+                
+                # Debug: Show all stored API keys
+                cursor.execute("""
+                    SELECT user_id, platform, api_key 
+                    FROM user_api_keys
+                """)
+                all_keys = cursor.fetchall()
+                logger.debug("=== All Stored API Keys ===")
+                for row in all_keys:
+                    logger.debug(f"User: {row[0]}, Platform: {row[1]}, Key: {row[2]}")
+                logger.debug("==========================")
+                
+                # Original query
                 cursor.execute(
                     """
                     SELECT api_key FROM user_api_keys
@@ -257,6 +270,8 @@ class SqliteDB:
                     logger.debug(f"Retrieved API key from DB - User: {user_id}, Platform: {platform}, Key: {result[0]}")
                 else:
                     logger.debug(f"No API key found for User: {user_id}, Platform: {platform}")
+                    logger.debug(f"Searched with user_id: '{user_id}' (type: {type(user_id)})")
+                    logger.debug(f"Searched with platform: '{platform}' (type: {type(platform)})")
                 return result[0] if result else None
         except Exception as e:
             logger.error(f"Error retrieving API key: {str(e)}")

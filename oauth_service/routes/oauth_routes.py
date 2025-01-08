@@ -210,9 +210,12 @@ async def exchange_code(
         
         # Store the API key as-is if it's in the token data
         if 'api_key' in token_data:
+            logger.debug(f"Storing API key from token data - User: {user_id}, Platform: {platform}, Key: {token_data['api_key']}")
             db = SqliteDB()
             db.store_user_api_key(user_id, platform, token_data['api_key'])
-            logger.debug(f"Stored API key for user {user_id} on platform {platform}")
+        else:
+            logger.debug(f"No API key found in token data for User: {user_id}, Platform: {platform}")
+            logger.debug(f"Token data keys: {token_data.keys()}")
 
         return TokenResponse(
             access_token=token_data["access_token"],
