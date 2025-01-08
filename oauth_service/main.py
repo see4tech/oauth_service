@@ -15,6 +15,7 @@ from .core.token_refresh import start_refresh_service, stop_refresh_service
 import asyncio
 from .core.db import SqliteDB
 import requests
+import json
 
 # Initialize settings and logger
 settings = get_settings()
@@ -92,50 +93,71 @@ async def lifespan(app: FastAPI):
     
     logger.info("Shutting down OAuth Service")
 
-async def get_api_key(api_key_header: str = Security(api_key_header), request: Request = None):
-    """Validate API key from request header."""
-    logger.debug("=== API Key Validation Start ===")
-    logger.debug(f"Full received API key header: {api_key_header}")  # Show full key for debugging
-    logger.debug(f"Full configured API key: {settings.API_KEY}")     # Show full key for debugging
-    
-    # Direct comparison with global API key
-    if api_key_header == settings.API_KEY:
-        logger.debug("Global API key validation successful")
-        return api_key_header
-
+@app.middleware("http")
+async def validate_api_key(request: Request, call_next):
+    """Validate API key from header."""
     try:
-        if request and request.method == "POST":
+        # Skip validation for OAuth callbacks and initialization
+        if "/callback" in request.url.path or request.url.path.endswith("/init"):
+            return await call_next(request)
+        
+        # Get API key from header
+        api_key = request.headers.get("x-api-key")
+        if not api_key:
+            raise HTTPException(status_code=401, detail="Missing API key")
+            
+        # First validate against global API key
+        logger.debug("=== API Key Validation Start ===")
+        logger.debug(f"Full received API key header: {api_key}")
+        logger.debug(f"Full configured API key: {settings.API_KEY}")
+        
+        # For user-specific endpoints, validate against stored API key
+        if request.method == "POST":
             try:
                 body = await request.json()
-                logger.debug(f"Full request body: {body}")  # Show full request payload
-                
+                logger.debug(f"Full request body: {body}")
                 user_id = body.get("user_id")
-                path_parts = request.url.path.split("/")
-                platform = path_parts[2] if len(path_parts) > 2 else None
                 
-                if user_id and platform:
+                if user_id:
                     db = SqliteDB()
-                    stored_api_key = db.get_user_api_key(user_id, platform)
-                    logger.debug(f"Full stored API key from DB: {stored_api_key}")  # Show full stored key
+                    stored_key = None
                     
-                    # Direct comparison with stored key
-                    if stored_api_key and stored_api_key == api_key_header:
-                        logger.debug("User-specific API key validation successful")
-                        return api_key_header
+                    if "twitter" in request.url.path:
+                        # Check both Twitter OAuth versions
+                        stored_key = (
+                            db.get_user_api_key(user_id, "twitter-oauth1") or 
+                            db.get_user_api_key(user_id, "twitter-oauth2")
+                        )
+                    else:
+                        # For other platforms, check normally
+                        platform = request.url.path.split("/")[2]  # Get platform from URL
+                        stored_key = db.get_user_api_key(user_id, platform)
                     
-                    logger.debug("User-specific API key mismatch")
-                    logger.debug(f"Keys don't match: '{api_key_header}' != '{stored_api_key}'")
-            except Exception as e:
-                logger.error(f"Error processing request: {str(e)}")
-                logger.error(f"Request path: {request.url.path}")
-                logger.error(f"Request method: {request.method}")
+                    logger.debug(f"Full stored API key from DB: {stored_key}")
+                    
+                    if not stored_key or stored_key != api_key:
+                        logger.debug("User-specific API key mismatch")
+                        logger.debug(f"Keys don't match: '{api_key}' != '{stored_key}'")
+                        raise HTTPException(status_code=401, detail="Invalid API key")
+                        
+            except json.JSONDecodeError:
+                pass  # Not a JSON body, skip user-specific validation
+                
+        response = await call_next(request)
+        return response
+        
+    except HTTPException as he:
+        logger.error(f"HTTP error occurred: {he.detail}")
+        return JSONResponse(
+            status_code=he.status_code,
+            content={"detail": he.detail}
+        )
     except Exception as e:
-        logger.error(f"Error during API key validation: {str(e)}")
-    
-    raise HTTPException(
-        status_code=HTTP_403_FORBIDDEN,
-        detail="Invalid API key"
-    )
+        logger.error(f"Error in API key validation: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"}
+        )
 
 # Initialize FastAPI app
 app = FastAPI(
