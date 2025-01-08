@@ -157,21 +157,7 @@ async def get_api_key(api_key_header: str = Security(api_key_header), request: R
             detail="No API key provided"
         )
     
-    # Normalize both keys
-    normalized_header_key = normalize_api_key(api_key_header)
-    normalized_settings_key = normalize_api_key(settings.API_KEY)
-    
-    logger.debug(f"Original header key: {api_key_header[:4]}...{api_key_header[-4:] if api_key_header else None}")
-    logger.debug(f"Normalized header key: {normalized_header_key[:4]}...{normalized_header_key[-4:] if normalized_header_key else None}")
-    logger.debug(f"Original settings key: {settings.API_KEY[:4]}...{settings.API_KEY[-4:] if settings.API_KEY else None}")
-    logger.debug(f"Normalized settings key: {normalized_settings_key[:4]}...{normalized_settings_key[-4:] if normalized_settings_key else None}")
-    
-    # First check against global API key
-    if normalized_header_key == normalized_settings_key:
-        logger.debug("Global API key validation successful")
-        return api_key_header
-    
-    # Try exact match if normalization didn't work
+    # First try exact matches before attempting any normalization
     if api_key_header == settings.API_KEY:
         logger.debug("Global API key validation successful (exact match)")
         return api_key_header
@@ -180,7 +166,24 @@ async def get_api_key(api_key_header: str = Security(api_key_header), request: R
         # Extract user_id and platform from request body for POST requests
         if request and request.method == "POST":
             try:
-                body = await request.json()
+                # Read raw body first to verify it's valid JSON
+                raw_body = await request.body()
+                if not raw_body:
+                    logger.debug("No request body found")
+                    raise HTTPException(
+                        status_code=HTTP_403_FORBIDDEN,
+                        detail="Invalid API key"
+                    )
+                
+                try:
+                    body = await request.json()
+                except Exception as e:
+                    logger.error(f"Failed to parse JSON body: {str(e)}")
+                    raise HTTPException(
+                        status_code=HTTP_403_FORBIDDEN,
+                        detail="Invalid API key"
+                    )
+                
                 user_id = body.get("user_id")
                 path_parts = request.url.path.split("/")
                 platform = path_parts[2] if len(path_parts) > 2 else None
@@ -190,21 +193,30 @@ async def get_api_key(api_key_header: str = Security(api_key_header), request: R
                 if user_id and platform:
                     db = SqliteDB()
                     stored_api_key = db.get_user_api_key(user_id, platform)
-                    normalized_stored_key = normalize_api_key(stored_api_key)
                     
-                    logger.debug(f"Original stored key: {stored_api_key[:4]}...{stored_api_key[-4:] if stored_api_key else None}")
-                    logger.debug(f"Normalized stored key: {normalized_stored_key[:4]}...{normalized_stored_key[-4:] if normalized_stored_key else None}")
-                    
-                    if normalized_stored_key and normalized_stored_key == normalized_header_key:
-                        logger.debug("User-specific API key validation successful")
-                        return api_key_header
-                    # Try exact match
-                    if stored_api_key and stored_api_key == api_key_header:
-                        logger.debug("User-specific API key validation successful (exact match)")
-                        return api_key_header
-                    logger.debug("User-specific API key mismatch")
+                    if stored_api_key:
+                        logger.debug(f"Found stored API key for user {user_id} and platform {platform}")
+                        
+                        # Try exact match first
+                        if stored_api_key == api_key_header:
+                            logger.debug("User-specific API key validation successful (exact match)")
+                            return api_key_header
+                        
+                        # Log the key lengths and formats for debugging
+                        logger.debug(f"Stored key length: {len(stored_api_key)}")
+                        logger.debug(f"Header key length: {len(api_key_header)}")
+                        logger.debug(f"Stored key format: {'base64' if '=' in stored_api_key else 'plain'}")
+                        logger.debug(f"Header key format: {'base64' if '=' in api_key_header else 'plain'}")
+                        
+                        logger.debug("User-specific API key mismatch")
+                    else:
+                        logger.debug(f"No stored API key found for user {user_id} and platform {platform}")
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.error(f"Error processing request body: {str(e)}")
+                logger.error(f"Request path: {request.url.path}")
+                logger.error(f"Request method: {request.method}")
     except Exception as e:
         logger.error(f"Error during API key validation: {str(e)}")
     
