@@ -88,21 +88,7 @@ async def lifespan(app: FastAPI):
         logger.debug(f"- Client ID configured: {'Yes' if creds.get('client_id') else 'No'}")
         logger.debug(f"- Callback URL: {creds.get('callback_url')}")
     
-    try:
-        # Start token refresh service in the background
-        asyncio.create_task(start_refresh_service())
-        logger.info("Token refresh service started")
-    except Exception as e:
-        logger.error(f"Error starting token refresh service: {str(e)}")
-    
     yield
-    
-    # Shutdown
-    try:
-        await stop_refresh_service()
-        logger.info("Token refresh service stopped")
-    except Exception as e:
-        logger.error(f"Error stopping token refresh service: {str(e)}")
     
     logger.info("Shutting down OAuth Service")
 
