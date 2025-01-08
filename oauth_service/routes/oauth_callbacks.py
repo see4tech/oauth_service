@@ -179,10 +179,7 @@ async def linkedin_callback(
             external_storage_payload = {
                 "user_id": user_id,
                 "platform": "linkedin",
-                "api_key": api_key,
-                "access_token": tokens['access_token'],
-                "refresh_token": tokens.get('refresh_token'),
-                "expires_in": tokens.get('expires_in', 3600)
+                "api_key": api_key
             }
             logger.info("=== External Storage Request ===")
             logger.info(f"Full payload being sent to external storage: {external_storage_payload}")
@@ -437,10 +434,7 @@ async def twitter_oauth1_callback(
         external_storage_payload = {
             "user_id": user_id,
             "platform": platform_with_version,  # "twitter-oauth1"
-            "api_key": api_key,
-            "access_token": token_data['access_token'],
-            "refresh_token": None,  # OAuth 1.0a doesn't use refresh tokens
-            "expires_in": None  # OAuth 1.0a tokens don't expire
+            "api_key": api_key
         }
         
         # Store API key in external service
@@ -553,7 +547,7 @@ async def twitter_oauth2_callback(
         # Prepare payload for external storage
         external_storage_payload = {
             "user_id": user_id,
-            "platform": platform_with_version,
+            "platform": platform_with_version,  # "twitter-oauth2"
             "api_key": api_key
         }
         
