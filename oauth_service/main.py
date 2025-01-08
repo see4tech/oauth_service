@@ -15,6 +15,8 @@ from .core.token_refresh import start_refresh_service, stop_refresh_service
 import asyncio
 from .core.db import SqliteDB
 import requests
+import base64
+from typing import Optional
 
 # Initialize settings and logger
 settings = get_settings()
@@ -106,14 +108,37 @@ async def lifespan(app: FastAPI):
     
     logger.info("Shutting down OAuth Service")
 
+def normalize_api_key(api_key: Optional[str]) -> Optional[str]:
+    """Normalize API key by removing any encoding/padding."""
+    if not api_key:
+        return None
+    
+    try:
+        # If the key ends with '=', it might be base64 encoded
+        if api_key.endswith('='):
+            # Try to decode if it's base64
+            decoded = base64.b64decode(api_key).decode('utf-8')
+            logger.debug("Successfully decoded base64 API key")
+            return decoded
+    except Exception:
+        # If decoding fails, return original key
+        pass
+    
+    return api_key
+
 async def get_api_key(api_key_header: str = Security(api_key_header), request: Request = None):
     """Validate API key from request header."""
     logger.debug("=== API Key Validation Start ===")
-    logger.debug(f"Received API key header: {api_key_header[:4]}...{api_key_header[-4:] if api_key_header else None}")
-    logger.debug(f"Configured API key: {settings.API_KEY[:4]}...{settings.API_KEY[-4:] if settings.API_KEY else None}")
+    
+    # Normalize both keys
+    normalized_header_key = normalize_api_key(api_key_header)
+    normalized_settings_key = normalize_api_key(settings.API_KEY)
+    
+    logger.debug(f"Received API key header (normalized): {normalized_header_key[:4]}...{normalized_header_key[-4:] if normalized_header_key else None}")
+    logger.debug(f"Configured API key (normalized): {normalized_settings_key[:4]}...{normalized_settings_key[-4:] if normalized_settings_key else None}")
     
     # First check against global API key
-    if api_key_header == settings.API_KEY:
+    if normalized_header_key == normalized_settings_key:
         logger.debug("Global API key validation successful")
         return api_key_header
 
@@ -131,8 +156,9 @@ async def get_api_key(api_key_header: str = Security(api_key_header), request: R
                 if user_id and platform:
                     db = SqliteDB()
                     stored_api_key = db.get_user_api_key(user_id, platform)
+                    normalized_stored_key = normalize_api_key(stored_api_key)
                     
-                    if stored_api_key and stored_api_key == api_key_header:
+                    if normalized_stored_key and normalized_stored_key == normalized_header_key:
                         logger.debug("User-specific API key validation successful")
                         return api_key_header
                     logger.debug("User-specific API key mismatch")
