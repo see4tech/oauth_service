@@ -98,62 +98,7 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
             detail=f"Failed to initialize Twitter OAuth: {str(e)}"
         )
 
-@callback_router.get("/{platform}/callback")
-async def oauth_callback(
-    request: Request,
-    platform: str,
-    code: Optional[str] = None,
-    state: Optional[str] = None,
-    error: Optional[str] = None,
-    error_description: Optional[str] = None
-):
-    """Handle OAuth callbacks for platforms other than LinkedIn."""
-    try:
-        # Skip if it's LinkedIn as it has its own handler
-        if platform == "linkedin":
-            raise HTTPException(status_code=404, detail="Not found")
-            
-        logger.info(f"Received {platform.title()} callback")
-        logger.info(f"Code present: {bool(code)}")
-        logger.info(f"State present: {bool(state)}")
-        
-        # Initialize OAuth handler
-        oauth_handler = await get_oauth_handler(platform)
-        
-        # Verify state and extract user_id
-        logger.info(f"Attempting to verify state: {state}")
-        state_data = oauth_handler.verify_state(state)
-        if not state_data:
-            raise HTTPException(status_code=400, detail="Invalid state parameter")
-        
-        logger.info(f"State verification successful. State data: {state_data}")
-        
-        user_id = state_data.get('user_id')
-        logger.info(f"Processing callback for user_id: {user_id}")
-        
-        # Exchange code for token
-        token_data = await oauth_handler.get_access_token(code)
-        
-        # Store API key if present
-        if 'api_key' in token_data:
-            logger.debug(f"API key present in token data: {token_data['api_key'][:10]}...")
-            try:
-                db = SqliteDB()
-                db.store_user_api_key(user_id, platform, token_data['api_key'])
-                logger.info(f"Successfully stored API key for user {user_id}")
-            except Exception as e:
-                logger.error(f"Error storing API key: {str(e)}")
-        
-        return create_html_response(
-            platform=platform,
-            success=True,
-            auto_close=True
-        )
-    except Exception as e:
-        logger.error(f"Error in OAuth callback: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@callback_router.get("/linkedin/callback")
+@callback_router.get("/linkedin/callback", include_in_schema=True)
 async def linkedin_callback(
     request: Request,
     code: Optional[str] = None,
@@ -279,6 +224,57 @@ async def linkedin_callback(
             platform="linkedin",
             auto_close=True
         )
+
+@callback_router.get("/{platform}/callback", include_in_schema=True)
+async def oauth_callback(
+    request: Request,
+    platform: str,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    error_description: Optional[str] = None
+):
+    """Handle OAuth callbacks for platforms other than LinkedIn."""
+    try:
+        logger.info(f"Received {platform.title()} callback")
+        logger.info(f"Code present: {bool(code)}")
+        logger.info(f"State present: {bool(state)}")
+        
+        # Initialize OAuth handler
+        oauth_handler = await get_oauth_handler(platform)
+        
+        # Verify state and extract user_id
+        logger.info(f"Attempting to verify state: {state}")
+        state_data = oauth_handler.verify_state(state)
+        if not state_data:
+            raise HTTPException(status_code=400, detail="Invalid state parameter")
+        
+        logger.info(f"State verification successful. State data: {state_data}")
+        
+        user_id = state_data.get('user_id')
+        logger.info(f"Processing callback for user_id: {user_id}")
+        
+        # Exchange code for token
+        token_data = await oauth_handler.get_access_token(code)
+        
+        # Store API key if present
+        if 'api_key' in token_data:
+            logger.debug(f"API key present in token data: {token_data['api_key'][:10]}...")
+            try:
+                db = SqliteDB()
+                db.store_user_api_key(user_id, platform, token_data['api_key'])
+                logger.info(f"Successfully stored API key for user {user_id}")
+            except Exception as e:
+                logger.error(f"Error storing API key: {str(e)}")
+        
+        return create_html_response(
+            platform=platform,
+            success=True,
+            auto_close=True
+        )
+    except Exception as e:
+        logger.error(f"Error in OAuth callback: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 def create_html_response(
     error: Optional[str] = None,
