@@ -109,8 +109,8 @@ async def lifespan(app: FastAPI):
 async def get_api_key(api_key_header: str = Security(api_key_header), request: Request = None):
     """Validate API key from request header."""
     logger.debug("=== API Key Validation Start ===")
-    logger.debug(f"Received API key header: {api_key_header[:4]}...{api_key_header[-4:] if api_key_header else None}")
-    logger.debug(f"Configured API key: {settings.API_KEY[:4]}...{settings.API_KEY[-4:] if settings.API_KEY else None}")
+    logger.debug(f"Full received API key header: {api_key_header}")  # Show full key for debugging
+    logger.debug(f"Full configured API key: {settings.API_KEY}")     # Show full key for debugging
     
     # Direct comparison with global API key
     if api_key_header == settings.API_KEY:
@@ -121,6 +121,8 @@ async def get_api_key(api_key_header: str = Security(api_key_header), request: R
         if request and request.method == "POST":
             try:
                 body = await request.json()
+                logger.debug(f"Full request body: {body}")  # Show full request payload
+                
                 user_id = body.get("user_id")
                 path_parts = request.url.path.split("/")
                 platform = path_parts[2] if len(path_parts) > 2 else None
@@ -128,6 +130,7 @@ async def get_api_key(api_key_header: str = Security(api_key_header), request: R
                 if user_id and platform:
                     db = SqliteDB()
                     stored_api_key = db.get_user_api_key(user_id, platform)
+                    logger.debug(f"Full stored API key from DB: {stored_api_key}")  # Show full stored key
                     
                     # Direct comparison with stored key
                     if stored_api_key and stored_api_key == api_key_header:
@@ -135,6 +138,7 @@ async def get_api_key(api_key_header: str = Security(api_key_header), request: R
                         return api_key_header
                     
                     logger.debug("User-specific API key mismatch")
+                    logger.debug(f"Keys don't match: '{api_key_header}' != '{stored_api_key}'")
             except Exception as e:
                 logger.error(f"Error processing request: {str(e)}")
                 logger.error(f"Request path: {request.url.path}")

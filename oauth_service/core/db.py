@@ -226,8 +226,8 @@ class SqliteDB:
     def store_user_api_key(self, user_id: str, platform: str, api_key: str) -> None:
         """Store the API key exactly as received."""
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            with self._lock:
+                cursor = self.conn.cursor()
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO user_api_keys (user_id, platform, api_key)
@@ -235,7 +235,7 @@ class SqliteDB:
                     """,
                     (user_id, platform, api_key)
                 )
-                conn.commit()
+                self.conn.commit()
         except Exception as e:
             logger.error(f"Error storing API key: {str(e)}")
             raise
@@ -243,8 +243,8 @@ class SqliteDB:
     def get_user_api_key(self, user_id: str, platform: str) -> Optional[str]:
         """Retrieve the API key exactly as stored."""
         try:
-            with self.get_connection() as conn:
-                cursor = conn.cursor()
+            with self._lock:
+                cursor = self.conn.cursor()
                 cursor.execute(
                     """
                     SELECT api_key FROM user_api_keys
@@ -253,6 +253,10 @@ class SqliteDB:
                     (user_id, platform)
                 )
                 result = cursor.fetchone()
+                if result:
+                    logger.debug(f"Retrieved API key from DB - User: {user_id}, Platform: {platform}, Key: {result[0]}")
+                else:
+                    logger.debug(f"No API key found for User: {user_id}, Platform: {platform}")
                 return result[0] if result else None
         except Exception as e:
             logger.error(f"Error retrieving API key: {str(e)}")
