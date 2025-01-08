@@ -109,6 +109,16 @@ class TokenManager:
                 logger.debug(f"No token found for user {user_id} on platform {platform}")
                 return None
             
+            # For LinkedIn, check expiration
+            if platform == "linkedin":
+                expires_at = token_data.get('expires_at')
+                if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
+                    logger.debug(f"Token expired for user {user_id} on platform {platform}")
+                    if token_data.get('refresh_token'):
+                        return await self.refresh_token(platform, user_id, token_data)
+                    return None
+                return token_data
+            
             # For Twitter, handle OAuth 1.0a and 2.0 separately
             if platform == "twitter":
                 oauth2_data = token_data.get('oauth2', {})
@@ -214,18 +224,23 @@ class TokenManager:
                     try:
                         if platform not in tokens:
                             tokens[platform] = {}
-                        decrypted_data = self.decrypt_token_data(encrypted_data)
-                        tokens[platform][user_id] = decrypted_data
-                    except Exception as decrypt_error:
-                        # Only log for non-test users
-                        if not (user_id.startswith('debug_') or user_id.startswith('test_')):
-                            logger.warning(f"Could not decrypt token for user {user_id} on platform {platform}")
+                        
+                        # Try to decrypt/parse token data
+                        try:
+                            token_data = self.decrypt_token_data(encrypted_data)
+                            tokens[platform][user_id] = token_data
+                            logger.debug(f"Successfully processed token for {platform}/{user_id}")
+                        except Exception as token_error:
+                            logger.warning(f"Could not process token for user {user_id} on platform {platform}: {str(token_error)}")
+                            continue
+                            
+                    except Exception as e:
+                        logger.warning(f"Error processing token for {platform}/{user_id}: {str(e)}")
                         continue
             
             return tokens
             
         except Exception as e:
-            # Log only if it's not a common "no such table" error during initialization
             if "no such table" not in str(e).lower():
-                logger.warning("Could not retrieve tokens from database")
+                logger.error(f"Error retrieving all tokens: {str(e)}")
             return {}
