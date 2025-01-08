@@ -143,6 +143,15 @@ async def oauth_callback(
                 logger.info(f"Successfully stored API key for user {user_id}")
             except Exception as e:
                 logger.error(f"Error storing API key: {str(e)}")
+        
+        return create_html_response(
+            platform=platform,
+            success=True,
+            auto_close=True
+        )
+    except Exception as e:
+        logger.error(f"Error in OAuth callback: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @callback_router.get("/linkedin/callback")
 async def linkedin_callback(
