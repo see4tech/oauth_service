@@ -439,7 +439,8 @@ async def twitter_oauth1_callback(
             "platform": platform_with_version,  # Use versioned platform name
             "api_key": api_key,
             "access_token": token_data['access_token'],
-            "access_token_secret": token_data['access_token_secret']
+            "refresh_token": None,  # OAuth 1.0a doesn't use refresh tokens
+            "expires_in": None  # OAuth 1.0a tokens don't expire
         }
         
         # Store API key in external service
