@@ -367,3 +367,65 @@ def create_html_response(
     """
     
     return HTMLResponse(content=html_content)
+
+@callback_router.get("/twitter/callback/1")
+async def twitter_oauth1_callback(
+    request: Request,
+    oauth_token: Optional[str] = None,
+    oauth_verifier: Optional[str] = None
+) -> HTMLResponse:
+    """Handle Twitter OAuth 1.0a callback."""
+    try:
+        logger.info("=== Twitter OAuth 1.0a Callback Start ===")
+        logger.info(f"OAuth token present: {bool(oauth_token)}")
+        logger.info(f"OAuth verifier present: {bool(oauth_verifier)}")
+        
+        if not oauth_token or not oauth_verifier:
+            return create_html_response(
+                error="Missing OAuth parameters",
+                platform="twitter",
+                version="1",
+                auto_close=True
+            )
+        
+        # Get user_id from stored request token
+        user_id = await get_stored_user_id(oauth_token)
+        if not user_id:
+            return create_html_response(
+                error="Invalid OAuth token",
+                platform="twitter",
+                version="1",
+                auto_close=True
+            )
+            
+        logger.info(f"Processing callback for user_id: {user_id}")
+        
+        # Initialize OAuth handler
+        oauth_handler = await get_oauth_handler("twitter")
+        
+        # Exchange verifier for access token
+        token_data = await oauth_handler.get_oauth1_access_token(oauth_token, oauth_verifier)
+        
+        # Store tokens
+        token_manager = TokenManager()
+        await token_manager.store_token(
+            platform="twitter",
+            user_id=user_id,
+            token_data={'oauth1': token_data}
+        )
+        
+        return create_html_response(
+            platform="twitter",
+            version="1",
+            success=True,
+            auto_close=True
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in Twitter OAuth 1.0a callback: {str(e)}")
+        return create_html_response(
+            error=str(e),
+            platform="twitter",
+            version="1",
+            auto_close=True
+        )

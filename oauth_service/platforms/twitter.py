@@ -454,3 +454,39 @@ class TwitterOAuth(OAuthBase):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 return await response.read()
+    
+    async def initialize_oauth1(self, callback_url: str) -> Dict:
+        """Initialize OAuth 1.0a flow."""
+        try:
+            logger.debug(f"Initializing OAuth 1.0a with callback URL: {callback_url}")
+            
+            # Create OAuth1Session for request token
+            oauth = OAuth1Session(
+                self.client_id,
+                client_secret=self.client_secret,
+                callback_uri=callback_url
+            )
+            
+            # Get request token
+            request_token_url = "https://api.twitter.com/oauth/request_token"
+            try:
+                response = await oauth.fetch_request_token(request_token_url)
+                oauth_token = response.get('oauth_token')
+                oauth_token_secret = response.get('oauth_token_secret')
+                logger.debug(f"Obtained request token: {oauth_token[:10]}...")
+                
+                # Generate authorization URL
+                auth_url = f"https://api.twitter.com/oauth/authorize?oauth_token={oauth_token}"
+                
+                return {
+                    'oauth1_url': auth_url,
+                    'oauth_token': oauth_token,
+                    'oauth_token_secret': oauth_token_secret
+                }
+            except Exception as e:
+                logger.error(f"Error getting request token: {str(e)}")
+                raise
+                
+        except Exception as e:
+            logger.error(f"Error initializing OAuth 1.0a: {str(e)}")
+            raise
