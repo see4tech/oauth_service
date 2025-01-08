@@ -5,14 +5,14 @@ import aiohttp
 from ..core.oauth_base import OAuthBase
 from ..utils.rate_limiter import RateLimiter
 from ..utils.logger import get_logger
+from ..core.db import SqliteDB
+from ..utils.crypto import generate_api_key
 from fastapi import HTTPException
 import base64
 import os
 import hashlib
 from datetime import datetime
 from urllib.parse import urlencode
-from ..db.sqlite_db import SqliteDB
-from ..utils.api_key_generator import generate_api_key
 
 logger = get_logger(__name__)
 
