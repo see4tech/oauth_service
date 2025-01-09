@@ -507,5 +507,11 @@ async def post_twitter_content(
         return {"success": True, "response": response}
         
     except Exception as e:
+        logger.debug(f"\n=== Twitter Post Error ===")
+        logger.debug(f"Error type: {type(e)}")
+        logger.debug(f"Error args: {e.args}")
+        logger.debug(f"Error occurred at:")
+        import traceback
+        logger.debug(traceback.format_exc())
         logger.error(f"Error creating post on twitter: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
