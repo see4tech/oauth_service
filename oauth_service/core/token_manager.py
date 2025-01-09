@@ -113,6 +113,16 @@ class TokenManager:
                 logger.debug(f"No token found for user {user_id} on platform {platform}")
                 return None
             
+            # For LinkedIn, check expiration
+            if platform == "linkedin":
+                expires_at = token_data.get('expires_at')
+                if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
+                    logger.debug(f"Token expired for user {user_id} on platform {platform}")
+                    if token_data.get('refresh_token'):
+                        return await self.refresh_token(platform, user_id, token_data)
+                    return None
+                return token_data
+            
             # For Twitter, handle OAuth 1.0a and 2.0 separately
             if platform == "twitter":
                 # If we have OAuth 2.0 data
