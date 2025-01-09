@@ -641,10 +641,22 @@ class TwitterOAuth(OAuthBase):
                 'media': ('media.jpg', image_io, content_type)
             }
             
-            logger.debug("4. Making upload request")
+            logger.debug("\n4. Making upload request")
             logger.debug(f"   URL: {upload_url}")
-            logger.debug(f"   Using file upload")
-            
+            logger.debug(f"   Content-Type in files: {content_type}")
+            logger.debug(f"   Files structure: {files}")
+            logger.debug(f"   Request encoding: {auth.headers.get('Content-Type', 'Not specified')}")
+
+            # Log the actual request details
+            from urllib.parse import urlparse
+            parsed_url = urlparse(upload_url)
+            logger.debug("\nFull Request Details:")
+            logger.debug(f"   Method: POST")
+            logger.debug(f"   Protocol: {parsed_url.scheme}")
+            logger.debug(f"   Host: {parsed_url.netloc}")
+            logger.debug(f"   Path: {parsed_url.path}")
+            logger.debug(f"   Headers: {auth.headers}")
+
             response = auth.post(upload_url, files=files)
             logger.debug(f"5. Got response: {response.status_code}")
             logger.debug(f"   Response text: {response.text[:200]}...")
