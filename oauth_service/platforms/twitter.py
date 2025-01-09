@@ -622,7 +622,12 @@ class TwitterOAuth(OAuthBase):
             logger.debug("Starting tweet creation process")
             logger.debug(f"Token data structure: {tokens.keys() if isinstance(tokens, dict) else 'Invalid tokens'}")
             logger.debug(f"OAuth2 token data: {tokens.get('oauth2', 'Not found')}")
-            logger.debug(f"Full token data (sanitized): {json.dumps({k: '***' if 'token' in k else v for k,v in tokens.items()})}")
+            logger.debug(f"Full token data (sanitized):")
+            for k, v in tokens.items():
+                if isinstance(v, dict):
+                    logger.debug(f"  {k}: {json.dumps({sk: '***' if 'token' in sk else sv for sk, sv in v.items()})}")
+                else:
+                    logger.debug(f"  {k}: {'***' if 'token' in k else v}")
             
             if not tokens or not isinstance(tokens, dict):
                 raise ValueError("No valid tokens found")
@@ -637,18 +642,18 @@ class TwitterOAuth(OAuthBase):
             
             # 2. Post tweet with media using v2 API with OAuth 2.0 tokens
             oauth2_tokens = tokens.get('oauth2')
-            logger.debug(f"OAuth2 tokens structure: {json.dumps({k: '***' if 'token' in k else v for k,v in oauth2_tokens.items() if oauth2_tokens})}")
-            
-            if not oauth2_tokens:
-                raise ValueError("OAuth 2.0 tokens not found")
-            
-            # Check if oauth2_tokens is a dict or direct token
+            logger.debug(f"OAuth2 tokens found:")
             if isinstance(oauth2_tokens, dict):
+                logger.debug(f"  Structure: {json.dumps({k: '***' if 'token' in k else v for k,v in oauth2_tokens.items()})}")
                 access_token = oauth2_tokens.get('access_token')
             else:
+                logger.debug(f"  Direct token: {'present' if oauth2_tokens else 'missing'}")
                 access_token = oauth2_tokens
             
             if not access_token:
+                logger.error(f"OAuth2 token data missing or invalid:")
+                logger.error(f"  oauth2_tokens type: {type(oauth2_tokens)}")
+                logger.error(f"  oauth2_tokens keys: {oauth2_tokens.keys() if isinstance(oauth2_tokens, dict) else 'N/A'}")
                 raise ValueError("OAuth 2.0 access token not found in token data")
             
             logger.debug("Posting tweet with media")
