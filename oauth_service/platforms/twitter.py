@@ -606,6 +606,7 @@ class TwitterOAuth(OAuthBase):
             logger.debug(f"   Consumer key: {self._consumer_key[:10]}...")
             logger.debug(f"   Access token: {oauth1_tokens['access_token'][:10]}...")
             
+            # Create OAuth1Session
             auth = OAuth1Session(
                 self._consumer_key,
                 client_secret=self._decrypted_consumer_secret,
@@ -616,49 +617,49 @@ class TwitterOAuth(OAuthBase):
             logger.debug("2. Downloading image")
             logger.debug(f"   URL: {image_url}")
             
-            # Download image
+            # Download image once
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url) as response:
                     image_data = await response.read()
                     content_type = response.headers.get('content-type', 'image/jpeg')
+                    size_mb = len(image_data) / (1024 * 1024)
+                    
                     logger.debug(f"3. Image downloaded")
                     logger.debug(f"   Content-Type: {content_type}")
-                    logger.debug(f"   Size: {len(image_data)} bytes")
+                    logger.debug(f"   Size: {size_mb:.2f}MB")
+                    
+                    if size_mb > 5:
+                        logger.debug("Image too large for simple upload, needs chunked upload")
+                        raise ValueError("Image too large (>5MB), needs chunked upload")
             
-            logger.debug("4. Converting to base64")
-            # Convert image to base64
+            # Convert to base64
             import base64
             media_data = base64.b64encode(image_data).decode('utf-8')
-            logger.debug(f"   Base64 length: {len(media_data)}")
             
             # Upload to Twitter
             upload_url = "https://upload.twitter.com/1.1/media/upload.json"
             data = {
-                'media_data': media_data
+                'media_data': media_data,
+                'media_category': 'tweet_image'  # Specify the media category
             }
             
-            logger.debug("5. Making upload request")
+            logger.debug("4. Making upload request")
             logger.debug(f"   URL: {upload_url}")
-            logger.debug(f"   Data keys: {list(data.keys())}")
+            logger.debug(f"   Using media_data parameter")
+            logger.debug(f"   Media category: tweet_image")
             
-            try:
-                response = auth.post(upload_url, data=data)
-                logger.debug(f"6. Got response: {response.status_code}")
-                logger.debug(f"   Response text: {response.text[:200]}...")
-                
-                if response.status_code != 200:
-                    raise ValueError(f"Failed to upload media: {response.text}")
-                
-                media_data = response.json()
-                media_id = media_data['media_id_string']
-                logger.debug(f"7. Success! Media ID: {media_id}")
-                return media_id
-                
-            except Exception as e:
-                logger.error(f"Upload request failed: {str(e)}")
-                logger.error(f"Response details: {getattr(response, 'text', 'No response text')}")
-                raise
-                
+            response = auth.post(upload_url, data=data)
+            logger.debug(f"5. Got response: {response.status_code}")
+            logger.debug(f"   Response text: {response.text[:200]}...")
+            
+            if response.status_code != 200:
+                raise ValueError(f"Failed to upload media: {response.text}")
+            
+            media_data = response.json()
+            media_id = media_data['media_id_string']
+            logger.debug(f"6. Success! Media ID: {media_id}")
+            return media_id
+            
         except Exception as e:
             logger.error(f"Error uploading media to Twitter: {str(e)}")
             raise ValueError(f"Failed to upload media: {str(e)}")
