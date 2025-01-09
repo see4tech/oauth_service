@@ -469,7 +469,7 @@ async def store_oauth_token(platform: str, token_data: dict):
         logger.error(f"Error storing OAuth token: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@router.post("/twitter/post")
+@router.post("/oauth/twitter/post")
 async def post_twitter_content(
     request: Request,
     user_id: str = Body(...),
@@ -481,14 +481,6 @@ async def post_twitter_content(
         logger.debug("=== Processing Post Request ===")
         logger.debug(f"Platform: twitter")
         logger.debug(f"User ID: {user_id}")
-        
-        # Get stored API key for validation - just check oauth1 since they're the same
-        db = SqliteDB()
-        stored_key = db.get_user_api_key(user_id, "twitter-oauth1")
-        
-        if not stored_key or stored_key != x_api_key:
-            logger.debug("API key validation failed")
-            raise HTTPException(status_code=401, detail="Invalid API key")
         
         # Initialize Twitter OAuth handler
         oauth_handler = await get_oauth_handler("twitter")
