@@ -478,9 +478,10 @@ async def post_twitter_content(
 ):
     """Post content to Twitter."""
     try:
-        logger.debug("=== Processing Post Request ===")
+        logger.debug("=== Processing Twitter Post Request ===")
         logger.debug(f"Platform: twitter")
         logger.debug(f"User ID: {user_id}")
+        logger.debug(f"Received API key: {x_api_key}")
         
         # Initialize Twitter OAuth handler
         oauth_handler = await get_oauth_handler("twitter")
