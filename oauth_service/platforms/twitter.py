@@ -623,6 +623,7 @@ class TwitterOAuth(OAuthBase):
             
             response = requests.get(image_url)
             image_io = BytesIO(response.content)
+            image_io.seek(0)  # Important: seek to start of file
             content_type = response.headers.get('content-type', 'image/jpeg')
             size_mb = len(response.content) / (1024 * 1024)
             
