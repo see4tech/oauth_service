@@ -125,10 +125,16 @@ class TokenManager:
             
             # For Twitter, handle OAuth 1.0a and 2.0 separately
             if platform == "twitter":
+                logger.debug(f"Processing Twitter tokens for user {user_id}")
                 # If we have OAuth 2.0 data
                 if 'oauth2' in token_data:
                     oauth2_data = token_data['oauth2']
+                    logger.debug(f"OAuth 2.0 data found: {json.dumps({k: '***' if 'token' in k else v for k, v in oauth2_data.items()})}")
+                    
                     expires_at = oauth2_data.get('expires_at')
+                    if expires_at:
+                        logger.debug(f"Token expires at: {datetime.fromtimestamp(expires_at).isoformat()}")
+                        logger.debug(f"Current time: {datetime.utcnow().isoformat()}")
                     
                     if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
                         logger.debug(f"OAuth 2.0 token expired for Twitter user {user_id}")
@@ -137,12 +143,27 @@ class TokenManager:
                             logger.debug(f"Found refresh token for Twitter user {user_id}, attempting refresh")
                             refreshed_data = await self.refresh_token(platform, user_id, oauth2_data)
                             if refreshed_data:
+                                logger.debug("Token refresh successful")
                                 # Preserve OAuth 1.0a tokens if they exist
                                 if 'oauth1' in token_data:
                                     refreshed_data['oauth1'] = token_data['oauth1']
+                                    logger.debug("Preserved OAuth 1.0a tokens")
                                 return refreshed_data
+                            logger.debug("Token refresh failed")
+                    
+                    # Check if we have the required OAuth 2.0 fields
+                    required_fields = ['access_token', 'token_type']
+                    missing_fields = [field for field in required_fields if field not in oauth2_data]
+                    if missing_fields:
+                        logger.error(f"Missing required OAuth 2.0 fields: {missing_fields}")
+                        # If OAuth 1.0a is available, fall back to it
+                        if 'oauth1' in token_data:
+                            logger.debug("Falling back to OAuth 1.0a tokens")
+                            return token_data
+                        return None
                     
                     # If OAuth 2.0 token is valid or we couldn't refresh, return full token data
+                    logger.debug("Returning full token data with valid OAuth 2.0 token")
                     return token_data
                 
                 # If we only have OAuth 1.0a tokens
@@ -150,6 +171,7 @@ class TokenManager:
                     logger.debug(f"Only OAuth 1.0a tokens found for user {user_id}")
                     return token_data
                 
+                logger.debug("No valid OAuth tokens found")
                 return None
             
             # For other platforms, handle standard OAuth 2.0
