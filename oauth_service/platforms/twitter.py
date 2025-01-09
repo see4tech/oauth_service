@@ -323,7 +323,7 @@ class TwitterOAuth(OAuthBase):
         """
         try:
             logger.debug("Starting media upload process")
-            logger.debug(f"Token data structure: {list(token_data.keys() if isinstance(token_data, dict) else [])}")
+            logger.debug(f"Token data contains keys: {list(token_data.keys())}")
             
             # First check if we have OAuth 1.0a tokens
             if not isinstance(token_data, dict):
@@ -388,7 +388,7 @@ class TwitterOAuth(OAuthBase):
                     os.unlink(tmp_path)
 
             logger.debug(f"5. Got response: {response.status_code}")
-            logger.debug(f"   Response text: {response.text[:200]}...")
+            logger.debug("Received response from Twitter API")
             
             if response.status_code != 200:
                 raise ValueError(f"Failed to upload media: {response.text}")
@@ -409,7 +409,8 @@ class TwitterOAuth(OAuthBase):
         """Create a tweet using Twitter API v2."""
         try:
             logger.debug("Starting tweet creation process")
-            logger.debug(f"Token data structure: {token_data.keys()}")
+            # Only log the structure/keys, not the values
+            logger.debug(f"Token data contains keys: {list(token_data.keys())}")
             
             # For media upload, we need OAuth 1.0a tokens
             media_ids = None
@@ -433,27 +434,30 @@ class TwitterOAuth(OAuthBase):
                 if not oauth2_token:
                     raise ValueError("OAuth 2.0 access token not found")
                 
-                # Create tweet using OAuth 2.0 token
-                headers = {
-                    "Authorization": f"Bearer {oauth2_token}",
-                    "Content-Type": "application/json"
-                }
+                # Create tweet using OAuth 2.0 token (don't log the actual token)
+                logger.debug("Creating tweet using OAuth 2.0")
                 
                 tweet_data = {
                     "text": content['text']
                 }
                 if media_ids:
                     tweet_data["media"] = {"media_ids": media_ids}
+                    logger.debug(f"Including media in tweet: {media_ids}")
                 
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         "https://api.twitter.com/2/tweets",
-                        headers=headers,
+                        headers={
+                            "Authorization": f"Bearer {oauth2_token}",
+                            "Content-Type": "application/json"
+                        },
                         json=tweet_data
                     ) as response:
                         if response.status != 201:
                             error_text = await response.text()
-                            raise ValueError(f"Failed to create tweet: {error_text}")
+                            # Sanitize error message in case it contains tokens
+                            safe_error = error_text.replace(oauth2_token, '[REDACTED]') if oauth2_token in error_text else error_text
+                            raise ValueError(f"Failed to create tweet: {safe_error}")
                         
                         tweet = await response.json()
                         
@@ -471,7 +475,11 @@ class TwitterOAuth(OAuthBase):
                 raise ValueError("OAuth 2.0 tokens required for tweet creation")
                 
         except Exception as e:
-            logger.error(f"Error creating tweet: {str(e)}")
+            # Ensure no tokens are logged in the error
+            error_msg = str(e)
+            if oauth2_token and oauth2_token in error_msg:
+                error_msg = error_msg.replace(oauth2_token, '[REDACTED]')
+            logger.error(f"Error creating tweet: {error_msg}")
             raise
     
     async def _fetch_media(self, url: str) -> bytes:
@@ -675,9 +683,7 @@ class TwitterOAuth(OAuthBase):
         """Upload media using Twitter v1.1 API."""
         try:
             logger.debug("\n=== Media Upload Process ===")
-            logger.debug(f"1. Creating OAuth1Session")
-            logger.debug(f"   Consumer key: {self._consumer_key[:10]}...")
-            logger.debug(f"   Access token: {oauth1_tokens['access_token'][:10]}...")
+            logger.debug("OAuth1 credentials configured")
             
             # Create OAuth1 auth object for requests
             from requests_oauthlib import OAuth1
@@ -724,7 +730,7 @@ class TwitterOAuth(OAuthBase):
                     os.unlink(tmp_path)
 
             logger.debug(f"5. Got response: {response.status_code}")
-            logger.debug(f"   Response text: {response.text[:200]}...")
+            logger.debug("Received response from Twitter API")
             
             if response.status_code != 200:
                 raise ValueError(f"Failed to upload media: {response.text}")

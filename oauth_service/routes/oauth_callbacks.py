@@ -209,9 +209,7 @@ async def linkedin_callback(
                 # Verify the stored key
                 stored_key = db.get_user_api_key(user_id, "linkedin")
                 logger.info("=== Local Storage Verification ===")
-                logger.info(f"Original API Key: {api_key}")
-                logger.info(f"Stored API Key: {stored_key}")
-                logger.info(f"Keys match: {stored_key == api_key}")
+                logger.info("API key storage verification completed")
                 
                 if stored_key != api_key:
                     logger.error("Stored key verification failed - mismatch between stored and original")
@@ -434,12 +432,12 @@ async def twitter_oauth1_callback(
             # Reuse the existing API key for OAuth 2.0
             api_key = existing_api_key
             logger.info("=== Reusing Existing Twitter API Key ===")
-            logger.info(f"Using existing API key from OAuth 1.0a: {api_key}")
+            logger.info("Using existing API key from OAuth 1.0a")
         else:
             # Generate new API key if none exists
             api_key = generate_api_key()
             logger.info("=== API Key Generation ===")
-            logger.info(f"Generated new API key: {api_key}")
+            logger.info("Generated new API key")
         
         # Store with oauth1 suffix
         platform_with_version = "twitter-oauth1"
@@ -474,9 +472,11 @@ async def twitter_oauth1_callback(
             # Verify the stored key
             stored_key = db.get_user_api_key(user_id, platform_with_version)
             logger.info("=== Local Storage Verification ===")
-            logger.info(f"Original API Key: {api_key}")
-            logger.info(f"Stored API Key: {stored_key}")
-            logger.info(f"Keys match: {stored_key == api_key}")
+            logger.info("API key storage verification completed")
+            
+            if stored_key != api_key:
+                logger.error("Stored key verification failed - mismatch between stored and original")
+                logger.error(f"Original length: {len(api_key)}, Stored length: {len(stored_key) if stored_key else 0}")
         except Exception as e:
             logger.error(f"Failed to store API key in local database: {str(e)}")
             raise
@@ -562,12 +562,12 @@ async def twitter_oauth2_callback(
             # Reuse the existing API key for OAuth 2.0
             api_key = existing_api_key
             logger.info("=== Reusing Existing Twitter API Key ===")
-            logger.info(f"Using existing API key from OAuth 1.0a: {api_key}")
+            logger.info("Using existing API key from OAuth 1.0a")
         else:
             # Generate new API key if none exists
             api_key = generate_api_key()
             logger.info("=== API Key Generation ===")
-            logger.info(f"Generated new API key: {api_key}")
+            logger.info("Generated new API key")
         
         # Store with oauth2 suffix
         platform_with_version = "twitter-oauth2"
@@ -602,9 +602,11 @@ async def twitter_oauth2_callback(
             # Verify the stored key
             stored_key = db.get_user_api_key(user_id, platform_with_version)
             logger.info("=== Local Storage Verification ===")
-            logger.info(f"Original API Key: {api_key}")
-            logger.info(f"Stored API Key: {stored_key}")
-            logger.info(f"Keys match: {stored_key == api_key}")
+            logger.info("API key storage verification completed")
+            
+            if stored_key != api_key:
+                logger.error("Stored key verification failed - mismatch between stored and original")
+                logger.error(f"Original length: {len(api_key)}, Stored length: {len(stored_key) if stored_key else 0}")
         except Exception as e:
             logger.error(f"Failed to store API key in local database: {str(e)}")
             raise

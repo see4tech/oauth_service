@@ -41,7 +41,7 @@ class KeyManager:
             return key
             
         except Exception as e:
-            logger.error(f"Error handling encryption key: {str(e)}")
+            logger.error("Error handling encryption key")
             raise
     
     def _is_valid_key(self, key: bytes) -> bool:

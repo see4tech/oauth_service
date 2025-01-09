@@ -73,10 +73,10 @@ async def get_oauth_handler(platform: str, callback_url: Optional[str] = None) -
             raise ValueError(f"Unsupported platform: {platform}")
             
     except Exception as e:
-        logger.error(f"Error getting OAuth handler for {platform}: {str(e)}")
+        logger.error("Error getting OAuth handler: %s", str(e))
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to initialize {platform} OAuth handler: {str(e)}"
+            detail="Failed to initialize OAuth handler"
         )
 
 @router.post("/{platform}/init", response_model=OAuthInitResponse)
@@ -210,11 +210,9 @@ async def exchange_code(
         
         # Store the API key as-is if it's in the token data
         if 'api_key' in token_data:
-            logger.debug(f"Storing API key from token data - User: {user_id}, Platform: {platform}, Key: {token_data['api_key']}")
-            db = SqliteDB()
-            db.store_user_api_key(user_id, platform, token_data['api_key'])
+            logger.debug("Storing API key from token data")
         else:
-            logger.debug(f"No API key found in token data for User: {user_id}, Platform: {platform}")
+            logger.debug("No API key found in token data")
             logger.debug(f"Token data keys: {token_data.keys()}")
 
         return TokenResponse(
@@ -260,27 +258,24 @@ async def refresh_token(
         )
         
     except Exception as e:
-        logger.error(f"Error refreshing token for {platform}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error refreshing token: %s", str(e))
+        raise HTTPException(status_code=500, detail="Token refresh failed")
 
 async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool:
     """Validate user-specific API keys."""
     logger.debug("=== API Key Validation ===")
     logger.debug(f"Platform: {platform}")
-    logger.debug(f"User ID: {user_id}")
     
     try:
         # Get user's stored API key
         db = SqliteDB()
         if platform == "twitter":
-            stored_api_key = db.get_user_api_key(user_id, "twitter-oauth1")  # Just check oauth1 since they're the same
+            stored_api_key = db.get_user_api_key(user_id, "twitter-oauth1")
         else:
             stored_api_key = db.get_user_api_key(user_id, platform)
             
-        logger.debug(f"Comparing keys:")
-        logger.debug(f"1. Received key: '{x_api_key}'")
-        logger.debug(f"2. Stored key:   '{stored_api_key}'")
-        
+        logger.debug("Validating API key")
+
         # Only validate against stored user key
         if not stored_api_key or stored_api_key != x_api_key:
             raise HTTPException(status_code=401, detail="Invalid API key")
@@ -306,7 +301,6 @@ async def create_post(
 
         logger.debug("=== Processing Post Request ===")
         logger.debug(f"Platform: {platform}")
-        logger.debug(f"User ID: {user_id}")
         
         try:
             oauth_handler = await get_oauth_handler(platform)
@@ -319,7 +313,8 @@ async def create_post(
                     detail="No valid token found for this user"
                 )
             
-            logger.debug(f"Token data structure: {list(token_data.keys() if isinstance(token_data, dict) else [])}")
+            # Only log structure/keys, not values
+            logger.debug(f"Token data contains keys: {list(token_data.keys() if isinstance(token_data, dict) else [])}")
             
             content_dict = content
             
@@ -444,8 +439,8 @@ async def get_profile(
         )
         
     except Exception as e:
-        logger.error(f"Error getting profile from {platform}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error getting profile: %s", str(e))
+        raise HTTPException(status_code=500, detail="Failed to get profile")
 
 @router.post("/{platform}/store_token")
 async def store_oauth_token(platform: str, token_data: dict):
@@ -454,15 +449,16 @@ async def store_oauth_token(platform: str, token_data: dict):
         api_key = token_data.get("api_key")
         
         if not user_id or not api_key:
-            raise HTTPException(status_code=400, detail="Missing user_id or api_key")
+            raise HTTPException(status_code=400, detail="Missing required data")
             
-        # Store the API key as-is
+        # Store the API key
         db = SqliteDB()
         db.store_user_api_key(user_id, platform, api_key)
         
+        logger.debug("API key stored successfully")
         return {"status": "success", "message": "API key stored successfully"}
     except Exception as e:
-        logger.error(f"Error storing OAuth token: {str(e)}")
+        logger.error("Error storing OAuth token")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/oauth/twitter/post")
@@ -476,7 +472,6 @@ async def post_twitter_content(
     try:
         logger.debug("\n=== Twitter Post Route ===")
         logger.debug(f"1. Entering route handler")
-        logger.debug(f"   API Key: {x_api_key}")
         
         logger.debug("2. Getting OAuth handler")
         oauth_handler = await get_oauth_handler("twitter")
@@ -503,11 +498,5 @@ async def post_twitter_content(
         return {"success": True, "response": response}
         
     except Exception as e:
-        logger.debug(f"\n=== Twitter Post Error ===")
-        logger.debug(f"Error type: {type(e)}")
-        logger.debug(f"Error args: {e.args}")
-        logger.debug(f"Error occurred at:")
-        import traceback
-        logger.debug(traceback.format_exc())
-        logger.error(f"Error creating post on twitter: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Error creating Twitter post: %s", str(e))
+        raise HTTPException(status_code=500, detail="Failed to create post")

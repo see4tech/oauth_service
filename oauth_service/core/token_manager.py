@@ -26,7 +26,7 @@ class TokenManager:
             logger.debug(f"Token data encrypted, length: {len(encrypted)}")
             return encrypted.decode()
         except Exception as e:
-            logger.error(f"Error encrypting token data: {str(e)}")
+            logger.error("Error encrypting token data")
             raise
     
     def decrypt_token_data(self, encrypted_data: str) -> Dict:
@@ -51,7 +51,7 @@ class TokenManager:
                 logger.debug(f"Successfully parsed token data with keys: {list(token_data.keys())}")
                 return token_data
         except Exception as e:
-            logger.error(f"Error decrypting token data: {str(e)}")
+            logger.error("Error decrypting token data")
             raise
     
     async def store_token(self, platform: str, user_id: str, token_data: Dict) -> None:

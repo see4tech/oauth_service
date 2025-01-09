@@ -66,8 +66,7 @@ async def lifespan(app: FastAPI):
     # Startup
     print("\n=== OAuth Service Startup ===")
     print(f"Environment: {settings.ENVIRONMENT}")
-    print(f"API Key configured: {bool(settings.API_KEY)}")
-    print(f"API Key value: {settings.API_KEY}")
+    print("API Key configured: Yes" if settings.API_KEY else "API Key configured: No")
     print("===========================\n")
     
     logger.info(f"Starting OAuth Service in {settings.ENVIRONMENT} environment")
@@ -86,7 +85,7 @@ async def lifespan(app: FastAPI):
     for platform in ['linkedin', 'twitter', 'facebook', 'instagram']:
         creds = settings.oauth_credentials.get(platform, {})
         logger.debug(f"{platform.title()} Configuration:")
-        logger.debug(f"- Client ID configured: {'Yes' if creds.get('client_id') else 'No'}")
+        logger.debug("- Credentials configured: %s", bool(creds.get('client_id')))
         logger.debug(f"- Callback URL: {creds.get('callback_url')}")
     
     yield
@@ -168,43 +167,24 @@ async def validate_api_key(request: Request, call_next):
             
         # First validate against global API key
         logger.debug("=== API Key Validation Start ===")
-        logger.debug(f"Full received API key header: {api_key}")
-        logger.debug(f"Full configured API key: {settings.API_KEY}")
-        
-        # For user-specific endpoints, validate against stored API key
+        logger.debug("Received API key header")
+
+        # Get configured API key
+        settings = get_settings()
+        logger.debug("Retrieved configured API key")
+
+        # For user-specific endpoints, validate against stored key
         if request.method == "POST":
             try:
                 body = await request.json()
-                logger.debug(f"Full request body: {body}")
-                user_id = body.get("user_id")
-                
-                if user_id:
-                    db = SqliteDB()
-                    stored_key = None
-                    
-                    if "twitter" in request.url.path:
-                        # Just check if the provided key matches either stored key
-                        stored_key = db.get_user_api_key(user_id, "twitter-oauth1")  # We can just check one since they're the same
-                        
-                        if not stored_key or stored_key != api_key:
-                            logger.debug("\n=== Middleware API Key Comparison ===")
-                            logger.debug(f"Received x-api-key: '{api_key}'")
-                            logger.debug(f"DB stored key:      '{stored_key}'")
-                            logger.debug(f"Global API key:     '{settings.API_KEY}'")
-                            
-                            if not stored_key or stored_key != api_key:
-                                logger.debug("Validation failed!")
-                                raise HTTPException(status_code=401, detail="Invalid API key")
-                    else:
-                        # For other platforms, check normally
-                        platform = request.url.path.split("/")[2]  # Get platform from URL
-                        stored_key = db.get_user_api_key(user_id, platform)
-                    
-                    logger.debug(f"Full stored API key from DB: {stored_key}")
-                    
+                if "user_id" in body:
+                    user_id = body["user_id"]
+                    stored_key = db.get_user_api_key(user_id, platform)
+                    logger.debug("Retrieved stored API key from DB")
+
                     if not stored_key or stored_key != api_key:
                         logger.debug("User-specific API key mismatch")
-                        logger.debug(f"Keys don't match: '{api_key}' != '{stored_key}'")
+                        logger.debug("Keys do not match")
                         raise HTTPException(status_code=401, detail="Invalid API key")
                         
             except json.JSONDecodeError:
