@@ -180,15 +180,26 @@ async def validate_api_key(request: Request, call_next):
                 if "user_id" in body:
                     user_id = body["user_id"]
                     db = SqliteDB()
-                    platform = request.url.path.split("/")[2]
-                    stored_key = db.get_user_api_key(user_id, platform)
-                    logger.debug("Retrieved stored API key from DB")
-
-                    if not stored_key or stored_key != api_key:
-                        logger.debug("User-specific API key mismatch")
-                        logger.debug("Keys do not match")
-                        raise HTTPException(status_code=401, detail="Invalid API key")
+                    
+                    if "twitter" in request.url.path:
+                        # Just check if the provided key matches either stored key
+                        stored_key = db.get_user_api_key(user_id, "twitter-oauth1")  # We can just check one since they're the same
                         
+                        if not stored_key or stored_key != api_key:
+                            logger.debug("User-specific API key mismatch")
+                            logger.debug("Keys do not match")
+                            raise HTTPException(status_code=401, detail="Invalid API key")
+                    else:
+                        # For other platforms, check normally
+                        platform = request.url.path.split("/")[2]  # Get platform from URL
+                        stored_key = db.get_user_api_key(user_id, platform)
+                        logger.debug("Retrieved stored API key from DB")
+
+                        if not stored_key or stored_key != api_key:
+                            logger.debug("User-specific API key mismatch")
+                            logger.debug("Keys do not match")
+                            raise HTTPException(status_code=401, detail="Invalid API key")
+                            
             except json.JSONDecodeError:
                 pass  # Not a JSON body, skip user-specific validation
                 
