@@ -406,16 +406,7 @@ class TwitterOAuth(OAuthBase):
             raise ValueError(f"Failed to upload media: {str(e)}")
     
     async def create_post(self, token_data: Dict, content: Dict) -> Dict:
-        """
-        Create a tweet using Twitter API v2.
-        
-        Args:
-            token_data: Dictionary containing OAuth tokens
-            content: Tweet content including text and media_ids
-            
-        Returns:
-            Dictionary containing tweet data
-        """
+        """Create a tweet using Twitter API v2."""
         try:
             logger.debug("Starting tweet creation process")
             logger.debug(f"Token data structure: {token_data.keys()}")
@@ -442,11 +433,13 @@ class TwitterOAuth(OAuthBase):
                 if not oauth2_token:
                     raise ValueError("OAuth 2.0 access token not found")
                 
+                # Fixed: Use OAuth 2.0 token as bearer_token
                 client = tweepy.Client(
-                    bearer_token=None,
-                    consumer_key=self._consumer_key,
-                    consumer_secret=self._decrypted_consumer_secret,
-                    access_token=oauth2_token
+                    bearer_token=oauth2_token,
+                    consumer_key=None,
+                    consumer_secret=None,
+                    access_token=None,
+                    access_token_secret=None
                 )
             elif isinstance(token_data, dict) and 'oauth1' in token_data:
                 oauth1_data = token_data['oauth1']
