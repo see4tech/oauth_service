@@ -617,12 +617,14 @@ class TwitterOAuth(OAuthBase):
             logger.debug("2. Downloading image")
             logger.debug(f"   URL: {image_url}")
             
-            # Download image using requests instead of aiohttp
+            # Download image and create file-like object
             import requests
+            from io import BytesIO
+            
             response = requests.get(image_url)
-            image_data = response.content
+            image_io = BytesIO(response.content)
             content_type = response.headers.get('content-type', 'image/jpeg')
-            size_mb = len(image_data) / (1024 * 1024)
+            size_mb = len(response.content) / (1024 * 1024)
             
             logger.debug(f"3. Image downloaded")
             logger.debug(f"   Content-Type: {content_type}")
@@ -632,23 +634,17 @@ class TwitterOAuth(OAuthBase):
                 logger.debug("Image too large for simple upload, needs chunked upload")
                 raise ValueError("Image too large (>5MB), needs chunked upload")
             
-            # Convert to base64
-            import base64
-            media_data = base64.b64encode(image_data).decode('utf-8')
-            
-            # Upload to Twitter
+            # Upload to Twitter using file-like object
             upload_url = "https://upload.twitter.com/1.1/media/upload.json"
-            data = {
-                'media_data': media_data,
-                'media_category': 'tweet_image'  # Specify the media category
+            files = {
+                'media': ('media.jpg', image_io, content_type)
             }
             
             logger.debug("4. Making upload request")
             logger.debug(f"   URL: {upload_url}")
-            logger.debug(f"   Using media_data parameter")
-            logger.debug(f"   Media category: tweet_image")
+            logger.debug(f"   Using file upload")
             
-            response = auth.post(upload_url, data=data)
+            response = auth.post(upload_url, files=files)
             logger.debug(f"5. Got response: {response.status_code}")
             logger.debug(f"   Response text: {response.text[:200]}...")
             
