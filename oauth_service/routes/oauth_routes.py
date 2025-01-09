@@ -469,7 +469,7 @@ async def store_oauth_token(platform: str, token_data: dict):
         logger.error(f"Error storing OAuth token: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@router.post("/oauth/twitter/post")
+@router.post("/twitter/post")
 async def post_twitter_content(
     request: Request,
     user_id: str = Body(...),

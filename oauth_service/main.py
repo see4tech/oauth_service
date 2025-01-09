@@ -107,18 +107,22 @@ async def get_api_key(request: Request, api_key_header: str = Security(api_key_h
                 body = await request.json()
                 user_id = body.get("user_id")
                 
-                if user_id and "twitter" in request.url.path:
+                if user_id:
                     db = SqliteDB()
-                    oauth1_key = db.get_user_api_key(user_id, "twitter-oauth1")
-                    oauth2_key = db.get_user_api_key(user_id, "twitter-oauth2")
-                    
-                    if api_key_header in [oauth1_key, oauth2_key]:
-                        return api_key_header
-                        
+                    if "twitter" in request.url.path:
+                        stored_key = db.get_user_api_key(user_id, "twitter-oauth1")  # Just check oauth1 since they're the same
+                        if api_key_header == stored_key:
+                            return api_key_header
+                    else:
+                        platform = request.url.path.split("/")[2]
+                        stored_key = db.get_user_api_key(user_id, platform)
+                        if api_key_header == stored_key:
+                            return api_key_header
+                            
             except json.JSONDecodeError:
                 pass
                 
-        # Fall back to global API key check
+        # Only check global API key if no user-specific key matched
         if api_key_header == settings.API_KEY:
             return api_key_header
             
