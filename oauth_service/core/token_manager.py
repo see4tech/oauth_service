@@ -113,33 +113,34 @@ class TokenManager:
                 logger.debug(f"No token found for user {user_id} on platform {platform}")
                 return None
             
-            # For LinkedIn, check expiration
-            if platform == "linkedin":
-                expires_at = token_data.get('expires_at')
-                if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
-                    logger.debug(f"Token expired for user {user_id} on platform {platform}")
-                    if token_data.get('refresh_token'):
-                        return await self.refresh_token(platform, user_id, token_data)
-                    return None
-                return token_data
-            
             # For Twitter, handle OAuth 1.0a and 2.0 separately
             if platform == "twitter":
-                oauth2_data = token_data.get('oauth2', {})
-                expires_at = oauth2_data.get('expires_at')
+                # If we have OAuth 2.0 data
+                if 'oauth2' in token_data:
+                    oauth2_data = token_data['oauth2']
+                    expires_at = oauth2_data.get('expires_at')
+                    
+                    if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
+                        logger.debug(f"OAuth 2.0 token expired for Twitter user {user_id}")
+                        refresh_token = oauth2_data.get('refresh_token')
+                        if refresh_token:
+                            logger.debug(f"Found refresh token for Twitter user {user_id}, attempting refresh")
+                            refreshed_data = await self.refresh_token(platform, user_id, oauth2_data)
+                            if refreshed_data:
+                                # Preserve OAuth 1.0a tokens if they exist
+                                if 'oauth1' in token_data:
+                                    refreshed_data['oauth1'] = token_data['oauth1']
+                                return refreshed_data
+                    
+                    # If OAuth 2.0 token is valid or we couldn't refresh, return full token data
+                    return token_data
                 
-                if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
-                    logger.debug(f"OAuth 2.0 token expired for Twitter user {user_id}")
-                    refresh_token = oauth2_data.get('refresh_token')
-                    if refresh_token:
-                        logger.debug(f"Found refresh token for Twitter user {user_id}, attempting refresh")
-                        return await self.refresh_token(platform, user_id, token_data)
-                    # If no refresh token, but we have OAuth 1.0a tokens, return those
-                    if 'oauth1' in token_data:
-                        logger.debug(f"No refresh token, but found OAuth 1.0a tokens for user {user_id}")
-                        return token_data
-                    return None
-                return token_data
+                # If we only have OAuth 1.0a tokens
+                elif 'oauth1' in token_data:
+                    logger.debug(f"Only OAuth 1.0a tokens found for user {user_id}")
+                    return token_data
+                
+                return None
             
             # For other platforms, handle standard OAuth 2.0
             expires_at = token_data.get('expires_at')
