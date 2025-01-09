@@ -620,6 +620,7 @@ class TwitterOAuth(OAuthBase):
             
             logger.debug("Starting tweet creation process")
             logger.debug(f"Token data structure: {tokens.keys() if isinstance(tokens, dict) else 'Invalid tokens'}")
+            logger.debug(f"OAuth2 token data: {tokens.get('oauth2', 'Not found')}")
             
             if not tokens or not isinstance(tokens, dict):
                 raise ValueError("No valid tokens found")
@@ -634,14 +635,20 @@ class TwitterOAuth(OAuthBase):
             
             # 2. Post tweet with media using v2 API with OAuth 2.0 tokens
             oauth2_tokens = tokens.get('oauth2')
-            if not oauth2_tokens or not oauth2_tokens.get('access_token'):
-                raise ValueError("OAuth 2.0 access token not found")
+            logger.debug(f"OAuth2 tokens found: {oauth2_tokens}")
+            
+            if not oauth2_tokens:
+                raise ValueError("OAuth 2.0 tokens not found")
+            
+            access_token = oauth2_tokens.get('access_token')
+            if not access_token:
+                raise ValueError("OAuth 2.0 access token not found in token data")
             
             logger.debug("Posting tweet with media")
-            logger.debug(f"Using OAuth2 token: {oauth2_tokens['access_token'][:10]}...")
+            logger.debug(f"Using OAuth2 token: {access_token[:10]}...")
             logger.debug(f"Media ID: {media_id}")
             
-            return await self._post_tweet_v2(oauth2_tokens['access_token'], text, media_id)
+            return await self._post_tweet_v2(access_token, text, media_id)
             
         except Exception as e:
             logger.error(f"Error creating tweet with media: {str(e)}")
