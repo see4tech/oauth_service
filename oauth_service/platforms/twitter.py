@@ -17,6 +17,7 @@ from requests_oauthlib import OAuth1Session
 import tempfile
 import requests
 from io import BytesIO
+import json
 
 logger = get_logger(__name__)
 
@@ -621,6 +622,7 @@ class TwitterOAuth(OAuthBase):
             logger.debug("Starting tweet creation process")
             logger.debug(f"Token data structure: {tokens.keys() if isinstance(tokens, dict) else 'Invalid tokens'}")
             logger.debug(f"OAuth2 token data: {tokens.get('oauth2', 'Not found')}")
+            logger.debug(f"Full token data (sanitized): {json.dumps({k: '***' if 'token' in k else v for k,v in tokens.items()})}")
             
             if not tokens or not isinstance(tokens, dict):
                 raise ValueError("No valid tokens found")
@@ -635,12 +637,17 @@ class TwitterOAuth(OAuthBase):
             
             # 2. Post tweet with media using v2 API with OAuth 2.0 tokens
             oauth2_tokens = tokens.get('oauth2')
-            logger.debug(f"OAuth2 tokens found: {oauth2_tokens}")
+            logger.debug(f"OAuth2 tokens structure: {json.dumps({k: '***' if 'token' in k else v for k,v in oauth2_tokens.items() if oauth2_tokens})}")
             
             if not oauth2_tokens:
                 raise ValueError("OAuth 2.0 tokens not found")
             
-            access_token = oauth2_tokens.get('access_token')
+            # Check if oauth2_tokens is a dict or direct token
+            if isinstance(oauth2_tokens, dict):
+                access_token = oauth2_tokens.get('access_token')
+            else:
+                access_token = oauth2_tokens
+            
             if not access_token:
                 raise ValueError("OAuth 2.0 access token not found in token data")
             
