@@ -179,6 +179,8 @@ async def validate_api_key(request: Request, call_next):
                 body = await request.json()
                 if "user_id" in body:
                     user_id = body["user_id"]
+                    db = SqliteDB()
+                    platform = request.url.path.split("/")[2]
                     stored_key = db.get_user_api_key(user_id, platform)
                     logger.debug("Retrieved stored API key from DB")
 
