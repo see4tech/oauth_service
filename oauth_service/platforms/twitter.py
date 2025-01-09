@@ -14,6 +14,9 @@ import hashlib
 from datetime import datetime
 from urllib.parse import urlencode
 from requests_oauthlib import OAuth1Session
+import tempfile
+import requests
+from io import BytesIO
 
 logger = get_logger(__name__)
 
@@ -339,29 +342,51 @@ class TwitterOAuth(OAuthBase):
                 logger.error("Missing required OAuth 1.0a token components")
                 raise ValueError("Missing OAuth 1.0a access token or secret")
 
-            # Download the image
-            async with aiohttp.ClientSession() as session:
-                async with session.get(image_url) as response:
-                    if not response.ok:
-                        raise ValueError(f"Failed to download image: {response.status}")
-                    image_data = await response.read()
+            # Download image and save temporarily
+            logger.debug("2. Downloading image")
+            logger.debug(f"   URL: {image_url}")
 
-            logger.debug("Image downloaded successfully")
+            response = requests.get(image_url)
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+                tmp_file.write(response.content)
+                tmp_path = tmp_file.name
 
-            # Create Twitter API v1.1 client
-            auth = tweepy.OAuth1UserHandler(
-                consumer_key=self._consumer_key,
-                consumer_secret=self._decrypted_consumer_secret,
-                access_token=oauth1_tokens['access_token'],
-                access_token_secret=oauth1_tokens['access_token_secret']
-            )
-            api = tweepy.API(auth)
+            try:
+                content_type = response.headers.get('content-type', 'image/jpeg')
+                size_mb = len(response.content) / (1024 * 1024)
+                
+                logger.debug(f"3. Image downloaded")
+                logger.debug(f"   Content-Type: {content_type}")
+                logger.debug(f"   Size: {size_mb:.2f}MB")
+                logger.debug(f"   Temp file: {tmp_path}")
+                
+                if size_mb > 5:
+                    logger.debug("Image too large for simple upload, needs chunked upload")
+                    raise ValueError("Image too large (>5MB), needs chunked upload")
+                
+                # Upload to Twitter using requests directly
+                upload_url = "https://upload.twitter.com/1.1/media/upload.json"
+                
+                with open(tmp_path, 'rb') as media_file:
+                    files = {
+                        'media': ('media.jpg', media_file, content_type)
+                    }
+                    response = requests.post(upload_url, auth=auth, files=files)
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
 
-            # Upload media
-            media = api.media_upload(filename='image', file=image_data)
-            logger.debug(f"Successfully uploaded media with ID: {media.media_id}")
+            logger.debug(f"5. Got response: {response.status_code}")
+            logger.debug(f"   Response text: {response.text[:200]}...")
             
-            return str(media.media_id)
+            if response.status_code != 200:
+                raise ValueError(f"Failed to upload media: {response.text}")
+            
+            media_data = response.json()
+            media_id = media_data['media_id_string']
+            logger.debug(f"6. Success! Media ID: {media_id}")
+            return media_id
 
         except ValueError as e:
             logger.error(f"Validation error in media upload: {str(e)}")
@@ -618,36 +643,41 @@ class TwitterOAuth(OAuthBase):
             logger.debug("2. Downloading image")
             logger.debug(f"   URL: {image_url}")
             
-            # Download image and create file-like object
-            import requests
-            from io import BytesIO
-            
+            # Download image and save temporarily
+            logger.debug("2. Downloading image")
+            logger.debug(f"   URL: {image_url}")
+
             response = requests.get(image_url)
-            image_io = BytesIO(response.content)
-            image_io.seek(0)  # Important: seek to start of file
-            content_type = response.headers.get('content-type', 'image/jpeg')
-            size_mb = len(response.content) / (1024 * 1024)
-            
-            logger.debug(f"3. Image downloaded")
-            logger.debug(f"   Content-Type: {content_type}")
-            logger.debug(f"   Size: {size_mb:.2f}MB")
-            
-            if size_mb > 5:
-                logger.debug("Image too large for simple upload, needs chunked upload")
-                raise ValueError("Image too large (>5MB), needs chunked upload")
-            
-            # Upload to Twitter using requests directly
-            upload_url = "https://upload.twitter.com/1.1/media/upload.json"
-            files = {
-                'media': ('media.jpg', image_io, content_type)
-            }
-            
-            logger.debug("\n4. Making upload request")
-            logger.debug(f"   URL: {upload_url}")
-            logger.debug(f"   Content-Type in files: {content_type}")
-            logger.debug(f"   Files structure: {files}")
-            
-            response = requests.post(upload_url, auth=auth, files=files)
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
+                tmp_file.write(response.content)
+                tmp_path = tmp_file.name
+
+            try:
+                content_type = response.headers.get('content-type', 'image/jpeg')
+                size_mb = len(response.content) / (1024 * 1024)
+                
+                logger.debug(f"3. Image downloaded")
+                logger.debug(f"   Content-Type: {content_type}")
+                logger.debug(f"   Size: {size_mb:.2f}MB")
+                logger.debug(f"   Temp file: {tmp_path}")
+                
+                if size_mb > 5:
+                    logger.debug("Image too large for simple upload, needs chunked upload")
+                    raise ValueError("Image too large (>5MB), needs chunked upload")
+                
+                # Upload to Twitter using requests directly
+                upload_url = "https://upload.twitter.com/1.1/media/upload.json"
+                
+                with open(tmp_path, 'rb') as media_file:
+                    files = {
+                        'media': ('media.jpg', media_file, content_type)
+                    }
+                    response = requests.post(upload_url, auth=auth, files=files)
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+
             logger.debug(f"5. Got response: {response.status_code}")
             logger.debug(f"   Response text: {response.text[:200]}...")
             
@@ -658,7 +688,7 @@ class TwitterOAuth(OAuthBase):
             media_id = media_data['media_id_string']
             logger.debug(f"6. Success! Media ID: {media_id}")
             return media_id
-            
+
         except Exception as e:
             logger.error(f"Error uploading media to Twitter: {str(e)}")
             raise ValueError(f"Failed to upload media: {str(e)}")
