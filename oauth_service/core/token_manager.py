@@ -129,7 +129,12 @@ class TokenManager:
                 # If we have OAuth 2.0 data
                 if 'oauth2' in token_data:
                     oauth2_data = token_data['oauth2']
-                    logger.debug(f"OAuth 2.0 data found: {json.dumps({k: '***' if 'token' in k else v for k, v in oauth2_data.items()})}")
+                    logger.debug(f"OAuth 2.0 data found: {json.dumps(oauth2_data)}")
+                    
+                    # Handle nested oauth2 structure if present
+                    if isinstance(oauth2_data, dict) and 'oauth2' in oauth2_data:
+                        oauth2_data = oauth2_data['oauth2']
+                        logger.debug("Found nested OAuth 2.0 data structure")
                     
                     expires_at = oauth2_data.get('expires_at')
                     if expires_at:
@@ -152,7 +157,7 @@ class TokenManager:
                             logger.debug("Token refresh failed")
                     
                     # Check if we have the required OAuth 2.0 fields
-                    required_fields = ['access_token', 'token_type']
+                    required_fields = ['access_token']  # Removed 'token_type' as it's not always present
                     missing_fields = [field for field in required_fields if field not in oauth2_data]
                     if missing_fields:
                         logger.error(f"Missing required OAuth 2.0 fields: {missing_fields}")
@@ -162,8 +167,9 @@ class TokenManager:
                             return token_data
                         return None
                     
-                    # If OAuth 2.0 token is valid or we couldn't refresh, return full token data
-                    logger.debug("Returning full token data with valid OAuth 2.0 token")
+                    # If OAuth 2.0 token is valid, update the structure to match expected format
+                    token_data['oauth2'] = oauth2_data
+                    logger.debug("Returning normalized OAuth 2.0 token data")
                     return token_data
                 
                 # If we only have OAuth 1.0a tokens
