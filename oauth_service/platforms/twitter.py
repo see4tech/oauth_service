@@ -615,19 +615,30 @@ class TwitterOAuth(OAuthBase):
     async def post_tweet_with_media(self, user_id: str, text: str, image_url: str) -> Dict:
         """Post tweet with media using both API versions."""
         try:
+            logger.debug("\n=== Starting Tweet with Media Process ===")
+            logger.debug(f"User ID: {user_id}")
+            logger.debug(f"Has text: {'yes' if text else 'no'}")
+            logger.debug(f"Image URL: {image_url}")
+            
             # Get tokens for both versions
+            logger.debug("1. Getting tokens from TokenManager")
             token_manager = TokenManager()
             tokens = await token_manager.get_token("twitter", user_id)
+            logger.debug("2. Got tokens from TokenManager")
             
-            logger.debug("Starting tweet creation process")
-            logger.debug(f"Token data structure: {tokens.keys() if isinstance(tokens, dict) else 'Invalid tokens'}")
-            logger.debug(f"OAuth2 token data: {tokens.get('oauth2', 'Not found')}")
-            logger.debug(f"Full token data (sanitized):")
-            for k, v in tokens.items():
-                if isinstance(v, dict):
-                    logger.debug(f"  {k}: {json.dumps({sk: '***' if 'token' in sk else sv for sk, sv in v.items()})}")
-                else:
-                    logger.debug(f"  {k}: {'***' if 'token' in k else v}")
+            logger.debug("3. Token data:")
+            logger.debug(f"   Raw type: {type(tokens)}")
+            logger.debug(f"   Is dict: {isinstance(tokens, dict)}")
+            if isinstance(tokens, dict):
+                logger.debug(f"   Keys: {tokens.keys()}")
+                logger.debug(f"   Has oauth1: {'oauth1' in tokens}")
+                logger.debug(f"   Has oauth2: {'oauth2' in tokens}")
+                
+                if 'oauth2' in tokens:
+                    oauth2_data = tokens['oauth2']
+                    logger.debug(f"   OAuth2 type: {type(oauth2_data)}")
+                    if isinstance(oauth2_data, dict):
+                        logger.debug(f"   OAuth2 keys: {oauth2_data.keys()}")
             
             if not tokens or not isinstance(tokens, dict):
                 raise ValueError("No valid tokens found")
