@@ -18,6 +18,7 @@ import tempfile
 import requests
 from io import BytesIO
 import json
+from ..core.token_refresh_handler import refresh_handler
 
 logger = get_logger(__name__)
 
@@ -405,7 +406,7 @@ class TwitterOAuth(OAuthBase):
             logger.error(f"Error uploading media to Twitter: {str(e)}")
             raise ValueError(f"Failed to upload media: {str(e)}")
     
-    async def create_post(self, token_data: Dict, content: Dict) -> Dict:
+    async def create_post(self, token_data: Dict, content: Dict, user_id: str = None, x_api_key: str = None) -> Dict:
         """Create a tweet using Twitter API v2."""
         try:
             logger.debug("Starting tweet creation process")
@@ -426,6 +427,13 @@ class TwitterOAuth(OAuthBase):
                 except Exception as e:
                     logger.error(f"Media upload failed: {str(e)}")
                     raise ValueError(f"Media upload failed: {str(e)}")
+
+            # Get fresh token data if user_id is provided
+            if user_id:
+                logger.debug(f"Checking token validity for user {user_id}")
+                token_data = await refresh_handler.get_valid_token(user_id, "twitter", x_api_key)
+                if not token_data:
+                    raise ValueError("Failed to get valid token")
 
             # For creating the tweet, use OAuth 2.0
             if isinstance(token_data, dict) and 'oauth2' in token_data:
@@ -477,7 +485,7 @@ class TwitterOAuth(OAuthBase):
         except Exception as e:
             # Ensure no tokens are logged in the error
             error_msg = str(e)
-            if oauth2_token and oauth2_token in error_msg:
+            if 'oauth2_token' in locals() and oauth2_token and oauth2_token in error_msg:
                 error_msg = error_msg.replace(oauth2_token, '[REDACTED]')
             logger.error(f"Error creating tweet: {error_msg}")
             raise

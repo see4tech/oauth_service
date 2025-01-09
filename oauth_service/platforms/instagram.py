@@ -3,6 +3,7 @@ import aiohttp
 from ..core.oauth_base import OAuthBase
 from ..utils.rate_limiter import RateLimiter
 from ..utils.logger import get_logger
+from ..core.token_refresh_handler import refresh_handler
 
 logger = get_logger(__name__)
 
@@ -230,13 +231,15 @@ class InstagramOAuth(OAuthBase):
                     raise ValueError(f"Failed to get profile: {data['error'].get('message')}")
                 return data
     
-    async def create_post(self, token: str, content: Dict) -> Dict:
+    async def create_post(self, token_data: Dict, content: Dict, user_id: str = None, x_api_key: str = None) -> Dict:
         """
         Create a post on Instagram.
         
         Args:
-            token: Access token
+            token_data: Dictionary containing access token
             content: Dictionary containing post content (text and image_url)
+            user_id: Optional user identifier for token refresh
+            x_api_key: Optional API key for token refresh
             
         Returns:
             Dictionary containing post information
@@ -245,16 +248,30 @@ class InstagramOAuth(OAuthBase):
             raise ValueError("Instagram requires an image for posting")
 
         try:
+            logger.debug("Starting Instagram post creation")
+            
+            # Get fresh token data if user_id is provided
+            if user_id:
+                logger.debug(f"Checking token validity for user {user_id}")
+                token_data = await refresh_handler.get_valid_token(user_id, "instagram", x_api_key)
+                if not token_data:
+                    raise ValueError("Failed to get valid token")
+            
+            # Get access token
+            access_token = token_data.get("access_token")
+            if not access_token:
+                raise ValueError("No access token found in token data")
+            
             # First create a media container
             container = await self.create_media_container(
-                token=token,
+                token=access_token,
                 media_url=content["image_url"],
                 caption=content["text"]
             )
             
             # Then publish the media
             result = await self.publish_media(
-                token=token,
+                token=access_token,
                 container_id=container["container_id"]
             )
             
@@ -265,5 +282,9 @@ class InstagramOAuth(OAuthBase):
             }
             
         except Exception as e:
-            logger.error(f"Error creating Instagram post: {str(e)}")
+            # Ensure no tokens are logged in the error
+            error_msg = str(e)
+            if 'access_token' in locals() and access_token and access_token in error_msg:
+                error_msg = error_msg.replace(access_token, '[REDACTED]')
+            logger.error(f"Error creating Instagram post: {error_msg}")
             raise

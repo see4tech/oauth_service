@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from ..core.oauth_base import OAuthBase
 from ..utils.rate_limiter import RateLimiter
 from ..utils.logger import get_logger
+from ..core.token_refresh_handler import refresh_handler
 
 logger = get_logger(__name__)
 
@@ -315,19 +316,28 @@ class LinkedInOAuth(OAuthBase):
                 detail=f"Error uploading image: {str(e)}"
             )
 
-    async def create_post(self, token_data: Dict, content: Dict) -> Dict:
+    async def create_post(self, token_data: Dict, content: Dict, user_id: str = None, x_api_key: str = None) -> Dict:
         """
         Create a LinkedIn post.
         
         Args:
             token_data: Dictionary containing access token
             content: Dictionary containing post content
+            user_id: Optional user identifier for token refresh
+            x_api_key: Optional API key for token refresh
             
         Returns:
             Dictionary containing post ID and URL
         """
         try:
             logger.debug("Starting LinkedIn post creation")
+            
+            # Get fresh token data if user_id is provided
+            if user_id:
+                logger.debug(f"Checking token validity for user {user_id}")
+                token_data = await refresh_handler.get_valid_token(user_id, "linkedin", x_api_key)
+                if not token_data:
+                    raise ValueError("Failed to get valid token")
             
             # Get access token from token data
             access_token = token_data.get("access_token")
@@ -389,7 +399,10 @@ class LinkedInOAuth(OAuthBase):
                     json=post_data
                 ) as response:
                     if not response.ok:
-                        raise ValueError("Failed to create post")
+                        error_text = await response.text()
+                        # Sanitize error message in case it contains tokens
+                        safe_error = error_text.replace(access_token, '[REDACTED]') if access_token in error_text else error_text
+                        raise ValueError(f"Failed to create post: {safe_error}")
                     
                     data = json.loads(await response.text())
                     post_id = data["id"]
@@ -401,5 +414,9 @@ class LinkedInOAuth(OAuthBase):
                     }
                     
         except Exception as e:
-            logger.error(f"Error creating post: {str(e)}")
+            # Ensure no tokens are logged in the error
+            error_msg = str(e)
+            if 'access_token' in locals() and access_token and access_token in error_msg:
+                error_msg = error_msg.replace(access_token, '[REDACTED]')
+            logger.error(f"Error creating post: {error_msg}")
             raise
