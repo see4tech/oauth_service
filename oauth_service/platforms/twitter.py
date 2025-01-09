@@ -584,6 +584,8 @@ class TwitterOAuth(OAuthBase):
             token_manager = TokenManager()
             tokens = await token_manager.get_token("twitter", user_id)
             
+            # No explicit API key validation here, but token retrieval could fail
+            
             # 1. Upload media using v1.1 API with OAuth 1.0a tokens
             oauth1_tokens = tokens.get('oauth1')
             media_id = await self._upload_media_v1(oauth1_tokens, image_url)

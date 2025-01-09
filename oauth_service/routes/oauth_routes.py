@@ -293,84 +293,94 @@ async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool
 @router.post("/{platform}/post", response_model=PostResponse)
 async def create_post(
     platform: str,
-    request: SimplePostRequest,
+    request: Request,
+    user_id: str = Body(...),
+    content: Dict = Body(...),
     x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
-    # Log non-sensitive information
-    logger.debug("=== Processing Post Request ===")
-    logger.debug(f"Platform: {platform}")
-    logger.debug(f"User ID: {request.user_id}")
-    
-    # Get stored API key
-    db = SqliteDB()
-    stored_api_key = db.get_user_api_key(request.user_id, platform)
-    
     try:
-        # Validate against user's stored API key
-        if x_api_key != stored_api_key:
-            logger.debug("API key validation failed")
-            raise HTTPException(status_code=401, detail="Invalid API key")
+        # This validation might be failing
+        await validate_api_keys(user_id, platform, x_api_key)
+
+        # Log non-sensitive information
+        logger.debug("=== Processing Post Request ===")
+        logger.debug(f"Platform: {platform}")
+        logger.debug(f"User ID: {user_id}")
+        
+        # Get stored API key
+        db = SqliteDB()
+        stored_api_key = db.get_user_api_key(user_id, platform)
+        
+        try:
+            # Validate against user's stored API key
+            if x_api_key != stored_api_key:
+                logger.debug("API key validation failed")
+                raise HTTPException(status_code=401, detail="Invalid API key")
             
-        if not stored_api_key:
-            logger.debug("No stored API key found")
-            raise HTTPException(status_code=401, detail="No API key found for user")
-        
-        oauth_handler = await get_oauth_handler(platform)
-        token_manager = TokenManager()
-        
-        # Get token data
-        token_data = await token_manager.get_valid_token(platform, request.user_id)
-        if not token_data:
-            raise HTTPException(
-                status_code=401,
-                detail="No valid token found for this user"
-            )
-        
-        # Log token structure (without sensitive data)
-        logger.debug(f"Token data structure: {list(token_data.keys() if isinstance(token_data, dict) else [])}")
-        
-        content_dict = request.content.dict(exclude_none=True)
-        
-        # For Twitter, ensure we have both OAuth 1.0a and 2.0 tokens if needed
-        if platform == "twitter":
-            if not isinstance(token_data, dict):
+            if not stored_api_key:
+                logger.debug("No stored API key found")
+                raise HTTPException(status_code=401, detail="No API key found for user")
+            
+            oauth_handler = await get_oauth_handler(platform)
+            token_manager = TokenManager()
+            
+            # Get token data
+            token_data = await token_manager.get_valid_token(platform, user_id)
+            if not token_data:
                 raise HTTPException(
-                    status_code=500,
-                    detail="Invalid token data structure"
+                    status_code=401,
+                    detail="No valid token found for this user"
                 )
             
-            if content_dict.get("image_url") and 'oauth1' not in token_data:
-                raise HTTPException(
-                    status_code=400,
-                    detail="OAuth 1.0a tokens required for media upload"
-                )
+            # Log token structure (without sensitive data)
+            logger.debug(f"Token data structure: {list(token_data.keys() if isinstance(token_data, dict) else [])}")
             
-            # Ensure OAuth 1.0a tokens are properly structured
-            if 'oauth1' in token_data:
-                oauth1_data = token_data['oauth1']
-                if not isinstance(oauth1_data, dict):
+            content_dict = content.dict(exclude_none=True)
+            
+            # For Twitter, ensure we have both OAuth 1.0a and 2.0 tokens if needed
+            if platform == "twitter":
+                if not isinstance(token_data, dict):
                     raise HTTPException(
                         status_code=500,
-                        detail="Invalid OAuth 1.0a token structure"
+                        detail="Invalid token data structure"
                     )
-                if not oauth1_data.get('access_token') or not oauth1_data.get('access_token_secret'):
+                
+                if content_dict.get("image_url") and 'oauth1' not in token_data:
                     raise HTTPException(
-                        status_code=401,
-                        detail="Missing OAuth 1.0a tokens"
+                        status_code=400,
+                        detail="OAuth 1.0a tokens required for media upload"
                     )
-        
-        result = await oauth_handler.create_post(
-            token_data,
-            content_dict
-        )
-        
-        return PostResponse(
-            post_id=result["post_id"],
-            platform=platform,
-            url=result.get("url"),
-            platform_specific_data=result.get("additional_data")
-        )
-        
+                
+                # Ensure OAuth 1.0a tokens are properly structured
+                if 'oauth1' in token_data:
+                    oauth1_data = token_data['oauth1']
+                    if not isinstance(oauth1_data, dict):
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Invalid OAuth 1.0a token structure"
+                        )
+                    if not oauth1_data.get('access_token') or not oauth1_data.get('access_token_secret'):
+                        raise HTTPException(
+                            status_code=401,
+                            detail="Missing OAuth 1.0a tokens"
+                        )
+            
+            result = await oauth_handler.create_post(
+                token_data,
+                content_dict
+            )
+            
+            return PostResponse(
+                post_id=result["post_id"],
+                platform=platform,
+                url=result.get("url"),
+                platform_specific_data=result.get("additional_data")
+            )
+            
+        except Exception as e:
+            logger.error(f"Error creating post on {platform}: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
     except Exception as e:
         logger.error(f"Error creating post on {platform}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
