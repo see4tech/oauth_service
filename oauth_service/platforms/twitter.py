@@ -606,8 +606,9 @@ class TwitterOAuth(OAuthBase):
             logger.debug(f"   Consumer key: {self._consumer_key[:10]}...")
             logger.debug(f"   Access token: {oauth1_tokens['access_token'][:10]}...")
             
-            # Create OAuth1Session
-            auth = OAuth1Session(
+            # Create OAuth1 auth object for requests
+            from requests_oauthlib import OAuth1
+            auth = OAuth1(
                 self._consumer_key,
                 client_secret=self._decrypted_consumer_secret,
                 resource_owner_key=oauth1_tokens['access_token'],
@@ -635,7 +636,7 @@ class TwitterOAuth(OAuthBase):
                 logger.debug("Image too large for simple upload, needs chunked upload")
                 raise ValueError("Image too large (>5MB), needs chunked upload")
             
-            # Upload to Twitter using file-like object
+            # Upload to Twitter using requests directly
             upload_url = "https://upload.twitter.com/1.1/media/upload.json"
             files = {
                 'media': ('media.jpg', image_io, content_type)
@@ -645,19 +646,8 @@ class TwitterOAuth(OAuthBase):
             logger.debug(f"   URL: {upload_url}")
             logger.debug(f"   Content-Type in files: {content_type}")
             logger.debug(f"   Files structure: {files}")
-            logger.debug(f"   Request encoding: {auth.headers.get('Content-Type', 'Not specified')}")
-
-            # Log the actual request details
-            from urllib.parse import urlparse
-            parsed_url = urlparse(upload_url)
-            logger.debug("\nFull Request Details:")
-            logger.debug(f"   Method: POST")
-            logger.debug(f"   Protocol: {parsed_url.scheme}")
-            logger.debug(f"   Host: {parsed_url.netloc}")
-            logger.debug(f"   Path: {parsed_url.path}")
-            logger.debug(f"   Headers: {auth.headers}")
-
-            response = auth.post(upload_url, files=files)
+            
+            response = requests.post(upload_url, auth=auth, files=files)
             logger.debug(f"5. Got response: {response.status_code}")
             logger.debug(f"   Response text: {response.text[:200]}...")
             
