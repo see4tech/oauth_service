@@ -614,22 +614,37 @@ class TwitterOAuth(OAuthBase):
     async def post_tweet_with_media(self, user_id: str, text: str, image_url: str) -> Dict:
         """Post tweet with media using both API versions."""
         try:
+            logger.debug("Starting tweet creation process")
+            logger.debug(f"Token data structure: {list(token_data.keys() if isinstance(token_data, dict) else [])}")
+            
             # Get tokens for both versions
             token_manager = TokenManager()
             tokens = await token_manager.get_token("twitter", user_id)
             
-            # No explicit API key validation here, but token retrieval could fail
+            if not tokens or not isinstance(tokens, dict):
+                raise ValueError("No valid tokens found")
             
             # 1. Upload media using v1.1 API with OAuth 1.0a tokens
             oauth1_tokens = tokens.get('oauth1')
+            if not oauth1_tokens:
+                raise ValueError("OAuth 1.0a tokens not found")
+            
             media_id = await self._upload_media_v1(oauth1_tokens, image_url)
+            logger.debug(f"Media uploaded successfully with ID: {media_id}")
             
             # 2. Post tweet with media using v2 API with OAuth 2.0 tokens
             oauth2_tokens = tokens.get('oauth2')
+            if not oauth2_tokens or not oauth2_tokens.get('access_token'):
+                raise ValueError("OAuth 2.0 access token not found")
+            
+            logger.debug("Posting tweet with media")
+            logger.debug(f"Using OAuth2 token: {oauth2_tokens['access_token'][:10]}...")
+            logger.debug(f"Media ID: {media_id}")
+            
             return await self._post_tweet_v2(oauth2_tokens['access_token'], text, media_id)
             
         except Exception as e:
-            logger.error(f"Error posting tweet with media: {str(e)}")
+            logger.error(f"Error creating tweet with media: {str(e)}")
             raise
     
     async def _upload_media_v1(self, oauth1_tokens: Dict, image_url: str) -> str:
