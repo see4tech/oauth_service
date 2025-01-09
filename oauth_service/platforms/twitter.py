@@ -342,6 +342,15 @@ class TwitterOAuth(OAuthBase):
                 logger.error("Missing required OAuth 1.0a token components")
                 raise ValueError("Missing OAuth 1.0a access token or secret")
 
+            # Create OAuth1 auth object for requests
+            from requests_oauthlib import OAuth1
+            oauth1_auth = OAuth1(
+                self._consumer_key,
+                client_secret=self._decrypted_consumer_secret,
+                resource_owner_key=oauth1_tokens['access_token'],
+                resource_owner_secret=oauth1_tokens['access_token_secret']
+            )
+
             # Download image and save temporarily
             logger.debug("2. Downloading image")
             logger.debug(f"   URL: {image_url}")
@@ -371,7 +380,7 @@ class TwitterOAuth(OAuthBase):
                     files = {
                         'media': ('media.jpg', media_file, content_type)
                     }
-                    response = requests.post(upload_url, auth=auth, files=files)
+                    response = requests.post(upload_url, auth=oauth1_auth, files=files)
             finally:
                 # Clean up temp file
                 if os.path.exists(tmp_path):
