@@ -478,13 +478,16 @@ async def post_twitter_content(
 ):
     """Post content to Twitter."""
     try:
-        # Get both stored API keys for validation
-        db = SqliteDB()
-        oauth1_key = db.get_user_api_key(user_id, "twitter-oauth1")
-        oauth2_key = db.get_user_api_key(user_id, "twitter-oauth2")
+        logger.debug("=== Processing Post Request ===")
+        logger.debug(f"Platform: twitter")
+        logger.debug(f"User ID: {user_id}")
         
-        # Check if provided key matches either stored key
-        if not (x_api_key == oauth1_key or x_api_key == oauth2_key):
+        # Get stored API key for validation - just check oauth1 since they're the same
+        db = SqliteDB()
+        stored_key = db.get_user_api_key(user_id, "twitter-oauth1")
+        
+        if not stored_key or stored_key != x_api_key:
+            logger.debug("API key validation failed")
             raise HTTPException(status_code=401, detail="Invalid API key")
         
         # Initialize Twitter OAuth handler
@@ -513,5 +516,5 @@ async def post_twitter_content(
         return {"success": True, "response": response}
         
     except Exception as e:
-        logger.error(f"Error posting to Twitter: {str(e)}")
+        logger.error(f"Error creating post on twitter: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
