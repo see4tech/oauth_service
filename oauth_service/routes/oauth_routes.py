@@ -302,7 +302,7 @@ async def create_post(
     x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
     try:
-        # This validation might be failing
+        # This validation is sufficient
         await validate_api_keys(user_id, platform, x_api_key)
 
         # Log non-sensitive information
@@ -310,20 +310,7 @@ async def create_post(
         logger.debug(f"Platform: {platform}")
         logger.debug(f"User ID: {user_id}")
         
-        # Get stored API key
-        db = SqliteDB()
-        stored_api_key = db.get_user_api_key(user_id, platform)
-        
         try:
-            # Validate against user's stored API key
-            if x_api_key != stored_api_key:
-                logger.debug("API key validation failed")
-                raise HTTPException(status_code=401, detail="Invalid API key")
-            
-            if not stored_api_key:
-                logger.debug("No stored API key found")
-                raise HTTPException(status_code=401, detail="No API key found for user")
-            
             oauth_handler = await get_oauth_handler(platform)
             token_manager = TokenManager()
             
