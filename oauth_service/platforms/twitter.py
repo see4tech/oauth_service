@@ -633,7 +633,7 @@ class TwitterOAuth(OAuthBase):
             
             # Create OAuth1 auth object for requests
             from requests_oauthlib import OAuth1
-            auth = OAuth1(
+            oauth1_auth = OAuth1(
                 self._consumer_key,
                 client_secret=self._decrypted_consumer_secret,
                 resource_owner_key=oauth1_tokens['access_token'],
@@ -644,9 +644,6 @@ class TwitterOAuth(OAuthBase):
             logger.debug(f"   URL: {image_url}")
             
             # Download image and save temporarily
-            logger.debug("2. Downloading image")
-            logger.debug(f"   URL: {image_url}")
-
             response = requests.get(image_url)
             with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_file:
                 tmp_file.write(response.content)
@@ -672,7 +669,7 @@ class TwitterOAuth(OAuthBase):
                     files = {
                         'media': ('media.jpg', media_file, content_type)
                     }
-                    response = requests.post(upload_url, auth=auth, files=files)
+                    response = requests.post(upload_url, auth=oauth1_auth, files=files)
             finally:
                 # Clean up temp file
                 if os.path.exists(tmp_path):
