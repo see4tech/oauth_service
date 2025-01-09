@@ -623,8 +623,13 @@ class TwitterOAuth(OAuthBase):
             # Get tokens for both versions
             logger.debug("1. Getting tokens from TokenManager")
             token_manager = TokenManager()
-            tokens = await token_manager.get_token("twitter", user_id)
-            logger.debug("2. Got tokens from TokenManager")
+            try:
+                tokens = await token_manager.get_token("twitter", user_id)
+                logger.debug("2. Got tokens from TokenManager")
+            except Exception as e:
+                logger.error(f"Error getting tokens: {str(e)}")
+                logger.error(f"Token manager error details:", exc_info=True)
+                raise
             
             logger.debug("3. Token data:")
             logger.debug(f"   Raw type: {type(tokens)}")
@@ -639,6 +644,7 @@ class TwitterOAuth(OAuthBase):
                     logger.debug(f"   OAuth2 type: {type(oauth2_data)}")
                     if isinstance(oauth2_data, dict):
                         logger.debug(f"   OAuth2 keys: {oauth2_data.keys()}")
+                        logger.debug(f"   OAuth2 data: {json.dumps({k: '***' if 'token' in k else v for k,v in oauth2_data.items()})}")
             
             if not tokens or not isinstance(tokens, dict):
                 raise ValueError("No valid tokens found")
@@ -653,12 +659,14 @@ class TwitterOAuth(OAuthBase):
             
             # 2. Post tweet with media using v2 API with OAuth 2.0 tokens
             oauth2_tokens = tokens.get('oauth2')
-            logger.debug(f"OAuth2 tokens found:")
+            logger.debug(f"OAuth2 tokens raw data: {oauth2_tokens}")
+            logger.debug(f"OAuth2 tokens type: {type(oauth2_tokens)}")
             if isinstance(oauth2_tokens, dict):
-                logger.debug(f"  Structure: {json.dumps({k: '***' if 'token' in k else v for k,v in oauth2_tokens.items()})}")
+                logger.debug(f"OAuth2 tokens keys: {oauth2_tokens.keys()}")
                 access_token = oauth2_tokens.get('access_token')
+                logger.debug(f"Access token found: {'yes' if access_token else 'no'}")
             else:
-                logger.debug(f"  Direct token: {'present' if oauth2_tokens else 'missing'}")
+                logger.debug(f"OAuth2 tokens is not a dict")
                 access_token = oauth2_tokens
             
             if not access_token:
