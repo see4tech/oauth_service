@@ -626,25 +626,20 @@ class TwitterOAuth(OAuthBase):
             try:
                 tokens = await token_manager.get_token("twitter", user_id)
                 logger.debug("2. Got tokens from TokenManager")
+                logger.debug("Token details:")
+                logger.debug(f"Raw tokens: {tokens}")  # Let's see the actual token data
+                logger.debug(f"Type: {type(tokens)}")
+                if isinstance(tokens, dict):
+                    logger.debug(f"Keys: {list(tokens.keys())}")
+                    if 'oauth2' in tokens:
+                        oauth2_data = tokens['oauth2']
+                        logger.debug(f"OAuth2 data type: {type(oauth2_data)}")
+                        if isinstance(oauth2_data, dict):
+                            logger.debug(f"OAuth2 keys: {list(oauth2_data.keys())}")
             except Exception as e:
                 logger.error(f"Error getting tokens: {str(e)}")
                 logger.error(f"Token manager error details:", exc_info=True)
                 raise
-            
-            logger.debug("3. Token data:")
-            logger.debug(f"   Raw type: {type(tokens)}")
-            logger.debug(f"   Is dict: {isinstance(tokens, dict)}")
-            if isinstance(tokens, dict):
-                logger.debug(f"   Keys: {tokens.keys()}")
-                logger.debug(f"   Has oauth1: {'oauth1' in tokens}")
-                logger.debug(f"   Has oauth2: {'oauth2' in tokens}")
-                
-                if 'oauth2' in tokens:
-                    oauth2_data = tokens['oauth2']
-                    logger.debug(f"   OAuth2 type: {type(oauth2_data)}")
-                    if isinstance(oauth2_data, dict):
-                        logger.debug(f"   OAuth2 keys: {oauth2_data.keys()}")
-                        logger.debug(f"   OAuth2 data: {json.dumps({k: '***' if 'token' in k else v for k,v in oauth2_data.items()})}")
             
             if not tokens or not isinstance(tokens, dict):
                 raise ValueError("No valid tokens found")
@@ -659,8 +654,9 @@ class TwitterOAuth(OAuthBase):
             
             # 2. Post tweet with media using v2 API with OAuth 2.0 tokens
             oauth2_tokens = tokens.get('oauth2')
-            logger.debug(f"OAuth2 tokens raw data: {oauth2_tokens}")
-            logger.debug(f"OAuth2 tokens type: {type(oauth2_tokens)}")
+            logger.debug(f"\nChecking OAuth2 tokens:")
+            logger.debug(f"Full tokens structure: {tokens}")  # This will show us the full token structure
+            logger.debug(f"oauth2_tokens value: {oauth2_tokens}")  # This will show us what we got from .get('oauth2')
             if isinstance(oauth2_tokens, dict):
                 logger.debug(f"OAuth2 tokens keys: {oauth2_tokens.keys()}")
                 access_token = oauth2_tokens.get('access_token')
