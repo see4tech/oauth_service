@@ -264,8 +264,7 @@ async def refresh_token(
         raise HTTPException(status_code=500, detail=str(e))
 
 async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool:
-    """Validate both global and user-specific API keys."""
-    # Log non-sensitive information
+    """Validate user-specific API keys."""
     logger.debug("=== API Key Validation ===")
     logger.debug(f"Platform: {platform}")
     logger.debug(f"User ID: {user_id}")
@@ -273,14 +272,18 @@ async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool
     try:
         # Get user's stored API key
         db = SqliteDB()
-        stored_api_key = db.get_user_api_key(user_id, platform)
-        
-        # Now do the validation
-        if x_api_key != settings.API_KEY:
-            raise HTTPException(status_code=401, detail="Invalid API key")
+        if platform == "twitter":
+            stored_api_key = db.get_user_api_key(user_id, "twitter-oauth1")  # Just check oauth1 since they're the same
+        else:
+            stored_api_key = db.get_user_api_key(user_id, platform)
             
-        if not stored_api_key:
-            raise HTTPException(status_code=401, detail="No API key found for user")
+        logger.debug(f"Comparing keys:")
+        logger.debug(f"1. Received key: '{x_api_key}'")
+        logger.debug(f"2. Stored key:   '{stored_api_key}'")
+        
+        # Only validate against stored user key
+        if not stored_api_key or stored_api_key != x_api_key:
+            raise HTTPException(status_code=401, detail="Invalid API key")
             
         return True
         
