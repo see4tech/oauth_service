@@ -600,30 +600,38 @@ class TwitterOAuth(OAuthBase):
     
     async def _upload_media_v1(self, oauth1_tokens: Dict, image_url: str) -> str:
         """Upload media using Twitter v1.1 API."""
-        # Create OAuth1Session with tokens
-        auth = OAuth1Session(
-            self._consumer_key,
-            client_secret=self._decrypted_consumer_secret,
-            resource_owner_key=oauth1_tokens['access_token'],
-            resource_owner_secret=oauth1_tokens['access_token_secret']
-        )
-        
-        # Download image
-        async with aiohttp.ClientSession() as session:
-            async with session.get(image_url) as response:
-                image_data = await response.read()
-        
-        # Upload to Twitter
-        upload_url = "https://upload.twitter.com/1.1/media/upload.json"
-        files = {'media': image_data}
-        
-        # Make the request
-        response = auth.post(upload_url, files=files)
-        if response.status_code != 200:
-            raise ValueError(f"Failed to upload media: {response.text}")
-        
-        media_data = response.json()
-        return media_data['media_id_string']
+        try:
+            # Create OAuth1Session with tokens
+            auth = OAuth1Session(
+                self._consumer_key,
+                client_secret=self._decrypted_consumer_secret,
+                resource_owner_key=oauth1_tokens['access_token'],
+                resource_owner_secret=oauth1_tokens['access_token_secret']
+            )
+            
+            # Download image
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as response:
+                    image_data = await response.read()
+                    logger.debug("Image downloaded successfully")
+                    
+            # Convert bytes to file-like object
+            from io import BytesIO
+            files = {'media': BytesIO(image_data)}
+            
+            # Upload to Twitter
+            upload_url = "https://upload.twitter.com/1.1/media/upload.json"
+            response = auth.post(upload_url, files=files)
+            
+            if response.status_code != 200:
+                raise ValueError(f"Failed to upload media: {response.text}")
+            
+            media_data = response.json()
+            return media_data['media_id_string']
+            
+        except Exception as e:
+            logger.error(f"Error uploading media to Twitter: {str(e)}")
+            raise ValueError(f"Failed to upload media: {str(e)}")
     
     async def _post_tweet_v2(self, access_token: str, text: str, media_id: str) -> Dict:
         """Post tweet with media using Twitter v2 API."""
