@@ -614,12 +614,12 @@ class TwitterOAuth(OAuthBase):
     async def post_tweet_with_media(self, user_id: str, text: str, image_url: str) -> Dict:
         """Post tweet with media using both API versions."""
         try:
-            logger.debug("Starting tweet creation process")
-            logger.debug(f"Token data structure: {list(token_data.keys() if isinstance(token_data, dict) else [])}")
-            
             # Get tokens for both versions
             token_manager = TokenManager()
             tokens = await token_manager.get_token("twitter", user_id)
+            
+            logger.debug("Starting tweet creation process")
+            logger.debug(f"Token data structure: {tokens.keys() if isinstance(tokens, dict) else 'Invalid tokens'}")
             
             if not tokens or not isinstance(tokens, dict):
                 raise ValueError("No valid tokens found")
