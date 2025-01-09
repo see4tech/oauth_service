@@ -478,17 +478,15 @@ async def post_twitter_content(
 ):
     """Post content to Twitter."""
     try:
-        logger.debug("=== Processing Twitter Post Request ===")
-        logger.debug(f"Platform: twitter")
-        logger.debug(f"User ID: {user_id}")
-        logger.debug(f"API Key in request: {x_api_key}")
+        logger.debug("\n=== Twitter Post Route ===")
+        logger.debug(f"1. Entering route handler")
+        logger.debug(f"   API Key: {x_api_key}")
         
-        # Initialize Twitter OAuth handler
+        logger.debug("2. Getting OAuth handler")
         oauth_handler = await get_oauth_handler("twitter")
         
-        # Check if we have an image to upload
+        logger.debug("3. Attempting to post")
         if "image_url" in content:
-            # Use combined method for media upload and tweet
             response = await oauth_handler.post_tweet_with_media(
                 user_id=user_id,
                 text=content["text"],

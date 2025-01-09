@@ -110,7 +110,12 @@ async def get_api_key(request: Request, api_key_header: str = Security(api_key_h
                 if user_id:
                     db = SqliteDB()
                     if "twitter" in request.url.path:
-                        stored_key = db.get_user_api_key(user_id, "twitter-oauth1")  # Just check oauth1 since they're the same
+                        stored_key = db.get_user_api_key(user_id, "twitter-oauth1")
+                        logger.debug("\n=== Dependency API Key Comparison ===")
+                        logger.debug(f"Received x-api-key: '{api_key_header}'")
+                        logger.debug(f"DB stored key:      '{stored_key}'")
+                        logger.debug(f"Global API key:     '{settings.API_KEY}'")
+                        
                         if api_key_header == stored_key:
                             return api_key_header
                     else:
@@ -182,12 +187,14 @@ async def validate_api_key(request: Request, call_next):
                         stored_key = db.get_user_api_key(user_id, "twitter-oauth1")  # We can just check one since they're the same
                         
                         if not stored_key or stored_key != api_key:
-                            logger.debug("=== API Key Validation Failed ===")
-                            logger.debug(f"Comparing keys:")
-                            logger.debug(f"1. Received key: '{api_key}'")
-                            logger.debug(f"2. Stored key:   '{stored_key}'")
-                            logger.debug("User-specific API key mismatch")
-                            raise HTTPException(status_code=401, detail="Invalid API key")
+                            logger.debug("\n=== Middleware API Key Comparison ===")
+                            logger.debug(f"Received x-api-key: '{api_key}'")
+                            logger.debug(f"DB stored key:      '{stored_key}'")
+                            logger.debug(f"Global API key:     '{settings.API_KEY}'")
+                            
+                            if not stored_key or stored_key != api_key:
+                                logger.debug("Validation failed!")
+                                raise HTTPException(status_code=401, detail="Invalid API key")
                     else:
                         # For other platforms, check normally
                         platform = request.url.path.split("/")[2]  # Get platform from URL
