@@ -615,24 +615,19 @@ class TwitterOAuth(OAuthBase):
                     image_data = await response.read()
                     content_type = response.headers.get('content-type', 'image/jpeg')
                     logger.debug(f"Image downloaded successfully. Content-Type: {content_type}")
-                    
-            # Create file-like object with name and content type
-            from io import BytesIO
-            image_io = BytesIO(image_data)
-            image_io.name = 'media.jpg'  # Twitter needs a filename
+            
+            # Convert image to base64
+            import base64
+            media_data = base64.b64encode(image_data).decode('utf-8')
             
             # Upload to Twitter
             upload_url = "https://upload.twitter.com/1.1/media/upload.json"
-            files = {
-                'media': (
-                    image_io.name,
-                    image_io,
-                    content_type
-                )
+            data = {
+                'media_data': media_data
             }
             
             logger.debug(f"Uploading media with content type: {content_type}")
-            response = auth.post(upload_url, files=files)
+            response = auth.post(upload_url, data=data)
             
             if response.status_code != 200:
                 raise ValueError(f"Failed to upload media: {response.text}")
