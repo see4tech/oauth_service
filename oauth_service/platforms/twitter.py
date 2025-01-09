@@ -613,14 +613,25 @@ class TwitterOAuth(OAuthBase):
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url) as response:
                     image_data = await response.read()
-                    logger.debug("Image downloaded successfully")
+                    content_type = response.headers.get('content-type', 'image/jpeg')
+                    logger.debug(f"Image downloaded successfully. Content-Type: {content_type}")
                     
-            # Convert bytes to file-like object
+            # Create file-like object with name and content type
             from io import BytesIO
-            files = {'media': BytesIO(image_data)}
+            image_io = BytesIO(image_data)
+            image_io.name = 'media.jpg'  # Twitter needs a filename
             
             # Upload to Twitter
             upload_url = "https://upload.twitter.com/1.1/media/upload.json"
+            files = {
+                'media': (
+                    image_io.name,
+                    image_io,
+                    content_type
+                )
+            }
+            
+            logger.debug(f"Uploading media with content type: {content_type}")
             response = auth.post(upload_url, files=files)
             
             if response.status_code != 200:
