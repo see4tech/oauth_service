@@ -426,53 +426,50 @@ class TwitterOAuth(OAuthBase):
                     logger.error(f"Media upload failed: {str(e)}")
                     raise ValueError(f"Media upload failed: {str(e)}")
 
-            # For creating the tweet, prefer OAuth 2.0 but fall back to OAuth 1.0a if needed
+            # For creating the tweet, use OAuth 2.0
             if isinstance(token_data, dict) and 'oauth2' in token_data:
                 oauth2_data = token_data['oauth2']
                 oauth2_token = oauth2_data.get('access_token')
                 if not oauth2_token:
                     raise ValueError("OAuth 2.0 access token not found")
                 
-                # Fixed: Use OAuth 2.0 token as bearer_token
-                client = tweepy.Client(
-                    bearer_token=oauth2_token,
-                    consumer_key=None,
-                    consumer_secret=None,
-                    access_token=None,
-                    access_token_secret=None
-                )
-            elif isinstance(token_data, dict) and 'oauth1' in token_data:
-                oauth1_data = token_data['oauth1']
-                if not oauth1_data.get('access_token') or not oauth1_data.get('access_token_secret'):
-                    raise ValueError("OAuth 1.0a tokens incomplete")
+                # Create tweet using OAuth 2.0 token
+                headers = {
+                    "Authorization": f"Bearer {oauth2_token}",
+                    "Content-Type": "application/json"
+                }
                 
-                client = tweepy.Client(
-                    bearer_token=None,
-                    consumer_key=self._consumer_key,
-                    consumer_secret=self._decrypted_consumer_secret,
-                    access_token=oauth1_data['access_token'],
-                    access_token_secret=oauth1_data['access_token_secret']
-                )
+                tweet_data = {
+                    "text": content['text']
+                }
+                if media_ids:
+                    tweet_data["media"] = {"media_ids": media_ids}
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        "https://api.twitter.com/2/tweets",
+                        headers=headers,
+                        json=tweet_data
+                    ) as response:
+                        if response.status != 201:
+                            error_text = await response.text()
+                            raise ValueError(f"Failed to create tweet: {error_text}")
+                        
+                        tweet = await response.json()
+                        
+                        if not tweet or 'data' not in tweet:
+                            raise ValueError("Invalid response from Twitter API")
+                        
+                        logger.debug("Tweet created successfully")
+                        return {
+                            'post_id': str(tweet['data']['id']),
+                            'text': tweet['data']['text'],
+                            'platform': 'twitter',
+                            'url': f"https://twitter.com/i/web/status/{tweet['data']['id']}"
+                        }
             else:
-                raise ValueError("No valid OAuth tokens found")
-            
-            # Create the tweet
-            tweet = client.create_tweet(
-                text=content['text'],
-                media_ids=media_ids
-            )
-            
-            if not tweet or not tweet.data:
-                raise ValueError("Failed to create tweet")
-            
-            logger.debug("Tweet created successfully")
-            return {
-                'post_id': str(tweet.data['id']),
-                'text': tweet.data['text'],
-                'platform': 'twitter',
-                'url': f"https://twitter.com/i/web/status/{tweet.data['id']}"
-            }
-            
+                raise ValueError("OAuth 2.0 tokens required for tweet creation")
+                
         except Exception as e:
             logger.error(f"Error creating tweet: {str(e)}")
             raise
