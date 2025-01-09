@@ -302,10 +302,8 @@ async def create_post(
     x_api_key: str = Header(..., alias="x-api-key")
 ) -> PostResponse:
     try:
-        # This validation is sufficient
         await validate_api_keys(user_id, platform, x_api_key)
 
-        # Log non-sensitive information
         logger.debug("=== Processing Post Request ===")
         logger.debug(f"Platform: {platform}")
         logger.debug(f"User ID: {user_id}")
@@ -314,7 +312,6 @@ async def create_post(
             oauth_handler = await get_oauth_handler(platform)
             token_manager = TokenManager()
             
-            # Get token data
             token_data = await token_manager.get_valid_token(platform, user_id)
             if not token_data:
                 raise HTTPException(
@@ -322,10 +319,9 @@ async def create_post(
                     detail="No valid token found for this user"
                 )
             
-            # Log token structure (without sensitive data)
             logger.debug(f"Token data structure: {list(token_data.keys() if isinstance(token_data, dict) else [])}")
             
-            content_dict = content.dict(exclude_none=True)
+            content_dict = content
             
             # For Twitter, ensure we have both OAuth 1.0a and 2.0 tokens if needed
             if platform == "twitter":
