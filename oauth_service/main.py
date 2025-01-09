@@ -182,8 +182,11 @@ async def validate_api_key(request: Request, call_next):
                         stored_key = db.get_user_api_key(user_id, "twitter-oauth1")  # We can just check one since they're the same
                         
                         if not stored_key or stored_key != api_key:
+                            logger.debug("=== API Key Validation Failed ===")
+                            logger.debug(f"Comparing keys:")
+                            logger.debug(f"1. Received key: '{api_key}'")
+                            logger.debug(f"2. Stored key:   '{stored_key}'")
                             logger.debug("User-specific API key mismatch")
-                            logger.debug(f"Keys don't match: '{api_key}' != '{stored_key}'")
                             raise HTTPException(status_code=401, detail="Invalid API key")
                     else:
                         # For other platforms, check normally
