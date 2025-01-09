@@ -65,9 +65,15 @@ async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool
         logger.debug(f"Received x-api-key: {x_api_key}")
         
         db = SqliteDB()
-        stored_key = db.get_user_api_key(user_id, f"{platform}-oauth1")
+        # For Twitter, check oauth1 key since they're the same
+        if platform == "twitter":
+            stored_key = db.get_user_api_key(user_id, "twitter-oauth1")
+        else:
+            stored_key = db.get_user_api_key(user_id, platform)
+            
         logger.debug(f"Stored key from DB: {stored_key}")
         
+        # Only compare against stored key, not global API key
         if not stored_key or stored_key != x_api_key:
             logger.debug("API key validation failed!")
             logger.debug(f"Keys match: {stored_key == x_api_key}")
