@@ -68,13 +68,21 @@ class TokenRefreshHandler:
         try:
             # Get lock for this user/platform combination
             async with self._get_lock(user_id, platform):
-                logger.debug(f"Checking token for user {user_id} on platform {platform}")
+                logger.debug(f"\n=== Token Validation Process ===")
+                logger.debug(f"Platform: {platform}")
+                logger.debug(f"User ID: {user_id}")
+                logger.debug(f"Has x-api-key: {'yes' if x_api_key else 'no'}")
                 
                 # Get current token
                 token_data = await self.token_manager.get_token(platform, user_id)
                 if not token_data:
                     logger.error(f"No token found for user {user_id} on platform {platform}")
                     return None
+                
+                logger.debug(f"Current token data keys: {list(token_data.keys())}")
+                if platform == "twitter" and "oauth2" in token_data:
+                    logger.debug(f"OAuth2 token keys: {list(token_data['oauth2'].keys())}")
+                    logger.debug(f"OAuth2 token expiration: {token_data['oauth2'].get('expires_at')}")
                 
                 # Verify x-api-key if provided
                 if x_api_key:
@@ -85,7 +93,8 @@ class TokenRefreshHandler:
                 
                 # Check if token needs refresh
                 if self._is_token_expired(token_data, platform):
-                    logger.info(f"Token expired for user {user_id} on platform {platform}, attempting refresh")
+                    logger.debug(f"\n=== Token Refresh Required ===")
+                    logger.debug(f"Token expired for user {user_id} on platform {platform}")
                     
                     # Get platform-specific OAuth handler
                     from ..routes.oauth_routes import get_oauth_handler
@@ -96,6 +105,7 @@ class TokenRefreshHandler:
                     if platform == "twitter":
                         oauth2_data = token_data.get('oauth2', {})
                         refresh_token = oauth2_data.get('refresh_token')
+                        logger.debug(f"Twitter OAuth2 refresh token found: {'yes' if refresh_token else 'no'}")
                     else:
                         refresh_token = token_data.get('refresh_token')
                     
@@ -105,21 +115,31 @@ class TokenRefreshHandler:
                     
                     try:
                         # Attempt to refresh the token
+                        logger.debug("Attempting token refresh")
                         new_token_data = await oauth_handler.refresh_token(refresh_token)
                         
                         if platform == "twitter":
                             # Preserve OAuth 1.0a tokens if they exist
                             if 'oauth1' in token_data:
                                 new_token_data['oauth1'] = token_data['oauth1']
+                                logger.debug("Preserved OAuth 1.0a tokens")
                         
                         # Store the new token
                         await self.token_manager.store_token(platform, user_id, new_token_data)
                         
-                        logger.info(f"Successfully refreshed token for user {user_id} on platform {platform}")
+                        logger.debug(f"Successfully refreshed token for user {user_id} on platform {platform}")
+                        logger.debug(f"New token data keys: {list(new_token_data.keys())}")
+                        if platform == "twitter" and "oauth2" in new_token_data:
+                            logger.debug(f"New OAuth2 token keys: {list(new_token_data['oauth2'].keys())}")
+                            logger.debug(f"New OAuth2 token expiration: {new_token_data['oauth2'].get('expires_at')}")
+                        
                         return new_token_data
                         
                     except Exception as e:
                         logger.error(f"Failed to refresh token: {str(e)}")
+                        if hasattr(e, 'response'):
+                            logger.error(f"Response status: {e.response.status_code}")
+                            logger.error(f"Response text: {e.response.text}")
                         return None
                 
                 logger.debug(f"Token is still valid for user {user_id} on platform {platform}")
