@@ -28,10 +28,10 @@ const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: 
         
         setIsLoading(false);
 
-        if (event.data.success) {
+        if (event.data.success && event.data.api_key) {
           console.log('LinkedIn auth successful');
           setLocalIsConnected(true);
-          onSuccess(event.data);
+          onSuccess({ api_key: event.data.api_key });
           toast.success('LinkedIn authorization successful');
         } else if (event.data.error) {
           console.error('LinkedIn auth error:', event.data.error);

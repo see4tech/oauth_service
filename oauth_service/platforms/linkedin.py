@@ -19,7 +19,8 @@ class LinkedInOAuth(OAuthBase):
     def __init__(self, client_id: str, client_secret: str, callback_url: str):
         super().__init__(client_id, client_secret, callback_url)
         # LinkedIn allows 100 requests per minute for token exchange
-        self.rate_limiter = RateLimiter(platform="linkedin")
+        self.token_exchange_limiter = RateLimiter(platform="linkedin_token_exchange")
+        self.api_limiter = RateLimiter(platform="linkedin")
         self.token_url = "https://www.linkedin.com/oauth/v2/accessToken"
         self.api_url = "https://api.linkedin.com/v2"
         
@@ -77,9 +78,9 @@ class LinkedInOAuth(OAuthBase):
             try:
                 logger.debug(f"Exchanging code for access token. Code: {code[:10]}... (Attempt {attempt + 1}/{max_retries})")
                 
-                # Wait for rate limit
-                await self.rate_limiter.wait("token_exchange")
-                logger.debug("Rate limit check passed, proceeding with token exchange")
+                # Wait for token exchange rate limit
+                await self.token_exchange_limiter.wait("token_exchange")
+                logger.debug("Token exchange rate limit check passed, proceeding with exchange")
                 
                 # Log timestamp for rate limit tracking
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -126,8 +127,8 @@ class LinkedInOAuth(OAuthBase):
                         logger.debug(f"Token response text: {response_text if response_text else '(empty response)'}")
                         
                         if response.status == 429:
-                            # Reset rate limiter on 429
-                            await self.rate_limiter.reset("token_exchange")
+                            # Reset token exchange rate limiter on 429
+                            await self.token_exchange_limiter.reset("token_exchange")
                             logger.error("\n=== LinkedIn Rate Limit Error ===")
                             logger.error(f"Rate limit headers: {dict(response.headers)}")
                             

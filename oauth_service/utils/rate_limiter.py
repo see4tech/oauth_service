@@ -12,7 +12,8 @@ class RateLimiter:
     
     # Platform-specific default rate limits (requests per second)
     DEFAULT_RATE_LIMITS = {
-        "linkedin": 1.67,  # 100 requests per minute = 1.67 requests per second
+        "linkedin": 1.0,    # General LinkedIn API
+        "linkedin_token_exchange": 1.67,  # 100 requests per minute = 1.67 requests per second
         "twitter": 1.0,    # Conservative default
         "facebook": 1.0,   # Conservative default
         "instagram": 1.0   # Conservative default

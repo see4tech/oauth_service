@@ -222,7 +222,7 @@ async def linkedin_callback(
             logger.info(f"Successfully stored API key for user {user_id} in both external and local storage")
             success = True
             
-            # Return success response with code and state for frontend
+            # Return success response with API key for frontend
             message_type = "LINKEDIN_AUTH_CALLBACK"
             html_content = f"""
                 <!DOCTYPE html>
@@ -237,8 +237,7 @@ async def linkedin_callback(
                         const message = {{
                             type: '{message_type}',
                             success: true,
-                            code: '{code}',
-                            state: '{state}',
+                            api_key: '{api_key}',
                             platform: 'linkedin'
                         }};
                         
