@@ -71,8 +71,8 @@ class LinkedInOAuth(OAuthBase):
         try:
             logger.debug(f"Exchanging code for access token. Code: {code[:10]}...")
             
-            # Check rate limit before proceeding
-            await self.rate_limiter.acquire()
+            # Wait for rate limit
+            await self.rate_limiter.wait("token_exchange")
             logger.debug("Rate limit check passed, proceeding with token exchange")
             
             # Log timestamp for rate limit tracking
@@ -121,8 +121,8 @@ class LinkedInOAuth(OAuthBase):
                         logger.debug(f"Token response text: {response_text if response_text else '(empty response)'}")
                         
                         if response.status == 429:
-                            # Release rate limit token on 429
-                            await self.rate_limiter.release()
+                            # Reset rate limiter on 429
+                            await self.rate_limiter.reset("token_exchange")
                             logger.error("\n=== LinkedIn Rate Limit Error ===")
                             logger.error(f"Rate limit headers: {dict(response.headers)}")
                             
