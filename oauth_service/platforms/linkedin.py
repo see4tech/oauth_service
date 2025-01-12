@@ -112,6 +112,15 @@ class LinkedInOAuth(OAuthBase):
                     if response.status == 429:
                         logger.error("\n=== LinkedIn Rate Limit Error ===")
                         logger.error(f"Rate limit headers: {dict(response.headers)}")
+                        
+                        # Log LinkedIn-specific headers
+                        logger.error("\n=== LinkedIn Response Details ===")
+                        logger.error(f"X-Li-Fabric: {response.headers.get('X-Li-Fabric')}")
+                        logger.error(f"X-Li-Pop: {response.headers.get('X-Li-Pop')}")
+                        logger.error(f"X-Li-Proto: {response.headers.get('X-Li-Proto')}")
+                        logger.error(f"X-LI-UUID: {response.headers.get('X-LI-UUID')}")
+                        
+                        # Log standard rate limit headers
                         retry_after = response.headers.get('Retry-After')
                         x_rate_limit_remaining = response.headers.get('X-RateLimit-Remaining')
                         x_rate_limit_reset = response.headers.get('X-RateLimit-Reset')
@@ -124,11 +133,17 @@ class LinkedInOAuth(OAuthBase):
                         else:
                             error_msg += " Please try again in a few minutes."
                             
-                        logger.error(f"Rate limit info:")
+                        logger.error(f"\n=== Rate Limit Information ===")
                         logger.error(f"- Retry-After: {retry_after}")
                         logger.error(f"- X-RateLimit-Remaining: {x_rate_limit_remaining}")
                         logger.error(f"- X-RateLimit-Reset: {x_rate_limit_reset}")
                         logger.error(f"- Response body: {response_text if response_text else '(empty response)'}")
+                        
+                        # Log cache control headers
+                        logger.error("\n=== Cache Control Headers ===")
+                        logger.error(f"Cache-Control: {response.headers.get('Cache-Control')}")
+                        logger.error(f"Pragma: {response.headers.get('Pragma')}")
+                        logger.error(f"Expires: {response.headers.get('Expires')}")
                         
                         raise HTTPException(
                             status_code=429,
