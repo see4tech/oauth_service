@@ -71,144 +71,158 @@ class LinkedInOAuth(OAuthBase):
         try:
             logger.debug(f"Exchanging code for access token. Code: {code[:10]}...")
             
+            # Check rate limit before proceeding
+            await self.rate_limiter.acquire()
+            logger.debug("Rate limit check passed, proceeding with token exchange")
+            
             # Log timestamp for rate limit tracking
             current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             logger.debug(f"\n=== LinkedIn Token Request Timestamp ===")
             logger.debug(f"Request Time: {current_time}")
             
-            # Prepare token exchange data
-            data = {
-                'grant_type': 'authorization_code',
-                'code': code,
-                'client_id': self.client_id,
-                'client_secret': self.crypto.decrypt(self._client_secret),
-                'redirect_uri': self.callback_url
-            }
-            
-            # Log request details (excluding secret)
-            safe_data = data.copy()
-            safe_data['client_secret'] = '[REDACTED]'
-            logger.debug(f"Request data (excluding secret): {safe_data}")
-            
-            # Create Basic Auth header
-            auth_str = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
-            auth_header = base64.b64encode(auth_str.encode()).decode()
-            
-            logger.debug("\n=== LinkedIn Token Exchange Request ===")
-            logger.debug(f"Token URL: {self.token_url}")
-            logger.debug(f"Client ID length: {len(self.client_id)}")
-            logger.debug(f"Auth header length: {len(auth_header)}")
-            logger.debug(f"Redirect URI: {self.callback_url}")
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.token_url,
-                    data=urlencode(data),
-                    headers={
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'Accept': 'application/json',
-                        'Authorization': f'Basic {auth_header}'
-                    }
-                ) as response:
-                    response_text = await response.text()
-                    logger.debug(f"Token response status: {response.status}")
-                    logger.debug(f"Token response headers: {dict(response.headers)}")
-                    logger.debug(f"Token response text: {response_text if response_text else '(empty response)'}")
-                    
-                    if response.status == 429:
-                        logger.error("\n=== LinkedIn Rate Limit Error ===")
-                        logger.error(f"Rate limit headers: {dict(response.headers)}")
+            try:
+                # Prepare token exchange data
+                data = {
+                    'grant_type': 'authorization_code',
+                    'code': code,
+                    'client_id': self.client_id,
+                    'client_secret': self.crypto.decrypt(self._client_secret),
+                    'redirect_uri': self.callback_url
+                }
+                
+                # Log request details (excluding secret)
+                safe_data = data.copy()
+                safe_data['client_secret'] = '[REDACTED]'
+                logger.debug(f"Request data (excluding secret): {safe_data}")
+                
+                # Create Basic Auth header
+                auth_str = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
+                auth_header = base64.b64encode(auth_str.encode()).decode()
+                
+                logger.debug("\n=== LinkedIn Token Exchange Request ===")
+                logger.debug(f"Token URL: {self.token_url}")
+                logger.debug(f"Client ID length: {len(self.client_id)}")
+                logger.debug(f"Auth header length: {len(auth_header)}")
+                logger.debug(f"Redirect URI: {self.callback_url}")
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        self.token_url,
+                        data=urlencode(data),
+                        headers={
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'Accept': 'application/json',
+                            'Authorization': f'Basic {auth_header}'
+                        }
+                    ) as response:
+                        response_text = await response.text()
+                        logger.debug(f"Token response status: {response.status}")
+                        logger.debug(f"Token response headers: {dict(response.headers)}")
+                        logger.debug(f"Token response text: {response_text if response_text else '(empty response)'}")
                         
-                        # Log request timing details
-                        response_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        logger.error(f"\n=== Request Timing ===")
-                        logger.error(f"Request started at: {current_time}")
-                        logger.error(f"Response received at: {response_time}")
-                        
-                        # Log LinkedIn-specific headers
-                        logger.error("\n=== LinkedIn Response Details ===")
-                        logger.error(f"X-Li-Fabric: {response.headers.get('X-Li-Fabric')}")
-                        logger.error(f"X-Li-Pop: {response.headers.get('X-Li-Pop')}")
-                        logger.error(f"X-Li-Proto: {response.headers.get('X-Li-Proto')}")
-                        logger.error(f"X-LI-UUID: {response.headers.get('X-LI-UUID')}")
-                        
-                        # Log standard rate limit headers
-                        retry_after = response.headers.get('Retry-After')
-                        x_rate_limit_remaining = response.headers.get('X-RateLimit-Remaining')
-                        x_rate_limit_reset = response.headers.get('X-RateLimit-Reset')
-                        
-                        error_msg = "LinkedIn rate limit exceeded."
-                        if retry_after:
-                            error_msg += f" Retry after {retry_after} seconds."
-                        elif x_rate_limit_reset:
-                            error_msg += f" Rate limit resets at {x_rate_limit_reset}."
-                        else:
-                            error_msg += " Please try again in a few minutes."
+                        if response.status == 429:
+                            # Release rate limit token on 429
+                            await self.rate_limiter.release()
+                            logger.error("\n=== LinkedIn Rate Limit Error ===")
+                            logger.error(f"Rate limit headers: {dict(response.headers)}")
                             
-                        logger.error(f"\n=== Rate Limit Information ===")
-                        logger.error(f"- Retry-After: {retry_after}")
-                        logger.error(f"- X-RateLimit-Remaining: {x_rate_limit_remaining}")
-                        logger.error(f"- X-RateLimit-Reset: {x_rate_limit_reset}")
-                        logger.error(f"- Response body: {response_text if response_text else '(empty response)'}")
+                            # Log request timing details
+                            response_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            logger.error(f"\n=== Request Timing ===")
+                            logger.error(f"Request started at: {current_time}")
+                            logger.error(f"Response received at: {response_time}")
+                            
+                            # Log LinkedIn-specific headers
+                            logger.error("\n=== LinkedIn Response Details ===")
+                            logger.error(f"X-Li-Fabric: {response.headers.get('X-Li-Fabric')}")
+                            logger.error(f"X-Li-Pop: {response.headers.get('X-Li-Pop')}")
+                            logger.error(f"X-Li-Proto: {response.headers.get('X-Li-Proto')}")
+                            logger.error(f"X-LI-UUID: {response.headers.get('X-LI-UUID')}")
+                            
+                            # Log standard rate limit headers
+                            retry_after = response.headers.get('Retry-After')
+                            x_rate_limit_remaining = response.headers.get('X-RateLimit-Remaining')
+                            x_rate_limit_reset = response.headers.get('X-RateLimit-Reset')
+                            
+                            error_msg = "LinkedIn rate limit exceeded."
+                            if retry_after:
+                                error_msg += f" Retry after {retry_after} seconds."
+                            elif x_rate_limit_reset:
+                                error_msg += f" Rate limit resets at {x_rate_limit_reset}."
+                            else:
+                                error_msg += " Please try again in a few minutes."
+                                
+                            logger.error(f"\n=== Rate Limit Information ===")
+                            logger.error(f"- Retry-After: {retry_after}")
+                            logger.error(f"- X-RateLimit-Remaining: {x_rate_limit_remaining}")
+                            logger.error(f"- X-RateLimit-Reset: {x_rate_limit_reset}")
+                            logger.error(f"- Response body: {response_text if response_text else '(empty response)'}")
+                            
+                            # Log cache control headers
+                            logger.error("\n=== Cache Control Headers ===")
+                            logger.error(f"Cache-Control: {response.headers.get('Cache-Control')}")
+                            logger.error(f"Pragma: {response.headers.get('Pragma')}")
+                            logger.error(f"Expires: {response.headers.get('Expires')}")
+                            
+                            raise HTTPException(
+                                status_code=429,
+                                detail=error_msg
+                            )
                         
-                        # Log cache control headers
-                        logger.error("\n=== Cache Control Headers ===")
-                        logger.error(f"Cache-Control: {response.headers.get('Cache-Control')}")
-                        logger.error(f"Pragma: {response.headers.get('Pragma')}")
-                        logger.error(f"Expires: {response.headers.get('Expires')}")
-                        
-                        raise HTTPException(
-                            status_code=429,
-                            detail=error_msg
-                        )
-                    
-                    if not response.ok:
-                        logger.error(f"\n=== LinkedIn Token Exchange Error ===")
-                        logger.error(f"Status code: {response.status}")
-                        logger.error(f"Response headers: {dict(response.headers)}")
-                        logger.error(f"Error response: {response_text if response_text else '(empty response)'}")
-                        
-                        error_msg = f"LinkedIn token exchange failed"
-                        if response_text:
-                            try:
-                                error_data = json.loads(response_text)
-                                if 'error_description' in error_data:
-                                    error_msg += f": {error_data['error_description']}"
-                                elif 'error' in error_data:
-                                    error_msg += f": {error_data['error']}"
-                                else:
+                        if not response.ok:
+                            logger.error(f"\n=== LinkedIn Token Exchange Error ===")
+                            logger.error(f"Status code: {response.status}")
+                            logger.error(f"Response headers: {dict(response.headers)}")
+                            logger.error(f"Error response: {response_text if response_text else '(empty response)'}")
+                            
+                            error_msg = f"LinkedIn token exchange failed"
+                            if response_text:
+                                try:
+                                    error_data = json.loads(response_text)
+                                    if 'error_description' in error_data:
+                                        error_msg += f": {error_data['error_description']}"
+                                    elif 'error' in error_data:
+                                        error_msg += f": {error_data['error']}"
+                                    else:
+                                        error_msg += f": {response_text}"
+                                except json.JSONDecodeError:
                                     error_msg += f": {response_text}"
-                            except json.JSONDecodeError:
-                                error_msg += f": {response_text}"
+                            
+                            raise HTTPException(
+                                status_code=response.status,
+                                detail=error_msg
+                            )
                         
-                        raise HTTPException(
-                            status_code=response.status,
-                            detail=error_msg
-                        )
-                    
-                    try:
-                        token_data = json.loads(response_text)
-                    except json.JSONDecodeError:
-                        logger.error(f"Failed to parse token response as JSON: {response_text}")
-                        raise HTTPException(
-                            status_code=500,
-                            detail="Invalid token response format from LinkedIn"
-                        )
-                    
-                    logger.debug("\n=== LinkedIn Token Exchange Success ===")
-                    logger.debug(f"Token data keys: {list(token_data.keys())}")
-                    logger.debug(f"Expires in: {token_data.get('expires_in')} seconds")
-                    logger.debug(f"Received refresh token: {bool(token_data.get('refresh_token'))}")
-                    
-                    return {
-                        'access_token': token_data['access_token'],
-                        'expires_in': token_data.get('expires_in', 3600),
-                        'refresh_token': token_data.get('refresh_token')
-                    }
+                        try:
+                            token_data = json.loads(response_text)
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to parse token response as JSON: {response_text}")
+                            raise HTTPException(
+                                status_code=500,
+                                detail="Invalid token response format from LinkedIn"
+                            )
+                        
+                        logger.debug("\n=== LinkedIn Token Exchange Success ===")
+                        logger.debug(f"Token data keys: {list(token_data.keys())}")
+                        logger.debug(f"Expires in: {token_data.get('expires_in')} seconds")
+                        logger.debug(f"Received refresh token: {bool(token_data.get('refresh_token'))}")
+                        
+                        return {
+                            'access_token': token_data['access_token'],
+                            'expires_in': token_data.get('expires_in', 3600),
+                            'refresh_token': token_data.get('refresh_token')
+                        }
+                        
+            finally:
+                # Always release the rate limit token unless we hit 429
+                if response.status != 429:
+                    await self.rate_limiter.release()
                     
         except HTTPException:
+            await self.rate_limiter.release()
             raise
         except Exception as e:
+            await self.rate_limiter.release()
             logger.error(f"Error exchanging code for token: {str(e)}")
             raise HTTPException(
                 status_code=500,
