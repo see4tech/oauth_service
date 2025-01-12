@@ -107,29 +107,67 @@ class LinkedInOAuth(OAuthBase):
                     response_text = await response.text()
                     logger.debug(f"Token response status: {response.status}")
                     logger.debug(f"Token response headers: {dict(response.headers)}")
-                    logger.debug(f"Token response text: {response_text}")
+                    logger.debug(f"Token response text: {response_text if response_text else '(empty response)'}")
                     
                     if response.status == 429:
                         logger.error("\n=== LinkedIn Rate Limit Error ===")
                         logger.error(f"Rate limit headers: {dict(response.headers)}")
                         retry_after = response.headers.get('Retry-After')
-                        logger.error(f"Retry-After header: {retry_after}")
+                        x_rate_limit_remaining = response.headers.get('X-RateLimit-Remaining')
+                        x_rate_limit_reset = response.headers.get('X-RateLimit-Reset')
+                        
+                        error_msg = "LinkedIn rate limit exceeded."
+                        if retry_after:
+                            error_msg += f" Retry after {retry_after} seconds."
+                        elif x_rate_limit_reset:
+                            error_msg += f" Rate limit resets at {x_rate_limit_reset}."
+                        else:
+                            error_msg += " Please try again in a few minutes."
+                            
+                        logger.error(f"Rate limit info:")
+                        logger.error(f"- Retry-After: {retry_after}")
+                        logger.error(f"- X-RateLimit-Remaining: {x_rate_limit_remaining}")
+                        logger.error(f"- X-RateLimit-Reset: {x_rate_limit_reset}")
+                        logger.error(f"- Response body: {response_text if response_text else '(empty response)'}")
+                        
                         raise HTTPException(
                             status_code=429,
-                            detail=f"LinkedIn rate limit exceeded. Retry after {retry_after} seconds"
+                            detail=error_msg
                         )
                     
                     if not response.ok:
                         logger.error(f"\n=== LinkedIn Token Exchange Error ===")
                         logger.error(f"Status code: {response.status}")
                         logger.error(f"Response headers: {dict(response.headers)}")
-                        logger.error(f"Error response: {response_text}")
+                        logger.error(f"Error response: {response_text if response_text else '(empty response)'}")
+                        
+                        error_msg = f"LinkedIn token exchange failed"
+                        if response_text:
+                            try:
+                                error_data = json.loads(response_text)
+                                if 'error_description' in error_data:
+                                    error_msg += f": {error_data['error_description']}"
+                                elif 'error' in error_data:
+                                    error_msg += f": {error_data['error']}"
+                                else:
+                                    error_msg += f": {response_text}"
+                            except json.JSONDecodeError:
+                                error_msg += f": {response_text}"
+                        
                         raise HTTPException(
                             status_code=response.status,
-                            detail=f"LinkedIn token exchange failed: {response_text}"
+                            detail=error_msg
                         )
                     
-                    token_data = json.loads(response_text)
+                    try:
+                        token_data = json.loads(response_text)
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse token response as JSON: {response_text}")
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Invalid token response format from LinkedIn"
+                        )
+                    
                     logger.debug("\n=== LinkedIn Token Exchange Success ===")
                     logger.debug(f"Token data keys: {list(token_data.keys())}")
                     logger.debug(f"Expires in: {token_data.get('expires_in')} seconds")
