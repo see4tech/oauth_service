@@ -8,6 +8,7 @@ from ..core.oauth_base import OAuthBase
 from ..utils.rate_limiter import RateLimiter
 from ..utils.logger import get_logger
 from ..core.token_refresh_handler import refresh_handler
+import datetime
 
 logger = get_logger(__name__)
 
@@ -70,6 +71,11 @@ class LinkedInOAuth(OAuthBase):
         try:
             logger.debug(f"Exchanging code for access token. Code: {code[:10]}...")
             
+            # Log timestamp for rate limit tracking
+            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            logger.debug(f"\n=== LinkedIn Token Request Timestamp ===")
+            logger.debug(f"Request Time: {current_time}")
+            
             # Prepare token exchange data
             data = {
                 'grant_type': 'authorization_code',
@@ -112,6 +118,12 @@ class LinkedInOAuth(OAuthBase):
                     if response.status == 429:
                         logger.error("\n=== LinkedIn Rate Limit Error ===")
                         logger.error(f"Rate limit headers: {dict(response.headers)}")
+                        
+                        # Log request timing details
+                        response_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        logger.error(f"\n=== Request Timing ===")
+                        logger.error(f"Request started at: {current_time}")
+                        logger.error(f"Response received at: {response_time}")
                         
                         # Log LinkedIn-specific headers
                         logger.error("\n=== LinkedIn Response Details ===")
