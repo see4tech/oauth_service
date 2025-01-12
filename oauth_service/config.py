@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     # Rate Limiting
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_PERIOD: int = 3600
+    LINKEDIN_RATE_LIMIT: float = 1.67  # 100 requests per minute = 1.67 requests per second
     
     # Logging
     LOG_LEVEL: str = "INFO"

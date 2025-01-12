@@ -10,6 +10,14 @@ logger = get_logger(__name__)
 class RateLimiter:
     """Rate limiting implementation with per-platform configuration."""
     
+    # Platform-specific default rate limits (requests per second)
+    DEFAULT_RATE_LIMITS = {
+        "linkedin": 1.67,  # 100 requests per minute = 1.67 requests per second
+        "twitter": 1.0,    # Conservative default
+        "facebook": 1.0,   # Conservative default
+        "instagram": 1.0   # Conservative default
+    }
+    
     def __init__(self, platform: str):
         """
         Initialize rate limiter for specific platform.
@@ -18,12 +26,16 @@ class RateLimiter:
             platform: Platform identifier (e.g., 'twitter', 'facebook')
         """
         self.platform = platform
+        # Use platform-specific default if available, otherwise use 1 req/sec
+        default_rate = self.DEFAULT_RATE_LIMITS.get(platform, 1.0)
         self.requests_per_second = float(os.getenv(
             f"{platform.upper()}_RATE_LIMIT",
-            "1"  # Default: 1 request per second
+            str(default_rate)
         ))
         self.last_request_time: Dict[str, float] = {}
         self._lock = asyncio.Lock()
+        
+        logger.debug(f"Initialized rate limiter for {platform} with {self.requests_per_second} requests/second")
     
     async def wait(self, endpoint: str) -> None:
         """
