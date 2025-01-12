@@ -70,49 +70,79 @@ class LinkedInOAuth(OAuthBase):
         try:
             logger.debug(f"Exchanging code for access token. Code: {code[:10]}...")
             
+            # Prepare token exchange data
             data = {
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": self.client_id,
-                "client_secret": self.crypto.decrypt(self._client_secret),
-                "redirect_uri": self.callback_url
+                'grant_type': 'authorization_code',
+                'code': code,
+                'client_id': self.client_id,
+                'client_secret': self.crypto.decrypt(self._client_secret),
+                'redirect_uri': self.callback_url
             }
             
-            debug_data = dict(data)
-            debug_data['client_secret'] = '[REDACTED]'
-            logger.debug(f"Request data (excluding secret): {debug_data}")
+            # Log request details (excluding secret)
+            safe_data = data.copy()
+            safe_data['client_secret'] = '[REDACTED]'
+            logger.debug(f"Request data (excluding secret): {safe_data}")
+            
+            # Create Basic Auth header
+            auth_str = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
+            auth_header = base64.b64encode(auth_str.encode()).decode()
+            
+            logger.debug("\n=== LinkedIn Token Exchange Request ===")
+            logger.debug(f"Token URL: {self.token_url}")
+            logger.debug(f"Client ID length: {len(self.client_id)}")
+            logger.debug(f"Auth header length: {len(auth_header)}")
+            logger.debug(f"Redirect URI: {self.callback_url}")
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     self.token_url,
-                    data=data,
+                    data=urlencode(data),
                     headers={
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'Accept': 'application/json'
+                        'Accept': 'application/json',
+                        'Authorization': f'Basic {auth_header}'
                     }
                 ) as response:
-                    logger.debug(f"Token response status: {response.status}")
                     response_text = await response.text()
+                    logger.debug(f"Token response status: {response.status}")
+                    logger.debug(f"Token response headers: {dict(response.headers)}")
                     logger.debug(f"Token response text: {response_text}")
                     
+                    if response.status == 429:
+                        logger.error("\n=== LinkedIn Rate Limit Error ===")
+                        logger.error(f"Rate limit headers: {dict(response.headers)}")
+                        retry_after = response.headers.get('Retry-After')
+                        logger.error(f"Retry-After header: {retry_after}")
+                        raise HTTPException(
+                            status_code=429,
+                            detail=f"LinkedIn rate limit exceeded. Retry after {retry_after} seconds"
+                        )
+                    
                     if not response.ok:
+                        logger.error(f"\n=== LinkedIn Token Exchange Error ===")
+                        logger.error(f"Status code: {response.status}")
+                        logger.error(f"Response headers: {dict(response.headers)}")
+                        logger.error(f"Error response: {response_text}")
                         raise HTTPException(
                             status_code=response.status,
                             detail=f"LinkedIn token exchange failed: {response_text}"
                         )
                     
-                    data = json.loads(response_text)
-                    token_data = {
-                        "access_token": data["access_token"],
-                        "token_type": data.get("token_type", "Bearer"),
-                        "expires_in": data.get("expires_in", 3600),
-                        "refresh_token": data.get("refresh_token"),
-                        "scope": data.get("scope"),
-                        "api_key": data.get("access_token")  # Using access_token as api_key
-                    }
-                    logger.debug(f"Prepared token data with API key: {token_data['api_key'][:10]}...")
-                    return token_data
+                    token_data = json.loads(response_text)
+                    logger.debug("\n=== LinkedIn Token Exchange Success ===")
+                    logger.debug(f"Token data keys: {list(token_data.keys())}")
+                    logger.debug(f"Expires in: {token_data.get('expires_in')} seconds")
+                    logger.debug(f"Received refresh token: {bool(token_data.get('refresh_token'))}")
                     
+                    return {
+                        'access_token': token_data['access_token'],
+                        'expires_in': token_data.get('expires_in', 3600),
+                        'refresh_token': token_data.get('refresh_token')
+                    }
+                    
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error exchanging code for token: {str(e)}")
             raise HTTPException(
