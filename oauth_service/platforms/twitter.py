@@ -498,7 +498,7 @@ class TwitterOAuth(OAuthBase):
             # Use the session to make the request
             async with aiohttp.ClientSession() as session:
                 headers = {
-                    'Authorization': f'Bearer {oauth2_token}',
+                    'Authorization': f'Bearer {oauth2_token.replace("Bearer ", "")}',
                     'Content-Type': 'application/json',
                     'User-Agent': 'v2TweetPoster'
                 }
