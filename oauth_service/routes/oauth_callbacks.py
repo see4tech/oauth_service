@@ -598,7 +598,7 @@ async def twitter_oauth2_callback(
         await token_manager.store_token(
             platform="twitter",
             user_id=user_id,
-            token_data={'oauth2': token_data}
+            token_data=token_data
         )
         
         # Check for existing Twitter API key first
