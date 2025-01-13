@@ -62,23 +62,26 @@ class TokenManager:
             logger.debug(f"Token data keys to store: {list(token_data.keys())}")
             
             # Handle Twitter's split token storage
-            if platform.startswith('twitter'):
+            if platform == "twitter":
+                # Determine if this is OAuth1 or OAuth2 data
                 if 'oauth1' in token_data:
                     platform_suffix = 'twitter-oauth1'
+                    oauth1_data = token_data['oauth1']
                     token_to_store = {
-                        'access_token': token_data['oauth1']['access_token'],
-                        'token_secret': token_data['oauth1']['access_token_secret'],
+                        'access_token': oauth1_data['access_token'],
+                        'token_secret': oauth1_data['access_token_secret'],
                         'refresh_token': None,
                         'expires_at': None
                     }
                 elif 'oauth2' in token_data:
                     platform_suffix = 'twitter-oauth2'
                     oauth2_data = token_data['oauth2']
+                    # Handle token response structure
                     token_to_store = {
-                        'access_token': oauth2_data['access_token'],
+                        'access_token': oauth2_data.get('token_type', 'Bearer') + ' ' + oauth2_data['access_token'],
                         'token_secret': None,
                         'refresh_token': oauth2_data.get('refresh_token'),
-                        'expires_at': oauth2_data.get('expires_at')
+                        'expires_at': int(datetime.utcnow().timestamp() + oauth2_data.get('expires_in', 0))
                     }
                 else:
                     raise ValueError("Invalid Twitter token data structure")
@@ -86,8 +89,8 @@ class TokenManager:
                 logger.debug("\n=== Twitter Token Storage ===")
                 logger.debug(f"Platform suffix: {platform_suffix}")
                 logger.debug(f"Token structure: {list(token_to_store.keys())}")
-                logger.debug(f"Has refresh token: {'yes' if token_to_store['refresh_token'] else 'no'}")
-                logger.debug(f"Has expiration: {'yes' if token_to_store['expires_at'] else 'no'}")
+                logger.debug(f"Has refresh token: {'yes' if token_to_store.get('refresh_token') else 'no'}")
+                logger.debug(f"Has expiration: {'yes' if token_to_store.get('expires_at') else 'no'}")
             else:
                 # Handle other platforms (LinkedIn, etc.) with original structure
                 platform_suffix = platform
