@@ -150,33 +150,7 @@ class TokenManager:
             
             # Decrypt token data
             token_data = self.decrypt_token_data(encrypted_data)
-            
-            # For Twitter, handle OAuth1 and OAuth2 tokens separately
-            if platform == "twitter-oauth1":
-                logger.debug("Successfully retrieved OAuth1 token")
-                return token_data
-            elif platform == "twitter-oauth2":
-                logger.debug("Successfully retrieved OAuth2 token")
-                return token_data
-            elif platform == "twitter":
-                # For general twitter platform, get both tokens
-                oauth1_data = self.db.get_token(user_id, "twitter-oauth1")
-                oauth2_data = self.db.get_token(user_id, "twitter-oauth2")
-                
-                result = {}
-                if oauth1_data:
-                    result['oauth1'] = self.decrypt_token_data(oauth1_data)
-                    logger.debug("Successfully retrieved OAuth1 token")
-                if oauth2_data:
-                    result['oauth2'] = self.decrypt_token_data(oauth2_data)
-                    logger.debug("Successfully retrieved OAuth2 token")
-                
-                if result:
-                    logger.debug("Retrieved both OAuth1 and OAuth2 tokens")
-                    return result
-                return None
-            
-            # For other platforms, return token data as is
+            logger.debug(f"Successfully retrieved token for {platform}")
             return token_data
             
         except Exception as e:
@@ -186,14 +160,6 @@ class TokenManager:
     async def get_valid_token(self, platform: str, user_id: str, x_api_key: Optional[str] = None) -> Optional[Dict]:
         """
         Get valid token data for a user, refreshing if necessary.
-        
-        Args:
-            platform: Platform identifier
-            user_id: User identifier
-            x_api_key: Optional API key for validation
-            
-        Returns:
-            Valid token data or None if unable to get/refresh token
         """
         try:
             token_data = await self.get_token(platform, user_id)
@@ -211,35 +177,21 @@ class TokenManager:
                     return None
                 return token_data
             
-            # For Twitter, handle OAuth 1.0a and 2.0 separately
-            if platform == "twitter":
-                oauth2_data = token_data.get('oauth2', {})
-                # Handle nested oauth2 structure if present
-                if isinstance(oauth2_data, dict) and 'oauth2' in oauth2_data:
-                    token_data['oauth2'] = oauth2_data['oauth2']
-                    logger.debug("Normalized nested OAuth 2.0 structure")
-                
-                expires_at = oauth2_data.get('expires_at')
+            # For Twitter OAuth2, check expiration
+            if platform == "twitter-oauth2":
+                expires_at = token_data.get('expires_at')
                 if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
                     logger.debug(f"OAuth 2.0 token expired for Twitter user {user_id}")
-                    refresh_token = oauth2_data.get('refresh_token')
+                    refresh_token = token_data.get('refresh_token')
                     if refresh_token:
                         logger.debug(f"Found refresh token for Twitter user {user_id}, attempting refresh")
                         return await self.refresh_token(platform, user_id, token_data, x_api_key)
-                    # If no refresh token, but we have OAuth 1.0a tokens, return those
-                    if 'oauth1' in token_data:
-                        logger.debug(f"No refresh token, but found OAuth 1.0a tokens for user {user_id}")
-                        return token_data
                     return None
                 return token_data
             
-            # For other platforms, handle standard OAuth 2.0
-            expires_at = token_data.get('expires_at')
-            if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
-                logger.debug(f"Token expired for user {user_id} on platform {platform}")
-                if token_data.get('refresh_token'):
-                    return await self.refresh_token(platform, user_id, token_data, x_api_key)
-                return None
+            # For Twitter OAuth1, tokens don't expire
+            if platform == "twitter-oauth1":
+                return token_data
             
             return token_data
             
