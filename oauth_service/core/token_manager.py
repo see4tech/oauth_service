@@ -61,32 +61,49 @@ class TokenManager:
             logger.debug(f"Storing token for platform: {platform}, user_id: {user_id}")
             logger.debug(f"Token data keys to store: {list(token_data.keys())}")
             
-            if platform == "twitter" and "oauth2" in token_data:
-                logger.debug("\n=== Twitter OAuth2 Token Storage ===")
-                logger.debug(f"OAuth2 token keys: {list(token_data['oauth2'].keys())}")
-                logger.debug(f"OAuth2 access token (first 10 chars): {token_data['oauth2'].get('access_token', '')[:10]}...")
-                logger.debug(f"OAuth2 refresh token exists: {'yes' if token_data['oauth2'].get('refresh_token') else 'no'}")
-                logger.debug(f"OAuth2 token expiration: {token_data['oauth2'].get('expires_at')}")
-            
-            # Get existing tokens first
-            existing_tokens = await self.get_token(platform, user_id) or {}
-            
-            # Merge with new tokens
-            existing_tokens.update(token_data)  # This preserves both oauth1 and oauth2
-            
-            # Encrypt merged tokens
-            encrypted_data = self.encrypt_token_data(existing_tokens)
-            
-            # Store encrypted token data
-            self.db.store_token(user_id, platform, encrypted_data)
-            
-            # Verify storage by retrieving and decrypting
-            stored_data = await self.get_token(platform, user_id)
-            if stored_data:
-                logger.debug("Successfully verified token storage and retrieval")
-                logger.debug(f"Retrieved token keys: {list(stored_data.keys())}")
+            # Handle Twitter's split token storage
+            if platform.startswith('twitter'):
+                if 'oauth1' in token_data:
+                    platform_suffix = 'twitter-oauth1'
+                    token_to_store = {
+                        'access_token': token_data['oauth1']['access_token'],
+                        'token_secret': token_data['oauth1']['access_token_secret'],
+                        'refresh_token': None,
+                        'expires_at': None
+                    }
+                elif 'oauth2' in token_data:
+                    platform_suffix = 'twitter-oauth2'
+                    oauth2_data = token_data['oauth2']
+                    token_to_store = {
+                        'access_token': oauth2_data['access_token'],
+                        'token_secret': None,
+                        'refresh_token': oauth2_data.get('refresh_token'),
+                        'expires_at': oauth2_data.get('expires_at')
+                    }
+                else:
+                    raise ValueError("Invalid Twitter token data structure")
+                
+                logger.debug("\n=== Twitter Token Storage ===")
+                logger.debug(f"Platform suffix: {platform_suffix}")
+                logger.debug(f"Token structure: {list(token_to_store.keys())}")
+                logger.debug(f"Has refresh token: {'yes' if token_to_store['refresh_token'] else 'no'}")
+                logger.debug(f"Has expiration: {'yes' if token_to_store['expires_at'] else 'no'}")
             else:
-                logger.error("Failed to verify token storage")
+                # Handle other platforms (LinkedIn, etc.) with original structure
+                platform_suffix = platform
+                token_to_store = token_data
+                logger.debug(f"\n=== Standard Token Storage for {platform} ===")
+                logger.debug(f"Token structure: {list(token_to_store.keys())}")
+            
+            # Encrypt token data
+            encrypted_data = self.encrypt_token_data(token_to_store)
+            
+            # Store encrypted token
+            success = self.db.store_token(user_id, platform_suffix, encrypted_data)
+            if success:
+                logger.debug(f"Successfully stored {platform_suffix} token")
+            else:
+                logger.error(f"Failed to store {platform_suffix} token")
             
         except Exception as e:
             logger.error("\n=== Token Storage Error ===")
@@ -99,26 +116,65 @@ class TokenManager:
             logger.debug("\n=== Token Retrieval Started ===")
             logger.debug(f"Getting token for platform: {platform}, user_id: {user_id}")
             
-            encrypted_data = self.db.get_token(user_id, platform)
-            if encrypted_data:
-                logger.debug("Found encrypted token data, attempting to decrypt")
-                try:
-                    token_data = self.decrypt_token_data(encrypted_data)
-                    logger.debug(f"Successfully decrypted token with keys: {list(token_data.keys())}")
-                    
-                    # For Twitter, handle nested OAuth structure
-                    if platform == "twitter" and "oauth2" in token_data:
-                        logger.debug(f"OAuth2 token keys: {list(token_data['oauth2'].keys())}")
-                        logger.debug(f"OAuth2 access token (first 10 chars): {token_data['oauth2'].get('access_token', '')[:10]}...")
-                        logger.debug(f"OAuth2 refresh token exists: {'yes' if token_data['oauth2'].get('refresh_token') else 'no'}")
-                        logger.debug(f"OAuth2 token expiration: {token_data['oauth2'].get('expires_at')}")
-                    
-                    return token_data
-                except Exception as decrypt_error:
-                    logger.error(f"Failed to decrypt token: {str(decrypt_error)}")
-                    return None
+            if platform.startswith('twitter'):
+                # Get both OAuth1 and OAuth2 tokens for Twitter
+                oauth1_data = None
+                oauth2_data = None
+                
+                # Get OAuth1 token
+                encrypted_oauth1 = self.db.get_token(user_id, 'twitter-oauth1')
+                if encrypted_oauth1:
+                    try:
+                        oauth1_token = self.decrypt_token_data(encrypted_oauth1)
+                        oauth1_data = {
+                            'oauth1': {
+                                'access_token': oauth1_token['access_token'],
+                                'access_token_secret': oauth1_token['token_secret']
+                            }
+                        }
+                        logger.debug("Successfully retrieved OAuth1 token")
+                    except Exception as e:
+                        logger.error(f"Error decrypting OAuth1 token: {str(e)}")
+                
+                # Get OAuth2 token
+                encrypted_oauth2 = self.db.get_token(user_id, 'twitter-oauth2')
+                if encrypted_oauth2:
+                    try:
+                        oauth2_token = self.decrypt_token_data(encrypted_oauth2)
+                        oauth2_data = {
+                            'oauth2': {
+                                'access_token': oauth2_token['access_token'],
+                                'refresh_token': oauth2_token['refresh_token'],
+                                'expires_at': oauth2_token['expires_at']
+                            }
+                        }
+                        logger.debug("Successfully retrieved OAuth2 token")
+                    except Exception as e:
+                        logger.error(f"Error decrypting OAuth2 token: {str(e)}")
+                
+                # Combine tokens for Twitter
+                if oauth1_data and oauth2_data:
+                    combined_data = {**oauth1_data, **oauth2_data}
+                    logger.debug("Retrieved both OAuth1 and OAuth2 tokens")
+                    return combined_data
+                elif oauth1_data:
+                    logger.debug("Retrieved only OAuth1 token")
+                    return oauth1_data
+                elif oauth2_data:
+                    logger.debug("Retrieved only OAuth2 token")
+                    return oauth2_data
+            else:
+                # Standard token retrieval for other platforms
+                encrypted_data = self.db.get_token(user_id, platform)
+                if encrypted_data:
+                    try:
+                        token_data = self.decrypt_token_data(encrypted_data)
+                        logger.debug(f"Successfully retrieved {platform} token")
+                        return token_data
+                    except Exception as e:
+                        logger.error(f"Error decrypting {platform} token: {str(e)}")
             
-            logger.debug(f"No token found for user {user_id} on platform {platform}")
+            logger.debug("No tokens found")
             return None
             
         except Exception as e:

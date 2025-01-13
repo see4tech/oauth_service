@@ -105,51 +105,47 @@ class SqliteDB:
             self.conn.commit()
             logger.info("Database initialization completed successfully")
     
-    def store_token(self, user_id: str, platform: str, token_data: str) -> None:
-        """
-        Store encrypted token data.
-        
-        Args:
-            user_id (str): Unique identifier for the user
-            platform (str): Platform name for the token
-            token_data (str): Encrypted token data to store
-        """
+    def store_token(self, user_id: str, platform: str, token_data: str) -> bool:
+        """Store OAuth token data for a user."""
         try:
             with self._lock:
                 cursor = self.conn.cursor()
+                
+                # Get existing API key for this user
+                api_key = self.get_user_api_key(user_id, platform)
+                
+                if not api_key:
+                    # If no API key exists, generate one
+                    api_key = generate_api_key()
+                
+                # Store token with platform-specific suffix
                 cursor.execute('''
-                    INSERT OR REPLACE INTO oauth_tokens 
-                    (user_id, platform, token_data, updated_at)
-                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                ''', (user_id, platform, token_data))
+                    INSERT OR REPLACE INTO oauth_tokens
+                    (user_id, platform, token_data, api_key)
+                    VALUES (?, ?, ?, ?)
+                ''', (user_id, platform, token_data, api_key))
+                
                 self.conn.commit()
-        except sqlite3.Error as e:
-            logger.error(f"Error storing token: {e}")
-            raise
+                return True
+        except Exception as e:
+            logger.error(f"Error storing token: {str(e)}")
+            return False
     
     def get_token(self, user_id: str, platform: str) -> Optional[str]:
-        """
-        Retrieve encrypted token data.
-        
-        Args:
-            user_id (str): Unique identifier for the user
-            platform (str): Platform name for the token
-        
-        Returns:
-            Optional[str]: Retrieved token data or None if not found
-        """
+        """Get OAuth token data for a user."""
         try:
             with self._lock:
                 cursor = self.conn.cursor()
                 cursor.execute('''
-                    SELECT token_data FROM oauth_tokens
+                    SELECT token_data
+                    FROM oauth_tokens
                     WHERE user_id = ? AND platform = ?
                 ''', (user_id, platform))
                 result = cursor.fetchone()
                 return result[0] if result else None
-        except sqlite3.Error as e:
-            logger.error(f"Error retrieving token: {e}")
-            raise
+        except Exception as e:
+            logger.error(f"Error retrieving token: {str(e)}")
+            return None
     
     def delete_token(self, user_id: str, platform: str) -> None:
         """
@@ -266,23 +262,48 @@ class SqliteDB:
             raise
             
     def get_user_api_key(self, user_id: str, platform: str) -> Optional[str]:
-        """Get API key for specific user and platform."""
+        """Get API key for a user."""
         try:
-            cursor = self.conn.cursor()
-            cursor.execute(
-                "SELECT api_key FROM user_api_keys WHERE user_id = ? AND platform = ?",
-                (user_id, platform)
-            )
-            result = cursor.fetchone()
-            
-            if result:
-                api_key = result[0]
-                # Only log the specific platform's key
-                logger.debug(f"Retrieved API key from DB - User: {user_id}, Platform: {platform}, Key: {api_key}")
-                return api_key
-            
-            return None
-            
+            with self._lock:
+                cursor = self.conn.cursor()
+                
+                if platform.startswith('twitter'):
+                    # First try exact platform match
+                    cursor.execute('''
+                        SELECT api_key
+                        FROM oauth_tokens
+                        WHERE user_id = ? AND platform = ?
+                    ''', (user_id, platform))
+                    result = cursor.fetchone()
+                    
+                    if not result and platform == 'twitter-oauth2':
+                        # If not found and looking for OAuth2, try OAuth1
+                        cursor.execute('''
+                            SELECT api_key
+                            FROM oauth_tokens
+                            WHERE user_id = ? AND platform = ?
+                        ''', (user_id, 'twitter-oauth1'))
+                        result = cursor.fetchone()
+                    elif not result and platform == 'twitter-oauth1':
+                        # If not found and looking for OAuth1, try OAuth2
+                        cursor.execute('''
+                            SELECT api_key
+                            FROM oauth_tokens
+                            WHERE user_id = ? AND platform = ?
+                        ''', (user_id, 'twitter-oauth2'))
+                        result = cursor.fetchone()
+                else:
+                    # Standard API key lookup for other platforms
+                    cursor.execute('''
+                        SELECT api_key
+                        FROM oauth_tokens
+                        WHERE user_id = ? AND platform = ?
+                    ''', (user_id, platform))
+                    result = cursor.fetchone()
+                
+                if result:
+                    logger.debug(f"Retrieved API key from DB - User: {user_id}, Platform: {platform}, Key: {result[0]}")
+                return result[0] if result else None
         except Exception as e:
             logger.error(f"Error retrieving API key: {str(e)}")
             return None

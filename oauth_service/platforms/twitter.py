@@ -425,12 +425,9 @@ class TwitterOAuth(OAuthBase):
         """Create a tweet using Twitter API v2."""
         try:
             logger.debug("\n=== Starting Tweet Creation Process ===")
-            logger.debug(f"User ID: {user_id}")
+            logger.debug(f"User ID from payload: {user_id}")
             logger.debug(f"Has x-api-key: {'yes' if x_api_key else 'no'}")
             logger.debug(f"Token data keys: {list(token_data.keys())}")
-            if 'oauth2' in token_data:
-                logger.debug(f"OAuth2 token keys: {list(token_data['oauth2'].keys())}")
-                logger.debug(f"OAuth2 token expiration: {token_data['oauth2'].get('expires_at')}")
             
             # For media upload, we need OAuth 1.0a tokens
             media_ids = None
@@ -451,14 +448,11 @@ class TwitterOAuth(OAuthBase):
             if user_id:
                 logger.debug(f"\n=== Token Refresh Check ===")
                 logger.debug(f"Checking token validity for user {user_id}")
-                fresh_token_data = await refresh_handler.get_valid_token(user_id, "twitter", x_api_key)
+                fresh_token_data = await refresh_handler.get_valid_token(user_id, "twitter-oauth2", x_api_key)
                 if not fresh_token_data:
                     logger.error("Failed to get valid token from refresh handler")
                     raise ValueError("Failed to get valid token")
                 logger.debug(f"Fresh token data keys: {list(fresh_token_data.keys())}")
-                if 'oauth2' in fresh_token_data:
-                    logger.debug(f"Fresh OAuth2 token keys: {list(fresh_token_data['oauth2'].keys())}")
-                    logger.debug(f"Fresh OAuth2 token expiration: {fresh_token_data['oauth2'].get('expires_at')}")
                 token_data = fresh_token_data
 
             # For creating the tweet, use OAuth 2.0

@@ -25,27 +25,19 @@ class TokenRefreshHandler:
     def _is_token_expired(self, token_data: Dict, platform: str) -> bool:
         """Check if the token is expired based on platform-specific logic."""
         try:
-            if platform == "twitter":
-                # For Twitter, check OAuth 2.0 token expiration
-                oauth2_data = token_data.get('oauth2', {})
-                expires_at = oauth2_data.get('expires_at')
-                if expires_at:
-                    return datetime.fromtimestamp(expires_at) <= datetime.utcnow()
-                return True  # If no expiration found, assume expired
-                
+            if platform == "twitter-oauth1":
+                return False  # OAuth1 tokens never expire
+            elif platform == "twitter-oauth2":
+                expires_at = token_data.get('expires_at')
+                if expires_at is None:
+                    return False  # If no expiration, assume valid
+                return datetime.fromtimestamp(expires_at) <= datetime.utcnow()
             elif platform == "linkedin":
-                # For LinkedIn, check token expiration
+                # LinkedIn token expiration check
                 expires_at = token_data.get('expires_at')
                 if expires_at:
                     return datetime.fromtimestamp(expires_at) <= datetime.utcnow()
-                return True
-                
-            elif platform in ["instagram", "facebook"]:
-                # For Instagram/Facebook, check long-lived token expiration
-                expires_at = token_data.get('expires_at')
-                if expires_at:
-                    return datetime.fromtimestamp(expires_at) <= datetime.utcnow()
-                return False  # If no expiration found, assume valid (60-day tokens)
+                return True  # If no expiration found for LinkedIn, assume expired
             
             return False
             
@@ -81,11 +73,6 @@ class TokenRefreshHandler:
                 
                 logger.debug(f"\n=== Current Token Data ===")
                 logger.debug(f"Token data keys: {list(token_data.keys())}")
-                if platform == "twitter" and "oauth2" in token_data:
-                    logger.debug(f"Current OAuth2 token keys: {list(token_data['oauth2'].keys())}")
-                    logger.debug(f"Current OAuth2 access token (first 10 chars): {token_data['oauth2'].get('access_token', '')[:10]}...")
-                    logger.debug(f"Current OAuth2 refresh token exists: {'yes' if token_data['oauth2'].get('refresh_token') else 'no'}")
-                    logger.debug(f"Current OAuth2 token expiration: {token_data['oauth2'].get('expires_at')}")
                 
                 # Verify x-api-key if provided
                 if x_api_key:
@@ -109,15 +96,13 @@ class TokenRefreshHandler:
                     
                     # Get refresh token based on platform
                     refresh_token = None
-                    if platform == "twitter":
-                        oauth2_data = token_data.get('oauth2', {})
-                        refresh_token = oauth2_data.get('refresh_token')
-                        logger.debug(f"\n=== Refresh Token Check ===")
-                        logger.debug(f"Twitter OAuth2 refresh token found: {'yes' if refresh_token else 'no'}")
-                        if refresh_token:
-                            logger.debug(f"Refresh token (first 10 chars): {refresh_token[:10]}...")
-                    else:
+                    if platform == "twitter-oauth2":
                         refresh_token = token_data.get('refresh_token')
+                    elif platform == "linkedin":
+                        refresh_token = token_data.get('refresh_token')
+                    
+                    logger.debug(f"\n=== Refresh Token Check ===")
+                    logger.debug(f"Refresh token found: {'yes' if refresh_token else 'no'}")
                     
                     if not refresh_token:
                         logger.error(f"No refresh token available for user {user_id} on platform {platform}")
@@ -131,17 +116,10 @@ class TokenRefreshHandler:
                         logger.debug("\n=== Token Refresh Response ===")
                         logger.debug(f"New token data received: {'yes' if new_token_data else 'no'}")
                         
-                        if platform == "twitter":
-                            # Preserve OAuth 1.0a tokens if they exist
-                            if 'oauth1' in token_data:
-                                new_token_data['oauth1'] = token_data['oauth1']
-                                logger.debug("Preserved OAuth 1.0a tokens in new token data")
-                            
-                            if 'oauth2' in new_token_data:
-                                logger.debug(f"New OAuth2 token keys: {list(new_token_data['oauth2'].keys())}")
-                                logger.debug(f"New OAuth2 access token (first 10 chars): {new_token_data['oauth2'].get('access_token', '')[:10]}...")
-                                logger.debug(f"New OAuth2 refresh token exists: {'yes' if new_token_data['oauth2'].get('refresh_token') else 'no'}")
-                                logger.debug(f"New OAuth2 token expiration: {new_token_data['oauth2'].get('expires_at')}")
+                        if new_token_data:
+                            logger.debug(f"New token data keys: {list(new_token_data.keys())}")
+                            logger.debug(f"New refresh token exists: {'yes' if new_token_data.get('refresh_token') else 'no'}")
+                            logger.debug(f"New token expiration: {new_token_data.get('expires_at')}")
                         
                         # Store the new token
                         logger.debug("\n=== Storing New Token ===")
