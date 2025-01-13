@@ -483,10 +483,12 @@ class TwitterOAuth(OAuthBase):
                 )
                 
                 async with aiohttp.ClientSession() as session:
+                    # Use the correct Twitter API v2 endpoint with OAuth 2.0 User Context
                     headers = {
                         'Authorization': f'Bearer {oauth2_token}',
                         'Content-Type': 'application/json',
-                        'User-Agent': 'OAuth2UserAgent'
+                        'User-Agent': 'v2TweetPoster',
+                        'X-Client-Type': 'OAuth2UserContext'
                     }
                     
                     logger.debug("\n=== Request Details ===")
@@ -494,6 +496,7 @@ class TwitterOAuth(OAuthBase):
                     logger.debug(f"Headers: {headers}")
                     logger.debug(f"Data: {tweet_data}")
                     
+                    # Make the request with OAuth 2.0 User Context
                     async with session.post(
                         "https://api.twitter.com/2/tweets",
                         headers=headers,
