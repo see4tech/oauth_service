@@ -1,7 +1,5 @@
-// 
-import { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { LinkedInPopupHandler } from "./LinkedInPopupHandler";
-import { LinkedInTokenExchange } from "./LinkedInTokenExchange";
 import { toast } from "sonner";
 
 interface LinkedInAuthProps {
@@ -11,7 +9,7 @@ interface LinkedInAuthProps {
   isConnected?: boolean;
 }
 
-const LinkedInAuth = ({ redirectUri, onSuccess, onError, isConnected = false }: LinkedInAuthProps) => {
+const LinkedInAuth: React.FC<LinkedInAuthProps> = ({ redirectUri, onSuccess, onError, isConnected = false }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [localIsConnected, setLocalIsConnected] = useState(isConnected);
   const authWindowRef = useRef<Window | null>(null);
