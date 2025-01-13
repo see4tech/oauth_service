@@ -459,8 +459,13 @@ class TwitterOAuth(OAuthBase):
                     logger.error("OAuth 1.0a tokens required but not found")
                     raise ValueError("OAuth 1.0a tokens required for media upload")
                 
+                # Wrap OAuth1 tokens in the expected structure
+                oauth1_wrapped = {'oauth1': oauth1_token_data}
+                logger.debug(f"OAuth1 token structure: {list(oauth1_wrapped.keys())}")
+                logger.debug(f"OAuth1 token data keys: {list(oauth1_token_data.keys())}")
+                
                 try:
-                    media_id = await self.upload_media_v1(oauth1_token_data, content['image_url'])
+                    media_id = await self.upload_media_v1(oauth1_wrapped, content['image_url'])
                     media_ids = [media_id]
                     logger.debug(f"Media uploaded successfully with ID: {media_id}")
                 except Exception as e:
@@ -521,7 +526,7 @@ class TwitterOAuth(OAuthBase):
                         'platform': 'twitter',
                         'url': f"https://twitter.com/i/web/status/{tweet['data']['id']}"
                     }
-                
+                    
         except Exception as e:
             # Ensure no tokens are logged in the error
             error_msg = str(e)
