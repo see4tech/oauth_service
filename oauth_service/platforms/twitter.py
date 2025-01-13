@@ -429,7 +429,22 @@ class TwitterOAuth(OAuthBase):
             logger.debug(f"Has x-api-key: {'yes' if x_api_key else 'no'}")
             logger.debug(f"Token data keys: {list(token_data.keys())}")
             
-            # For media upload, we need OAuth 1.0a tokens
+            # First, validate and refresh OAuth2 token if needed
+            logger.debug(f"\n=== OAuth2 Token Validation ===")
+            logger.debug(f"Getting OAuth 2.0 token for user {user_id}")
+            oauth2_token_data = await refresh_handler.get_valid_token(user_id, "twitter-oauth2", x_api_key)
+            if not oauth2_token_data:
+                logger.error("Failed to get valid OAuth 2.0 token")
+                raise ValueError("Failed to get valid OAuth 2.0 token")
+            logger.debug(f"OAuth 2.0 token data keys: {list(oauth2_token_data.keys())}")
+            
+            # Extract OAuth 2.0 token
+            oauth2_token = oauth2_token_data.get('access_token')
+            if not oauth2_token:
+                logger.error("OAuth 2.0 access token not found in token data")
+                raise ValueError("OAuth 2.0 access token not found")
+            
+            # Now that we have a valid OAuth2 token, proceed with media upload if needed
             media_ids = None
             if content.get('image_url'):
                 # Get OAuth 1.0a tokens
@@ -445,21 +460,6 @@ class TwitterOAuth(OAuthBase):
                 except Exception as e:
                     logger.error(f"Media upload failed: {str(e)}")
                     raise ValueError(f"Media upload failed: {str(e)}")
-
-            # Get fresh OAuth 2.0 token data for tweet creation
-            logger.debug(f"\n=== Token Refresh Check ===")
-            logger.debug(f"Getting OAuth 2.0 token for user {user_id}")
-            oauth2_token_data = await refresh_handler.get_valid_token(user_id, "twitter-oauth2", x_api_key)
-            if not oauth2_token_data:
-                logger.error("Failed to get valid OAuth 2.0 token")
-                raise ValueError("Failed to get valid OAuth 2.0 token")
-            logger.debug(f"OAuth 2.0 token data keys: {list(oauth2_token_data.keys())}")
-
-            # Extract OAuth 2.0 token
-            oauth2_token = oauth2_token_data.get('access_token')
-            if not oauth2_token:
-                logger.error("OAuth 2.0 access token not found in token data")
-                raise ValueError("OAuth 2.0 access token not found")
             
             # Create tweet using OAuth 2.0 User Context
             logger.debug("\n=== Creating Tweet ===")
