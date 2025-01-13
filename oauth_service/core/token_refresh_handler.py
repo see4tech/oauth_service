@@ -38,7 +38,13 @@ class TokenRefreshHandler:
                 expires_at = token_data.get('expires_at')
                 if expires_at:
                     return datetime.fromtimestamp(expires_at) <= datetime.utcnow()
-                return True  # If no expiration found for LinkedIn, assume expired
+                # If no expiration found for LinkedIn, check expires_in
+                expires_in = token_data.get('expires_in')
+                if expires_in:
+                    # Calculate expiration from expires_in
+                    expires_at = int(datetime.utcnow().timestamp() + expires_in)
+                    return False  # Token is fresh since we just got expires_in
+                return False  # If no expiration info at all, assume valid
             
             return False
             

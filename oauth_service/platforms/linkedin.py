@@ -197,9 +197,14 @@ class LinkedInOAuth(OAuthBase):
                     logger.debug(f"Expires in: {token_data.get('expires_in')} seconds")
                     logger.debug(f"Received refresh token: {bool(token_data.get('refresh_token'))}")
                     
+                    # Calculate expires_at
+                    expires_in = token_data.get('expires_in', 3600)
+                    expires_at = int(datetime.datetime.utcnow().timestamp() + expires_in)
+                    
                     return {
                         'access_token': token_data['access_token'],
-                        'expires_in': token_data.get('expires_in', 3600),
+                        'expires_in': expires_in,
+                        'expires_at': expires_at,
                         'refresh_token': token_data.get('refresh_token')
                     }
                     
