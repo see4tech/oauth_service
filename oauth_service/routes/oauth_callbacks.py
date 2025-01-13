@@ -151,9 +151,14 @@ async def linkedin_callback(
         return create_html_response(success=False, error=error_msg)
     
     # Check if this code was already processed
-    if _is_code_processed(code):
+    if await _is_code_processed(code):
         logger.info(f"Skipping duplicate callback for code: {code[:10]}...")
-        return create_html_response(success=True, message="OAuth flow already completed")
+        return create_html_response(
+            success=True,
+            error=None,
+            platform="linkedin",
+            auto_close=True
+        )
     
     try:
         # Initialize OAuth handler
