@@ -455,7 +455,7 @@ class TwitterOAuth(OAuthBase):
                 logger.debug(f"Fresh token data keys: {list(fresh_token_data.keys())}")
                 token_data = fresh_token_data
 
-            # For creating the tweet, use OAuth 2.0
+            # For creating the tweet, use OAuth 2.0 User Context
             if isinstance(token_data, dict) and 'oauth2' in token_data:
                 oauth2_data = token_data['oauth2']
                 oauth2_token = oauth2_data.get('access_token')
@@ -463,9 +463,9 @@ class TwitterOAuth(OAuthBase):
                     logger.error("OAuth 2.0 access token not found in token data")
                     raise ValueError("OAuth 2.0 access token not found")
                 
-                # Create tweet using OAuth 2.0 token
+                # Create tweet using OAuth 2.0 User Context
                 logger.debug("\n=== Creating Tweet ===")
-                logger.debug("Using OAuth 2.0 token")
+                logger.debug("Using OAuth 2.0 User Context")
                 
                 tweet_data = {
                     "text": content['text']
@@ -480,8 +480,9 @@ class TwitterOAuth(OAuthBase):
                     async with session.post(
                         "https://api.twitter.com/2/tweets",
                         headers={
-                            "Authorization": f"Bearer {oauth2_token}",
-                            "Content-Type": "application/json"
+                            "Authorization": f"OAuth2 {oauth2_token}",
+                            "Content-Type": "application/json",
+                            "X-Client-Type": "OAuth2Client"
                         },
                         json=tweet_data
                     ) as response:
