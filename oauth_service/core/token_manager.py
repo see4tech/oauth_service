@@ -190,34 +190,38 @@ class TokenManager:
             logger.error(f"Error retrieving token: {str(e)}")
             return None
     
-    async def refresh_token(self, platform: str, user_id: str, token_data: Dict, x_api_key: Optional[str] = None) -> Optional[Dict]:
-        """
-        Refresh expired token.
-        
-        Args:
-            platform: Platform identifier
-            user_id: User identifier
-            token_data: Current token data containing refresh token
-            x_api_key: Optional API key for validation
-            
-        Returns:
-            New token data or None if refresh fails
-        """
+    async def refresh_token(self, platform: str, user_id: str, x_api_key: Optional[str] = None) -> Optional[Dict]:
+        """Refresh the token for the specified platform and user."""
         try:
-            refresh_token = token_data.get('refresh_token')
-            if not refresh_token:
-                logger.debug(f"No refresh token available for user {user_id} on platform {platform}")
-                return None
+            logger.debug(f"\n=== Token Refresh Started ===")
+            logger.debug(f"Platform: {platform}, User ID: {user_id}")
             
-            # Get the platform-specific OAuth handler
-            from ..routes.oauth_routes import get_oauth_handler
-            oauth_handler = await get_oauth_handler(platform)
+            # Get base platform name for OAuth handler
+            base_platform = "twitter" if platform.startswith("twitter-") else platform
+            
+            oauth_handler = await get_oauth_handler(base_platform)
+            if not oauth_handler:
+                raise Exception("Failed to initialize OAuth handler")
+            
+            # Get current token data
+            token_data = await self.get_token(platform, user_id)
+            if not token_data:
+                logger.error(f"No token data found for {platform} user {user_id}")
+                return None
+                
+            logger.debug(f"Current token data keys: {list(token_data.keys())}")
             
             # Refresh the token
-            new_token_data = await oauth_handler.refresh_token(refresh_token)
+            new_token_data = await oauth_handler.refresh_token(token_data, x_api_key)
+            if not new_token_data:
+                logger.error(f"Failed to refresh token for {platform} user {user_id}")
+                return None
+                
+            logger.debug(f"New token data keys: {list(new_token_data.keys())}")
             
             # Store the new token
             await self.store_token(platform, user_id, new_token_data)
+            logger.debug(f"Successfully stored refreshed token for {platform}")
             
             return new_token_data
             
