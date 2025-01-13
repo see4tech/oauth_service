@@ -61,75 +61,59 @@ class TokenManager:
             logger.debug(f"Storing token for platform: {platform}, user_id: {user_id}")
             logger.debug(f"Token data keys to store: {list(token_data.keys())}")
             
-            # Handle Twitter's split token storage
-            if platform == "twitter":
-                # Determine if this is OAuth1 or OAuth2 data
-                if 'oauth1' in token_data:
-                    platform_suffix = 'twitter-oauth1'
-                    oauth1_data = token_data['oauth1']
-                    token_to_store = {
-                        'access_token': oauth1_data['access_token'],
-                        'token_secret': oauth1_data['access_token_secret'],
-                        'refresh_token': None,
-                        'expires_at': None
-                    }
-                elif 'oauth2' in token_data:
-                    platform_suffix = 'twitter-oauth2'
-                    oauth2_data = token_data['oauth2']
-                    # Handle token response structure
-                    token_to_store = {
-                        'access_token': oauth2_data.get('token_type', 'Bearer') + ' ' + oauth2_data['access_token'],
-                        'token_secret': None,
-                        'refresh_token': oauth2_data.get('refresh_token'),
-                        'expires_at': int(datetime.utcnow().timestamp() + oauth2_data.get('expires_in', 0))
-                    }
-                else:
-                    raise ValueError("Invalid Twitter token data structure")
+            token_to_store = token_data.copy()  # Create a copy to avoid modifying the original
+            
+            # Handle LinkedIn token storage
+            if platform == "linkedin":
+                logger.debug(f"\n=== LinkedIn Token Storage ===")
+                logger.debug(f"Original token data keys: {list(token_data.keys())}")
+                logger.debug(f"Original token data: {json.dumps({k: '***' if k in ['access_token', 'refresh_token'] else v for k, v in token_data.items()})}")
                 
-                logger.debug("\n=== Twitter Token Storage ===")
-                logger.debug(f"Platform suffix: {platform_suffix}")
+                # Calculate expires_at if expires_in is present
+                if 'expires_in' in token_data:
+                    token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + token_data['expires_in'])
+                elif 'expires_at' not in token_to_store:
+                    # If no expiration info, set a default expiration of 1 hour
+                    token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + 3600)
+                
+                logger.debug(f"Token structure to store: {list(token_to_store.keys())}")
+                logger.debug(f"Has refresh token: {'yes' if token_to_store.get('refresh_token') else 'no'}")
+                logger.debug(f"Has expires_at: {'yes' if token_to_store.get('expires_at') else 'no'}")
+                
+            # Handle Twitter OAuth2 token storage
+            elif platform == "twitter-oauth2":
+                logger.debug("\n=== Twitter OAuth2 Token Storage ===")
+                # Ensure token has Bearer prefix
+                access_token = token_data.get('access_token', '')
+                if not access_token.startswith('Bearer '):
+                    token_to_store['access_token'] = f"Bearer {access_token}"
+                
+                # Calculate expires_at if expires_in is present
+                if 'expires_in' in token_data:
+                    token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + token_data['expires_in'])
+                
                 logger.debug(f"Token structure: {list(token_to_store.keys())}")
                 logger.debug(f"Has refresh token: {'yes' if token_to_store.get('refresh_token') else 'no'}")
                 logger.debug(f"Has expiration: {'yes' if token_to_store.get('expires_at') else 'no'}")
-            else:
-                # Handle other platforms (LinkedIn, etc.) with original structure
-                platform_suffix = platform
-                token_to_store = token_data.copy()  # Create a copy to avoid modifying the original
                 
-                # For LinkedIn, ensure expires_at is calculated and refresh token is preserved
-                if platform == "linkedin":
-                    logger.debug(f"\n=== LinkedIn Token Storage ===")
-                    logger.debug(f"Original token data keys: {list(token_data.keys())}")
-                    logger.debug(f"Original token data: {json.dumps({k: '***' if k in ['access_token', 'refresh_token'] else v for k, v in token_data.items()})}")
+            # Handle Twitter OAuth1 token storage
+            elif platform == "twitter-oauth1":
+                logger.debug("\n=== Twitter OAuth1 Token Storage ===")
+                # Ensure we have the required OAuth1 tokens
+                if not token_data.get('access_token') or not token_data.get('token_secret'):
+                    raise ValueError("Missing required OAuth1 tokens")
                     
-                    # Calculate expires_at if expires_in is present
-                    if 'expires_in' in token_data:
-                        token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + token_data['expires_in'])
-                    elif 'expires_at' not in token_to_store:
-                        # If no expiration info, set a default expiration of 1 hour
-                        token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + 3600)
-                    
-                    # Ensure refresh token is preserved
-                    if 'refresh_token' in token_data:
-                        token_to_store['refresh_token'] = token_data['refresh_token']
-                    
-                    logger.debug(f"Token structure to store: {list(token_to_store.keys())}")
-                    logger.debug(f"Has refresh token: {'yes' if token_to_store.get('refresh_token') else 'no'}")
-                    logger.debug(f"Has expires_at: {'yes' if token_to_store.get('expires_at') else 'no'}")
-                    logger.debug(f"Token data to store: {json.dumps({k: '***' if k in ['access_token', 'refresh_token'] else v for k, v in token_to_store.items()})}")
-                else:
-                    logger.debug(f"\n=== Standard Token Storage for {platform} ===")
-                    logger.debug(f"Token structure: {list(token_to_store.keys())}")
+                logger.debug(f"Token structure: {list(token_to_store.keys())}")
             
             # Encrypt token data
             encrypted_data = self.encrypt_token_data(token_to_store)
             
             # Store encrypted token
-            success = self.db.store_token(user_id, platform_suffix, encrypted_data)
+            success = self.db.store_token(user_id, platform, encrypted_data)
             if success:
-                logger.debug(f"Successfully stored {platform_suffix} token")
+                logger.debug(f"Successfully stored {platform} token")
             else:
-                logger.error(f"Failed to store {platform_suffix} token")
+                logger.error(f"Failed to store {platform} token")
             
         except Exception as e:
             logger.error("\n=== Token Storage Error ===")
@@ -151,6 +135,13 @@ class TokenManager:
             # Decrypt token data
             token_data = self.decrypt_token_data(encrypted_data)
             logger.debug(f"Successfully retrieved token for {platform}")
+            logger.debug(f"Token data keys: {list(token_data.keys())}")
+            
+            # For twitter platform, check if we have old nested structure
+            if platform == "twitter" and ("oauth1" in token_data or "oauth2" in token_data):
+                logger.debug("Found old nested token structure, please re-authenticate to update token format")
+                return None
+            
             return token_data
             
         except Exception as e:
