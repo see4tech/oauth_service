@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 import time
 import asyncio
 from datetime import datetime
@@ -33,11 +33,11 @@ class RateLimiter:
             f"{platform.upper()}_RATE_LIMIT",
             str(default_rate)
         ))
-        self.last_request_time: Dict[str, float] = {}
+        self.request_timestamps: Dict[str, List[float]] = {}  # Store timestamps for each endpoint
         self._lock = asyncio.Lock()
         
         logger.debug(f"Initialized rate limiter for {platform} with {self.requests_per_second} requests/second")
-    
+        
     async def wait(self, endpoint: str) -> None:
         """
         Wait if necessary to respect rate limits.
@@ -49,16 +49,46 @@ class RateLimiter:
             current_time = time.time()
             key = f"{self.platform}:{endpoint}"
             
-            if key in self.last_request_time:
-                time_since_last_request = current_time - self.last_request_time[key]
-                if time_since_last_request < (1 / self.requests_per_second):
-                    wait_time = (1 / self.requests_per_second) - time_since_last_request
+            # Initialize timestamps list if not exists
+            if key not in self.request_timestamps:
+                self.request_timestamps[key] = []
+            
+            # Remove timestamps older than 1 minute
+            window_start = current_time - 60
+            self.request_timestamps[key] = [
+                ts for ts in self.request_timestamps[key] if ts > window_start
+            ]
+            
+            # For LinkedIn token exchange, enforce the 100 requests per minute limit
+            if self.platform == "linkedin_token_exchange":
+                requests_in_window = len(self.request_timestamps[key])
+                if requests_in_window >= 100:
+                    # Calculate wait time until oldest request expires from window
+                    wait_time = 60 - (current_time - self.request_timestamps[key][0])
                     logger.debug(
-                        f"Rate limit wait for {self.platform}:{endpoint}: {wait_time:.2f}s"
+                        f"Rate limit exceeded for {self.platform}:{endpoint}. "
+                        f"Requests in last minute: {requests_in_window}. "
+                        f"Waiting {wait_time:.2f}s"
                     )
                     await asyncio.sleep(wait_time)
+                    # After waiting, remove expired timestamps
+                    window_start = time.time() - 60
+                    self.request_timestamps[key] = [
+                        ts for ts in self.request_timestamps[key] if ts > window_start
+                    ]
+            else:
+                # For other endpoints, enforce requests per second
+                if self.request_timestamps[key]:
+                    time_since_last_request = current_time - self.request_timestamps[key][-1]
+                    if time_since_last_request < (1 / self.requests_per_second):
+                        wait_time = (1 / self.requests_per_second) - time_since_last_request
+                        logger.debug(
+                            f"Rate limit wait for {self.platform}:{endpoint}: {wait_time:.2f}s"
+                        )
+                        await asyncio.sleep(wait_time)
             
-            self.last_request_time[key] = time.time()
+            # Add current timestamp
+            self.request_timestamps[key].append(time.time())
     
     async def reset(self, endpoint: str) -> None:
         """
@@ -69,5 +99,5 @@ class RateLimiter:
         """
         async with self._lock:
             key = f"{self.platform}:{endpoint}"
-            if key in self.last_request_time:
-                del self.last_request_time[key]
+            if key in self.request_timestamps:
+                self.request_timestamps[key] = []
