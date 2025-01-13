@@ -51,7 +51,7 @@ class TokenRefreshHandler:
         
         Args:
             user_id: User identifier
-            platform: Platform identifier
+            platform: Platform identifier (e.g., "twitter-oauth1", "twitter-oauth2")
             x_api_key: Optional API key for verification
             
         Returns:
@@ -76,10 +76,19 @@ class TokenRefreshHandler:
                 
                 # Verify x-api-key if provided
                 if x_api_key:
-                    stored_api_key = self.db.get_user_api_key(user_id, platform)
-                    if not stored_api_key or stored_api_key != x_api_key:
-                        logger.error(f"Invalid x-api-key for user {user_id} on platform {platform}")
+                    # For Twitter, always validate against twitter-oauth1 API key
+                    validation_platform = "twitter-oauth1" if platform.startswith("twitter") else platform
+                    stored_api_key = self.db.get_user_api_key(user_id, validation_platform)
+                    logger.debug(f"\n=== API Key Validation ===")
+                    logger.debug(f"Validating against platform: {validation_platform}")
+                    
+                    if not stored_api_key:
+                        logger.error(f"No API key found for user {user_id} on platform {validation_platform}")
                         return None
+                    if stored_api_key != x_api_key:
+                        logger.error(f"Invalid x-api-key for user {user_id} on platform {validation_platform}")
+                        return None
+                    logger.debug("API key validation successful")
                 
                 # Check if token needs refresh
                 is_expired = self._is_token_expired(token_data, platform)

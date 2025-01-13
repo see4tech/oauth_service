@@ -348,7 +348,9 @@ async def create_post(
             
             result = await oauth_handler.create_post(
                 token_data,
-                content_dict
+                content_dict,
+                user_id=user_id,
+                x_api_key=x_api_key
             )
             
             return PostResponse(
