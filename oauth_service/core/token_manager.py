@@ -96,13 +96,27 @@ class TokenManager:
                 platform_suffix = platform
                 token_to_store = token_data.copy()  # Create a copy to avoid modifying the original
                 
-                # For LinkedIn, ensure expires_at is calculated
-                if platform == "linkedin" and 'expires_in' in token_data:
-                    token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + token_data['expires_in'])
+                # For LinkedIn, ensure expires_at is calculated and refresh token is preserved
+                if platform == "linkedin":
                     logger.debug(f"\n=== LinkedIn Token Storage ===")
-                    logger.debug(f"Token structure: {list(token_to_store.keys())}")
+                    logger.debug(f"Original token data keys: {list(token_data.keys())}")
+                    logger.debug(f"Original token data: {json.dumps({k: '***' if k in ['access_token', 'refresh_token'] else v for k, v in token_data.items()})}")
+                    
+                    # Calculate expires_at if expires_in is present
+                    if 'expires_in' in token_data:
+                        token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + token_data['expires_in'])
+                    elif 'expires_at' not in token_to_store:
+                        # If no expiration info, set a default expiration of 1 hour
+                        token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + 3600)
+                    
+                    # Ensure refresh token is preserved
+                    if 'refresh_token' in token_data:
+                        token_to_store['refresh_token'] = token_data['refresh_token']
+                    
+                    logger.debug(f"Token structure to store: {list(token_to_store.keys())}")
                     logger.debug(f"Has refresh token: {'yes' if token_to_store.get('refresh_token') else 'no'}")
-                    logger.debug(f"Expires at: {token_to_store['expires_at']}")
+                    logger.debug(f"Has expires_at: {'yes' if token_to_store.get('expires_at') else 'no'}")
+                    logger.debug(f"Token data to store: {json.dumps({k: '***' if k in ['access_token', 'refresh_token'] else v for k, v in token_to_store.items()})}")
                 else:
                     logger.debug(f"\n=== Standard Token Storage for {platform} ===")
                     logger.debug(f"Token structure: {list(token_to_store.keys())}")

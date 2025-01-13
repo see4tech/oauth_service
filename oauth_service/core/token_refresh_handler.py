@@ -4,6 +4,7 @@ import asyncio
 from ..utils.logger import get_logger
 from .token_manager import TokenManager
 from ..core.db import SqliteDB
+import json
 
 logger = get_logger(__name__)
 
@@ -73,6 +74,7 @@ class TokenRefreshHandler:
                 
                 logger.debug(f"\n=== Current Token Data ===")
                 logger.debug(f"Token data keys: {list(token_data.keys())}")
+                logger.debug(f"Token data values: {json.dumps({k: '***' if k in ['access_token', 'refresh_token'] else v for k, v in token_data.items()})}")
                 
                 # Verify x-api-key if provided
                 if x_api_key:
@@ -111,6 +113,10 @@ class TokenRefreshHandler:
                         refresh_token = token_data.get('refresh_token')
                     elif platform == "linkedin":
                         refresh_token = token_data.get('refresh_token')
+                        logger.debug(f"\n=== LinkedIn Refresh Token Details ===")
+                        logger.debug(f"Raw refresh token value: {refresh_token}")
+                        logger.debug(f"Refresh token type: {type(refresh_token)}")
+                        logger.debug(f"Token data dump: {json.dumps(token_data, indent=2)}")
                     
                     logger.debug(f"\n=== Refresh Token Check ===")
                     logger.debug(f"Refresh token found: {'yes' if refresh_token else 'no'}")
