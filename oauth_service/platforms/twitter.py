@@ -429,6 +429,12 @@ class TwitterOAuth(OAuthBase):
             logger.debug(f"Has x-api-key: {'yes' if x_api_key else 'no'}")
             logger.debug(f"Token data keys: {list(token_data.keys())}")
             
+            if not user_id:
+                logger.error("No user_id provided in payload")
+                raise ValueError("User ID is required")
+            
+            logger.debug(f"Using user_id: {user_id}")
+            
             # First, validate and refresh OAuth2 token if needed
             logger.debug(f"\n=== OAuth2 Token Validation ===")
             logger.debug(f"Getting OAuth 2.0 token for user {user_id}")
