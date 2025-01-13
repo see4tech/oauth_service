@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Path
 from fastapi.responses import HTMLResponse, RedirectResponse
 from typing import Optional, Dict
 from ..core import TokenManager
@@ -324,16 +324,13 @@ async def linkedin_callback(
 @callback_router.get("/{platform}/callback", include_in_schema=True)
 async def oauth_callback(
     request: Request,
-    platform: str,
+    platform: str = Path(..., regex="^(?!linkedin$).*$"),  # Exclude 'linkedin' from matching
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
     error_description: Optional[str] = None
 ):
     """Handle OAuth callbacks for platforms other than LinkedIn."""
-    if platform == "linkedin":
-        return await linkedin_callback(request, code, state, error, error_description)
-        
     try:
         logger.info(f"Received {platform.title()} callback")
         logger.info(f"Code present: {bool(code)}")
