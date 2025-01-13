@@ -48,7 +48,8 @@ class LinkedInOAuth(OAuthBase):
             'openid',
             'profile',
             'w_member_social',
-            'email'
+            'email',
+            'offline_access'  # Required for refresh tokens
         ]
     
     async def get_authorization_url(self, state: Optional[str] = None, scopes: Optional[List[str]] = None) -> str:

@@ -94,9 +94,18 @@ class TokenManager:
             else:
                 # Handle other platforms (LinkedIn, etc.) with original structure
                 platform_suffix = platform
-                token_to_store = token_data
-                logger.debug(f"\n=== Standard Token Storage for {platform} ===")
-                logger.debug(f"Token structure: {list(token_to_store.keys())}")
+                token_to_store = token_data.copy()  # Create a copy to avoid modifying the original
+                
+                # For LinkedIn, ensure expires_at is calculated
+                if platform == "linkedin" and 'expires_in' in token_data:
+                    token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + token_data['expires_in'])
+                    logger.debug(f"\n=== LinkedIn Token Storage ===")
+                    logger.debug(f"Token structure: {list(token_to_store.keys())}")
+                    logger.debug(f"Has refresh token: {'yes' if token_to_store.get('refresh_token') else 'no'}")
+                    logger.debug(f"Expires at: {token_to_store['expires_at']}")
+                else:
+                    logger.debug(f"\n=== Standard Token Storage for {platform} ===")
+                    logger.debug(f"Token structure: {list(token_to_store.keys())}")
             
             # Encrypt token data
             encrypted_data = self.encrypt_token_data(token_to_store)
