@@ -476,14 +476,27 @@ class TwitterOAuth(OAuthBase):
                 
                 logger.debug(f"Tweet data: {tweet_data}")
                 
+                # Create OAuth2Session for the request
+                oauth2_session = OAuth2Session(
+                    client_id=self.client_id,
+                    token={'access_token': oauth2_token, 'token_type': 'bearer'}
+                )
+                
                 async with aiohttp.ClientSession() as session:
+                    headers = {
+                        'Authorization': f'Bearer {oauth2_token}',
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'OAuth2UserAgent'
+                    }
+                    
+                    logger.debug("\n=== Request Details ===")
+                    logger.debug(f"URL: https://api.twitter.com/2/tweets")
+                    logger.debug(f"Headers: {headers}")
+                    logger.debug(f"Data: {tweet_data}")
+                    
                     async with session.post(
                         "https://api.twitter.com/2/tweets",
-                        headers={
-                            "Authorization": f"OAuth2 {oauth2_token}",
-                            "Content-Type": "application/json",
-                            "X-Client-Type": "OAuth2Client"
-                        },
+                        headers=headers,
                         json=tweet_data
                     ) as response:
                         response_text = await response.text()
