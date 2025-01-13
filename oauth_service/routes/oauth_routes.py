@@ -306,7 +306,7 @@ async def create_post(
             oauth_handler = await get_oauth_handler(platform)
             token_manager = TokenManager()
             
-            token_data = await token_manager.get_valid_token(platform, user_id)
+            token_data = await token_manager.get_valid_token(platform, user_id, x_api_key)
             if not token_data:
                 raise HTTPException(
                     status_code=401,

@@ -160,8 +160,18 @@ class TokenManager:
             logger.error(f"Error getting token: {str(e)}")
             return None
 
-    async def get_valid_token(self, platform: str, user_id: str) -> Optional[Dict]:
-        """Get valid token data for a user, refreshing if necessary."""
+    async def get_valid_token(self, platform: str, user_id: str, x_api_key: Optional[str] = None) -> Optional[Dict]:
+        """
+        Get valid token data for a user, refreshing if necessary.
+        
+        Args:
+            platform: Platform identifier
+            user_id: User identifier
+            x_api_key: Optional API key for validation
+            
+        Returns:
+            Valid token data or None if unable to get/refresh token
+        """
         try:
             token_data = await self.get_token(platform, user_id)
             if not token_data:
@@ -174,7 +184,7 @@ class TokenManager:
                 if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
                     logger.debug(f"Token expired for user {user_id} on platform {platform}")
                     if token_data.get('refresh_token'):
-                        return await self.refresh_token(platform, user_id, token_data)
+                        return await self.refresh_token(platform, user_id, token_data, x_api_key)
                     return None
                 return token_data
             
@@ -192,7 +202,7 @@ class TokenManager:
                     refresh_token = oauth2_data.get('refresh_token')
                     if refresh_token:
                         logger.debug(f"Found refresh token for Twitter user {user_id}, attempting refresh")
-                        return await self.refresh_token(platform, user_id, token_data)
+                        return await self.refresh_token(platform, user_id, token_data, x_api_key)
                     # If no refresh token, but we have OAuth 1.0a tokens, return those
                     if 'oauth1' in token_data:
                         logger.debug(f"No refresh token, but found OAuth 1.0a tokens for user {user_id}")
@@ -205,7 +215,7 @@ class TokenManager:
             if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
                 logger.debug(f"Token expired for user {user_id} on platform {platform}")
                 if token_data.get('refresh_token'):
-                    return await self.refresh_token(platform, user_id, token_data)
+                    return await self.refresh_token(platform, user_id, token_data, x_api_key)
                 return None
             
             return token_data
@@ -214,7 +224,7 @@ class TokenManager:
             logger.error(f"Error retrieving token: {str(e)}")
             return None
     
-    async def refresh_token(self, platform: str, user_id: str, token_data: Dict) -> Optional[Dict]:
+    async def refresh_token(self, platform: str, user_id: str, token_data: Dict, x_api_key: Optional[str] = None) -> Optional[Dict]:
         """
         Refresh expired token.
         
@@ -222,6 +232,7 @@ class TokenManager:
             platform: Platform identifier
             user_id: User identifier
             token_data: Current token data containing refresh token
+            x_api_key: Optional API key for validation
             
         Returns:
             New token data or None if refresh fails
