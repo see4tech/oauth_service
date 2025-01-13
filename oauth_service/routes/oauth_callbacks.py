@@ -324,13 +324,17 @@ async def linkedin_callback(
 @callback_router.get("/{platform}/callback", include_in_schema=True)
 async def oauth_callback(
     request: Request,
-    platform: str = Path(..., regex="^(?!linkedin$).*$"),  # Exclude 'linkedin' from matching
+    platform: str = Path(...),
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
     error_description: Optional[str] = None
 ):
-    """Handle OAuth callbacks for platforms other than LinkedIn."""
+    if platform == "linkedin":
+        return await linkedin_callback(request, code, state, error, error_description)
+        
+    logger.debug(f"Processing OAuth callback for platform: {platform}")
+    
     try:
         logger.info(f"Received {platform.title()} callback")
         logger.info(f"Code present: {bool(code)}")
