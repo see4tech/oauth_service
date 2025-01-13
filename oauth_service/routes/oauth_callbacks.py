@@ -16,6 +16,7 @@ import aiohttp
 from datetime import datetime
 import logging
 import time
+from asyncio import Lock
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
@@ -24,6 +25,18 @@ settings = get_settings()
 # Cache to store recently processed auth codes with timestamps
 _processed_codes: Dict[str, float] = {}
 _CACHE_EXPIRY = 60  # Clear codes from cache after 60 seconds
+_code_locks: Dict[str, Lock] = {}
+
+async def _get_code_lock(code: str) -> Lock:
+    """Get or create a lock for a specific authorization code."""
+    if code not in _code_locks:
+        _code_locks[code] = Lock()
+    return _code_locks[code]
+
+async def _cleanup_code_lock(code: str) -> None:
+    """Remove the lock for a code that's no longer needed."""
+    if code in _code_locks:
+        del _code_locks[code]
 
 async def _is_code_processed(code: str) -> bool:
     """Check if an authorization code was already processed."""
@@ -150,157 +163,163 @@ async def linkedin_callback(
         logger.error(f"Error in LinkedIn callback: {error_msg}")
         return create_html_response(success=False, error=error_msg)
     
-    # Check if this code was already processed
-    if await _is_code_processed(code):
-        logger.info(f"Skipping duplicate callback for code: {code[:10]}...")
-        return create_html_response(
-            success=True,
-            error=None,
-            platform="linkedin",
-            auto_close=True
-        )
-    
-    try:
-        # Initialize OAuth handler
-        oauth_handler = await get_oauth_handler("linkedin")
-        
-        # Verify state
-        logger.info(f"Attempting to verify state: {state}")
-        state_data = oauth_handler.verify_state(state)
-        if not state_data:
+    # Get lock for this authorization code
+    code_lock = await _get_code_lock(code)
+    async with code_lock:
+        # Check if this code was already processed
+        if await _is_code_processed(code):
+            logger.info(f"Skipping duplicate callback for code: {code[:10]}...")
             return create_html_response(
-                error="Invalid state",
+                success=True,
+                error=None,
                 platform="linkedin",
                 auto_close=True
             )
         
-        logger.info(f"State verification successful. State data: {state_data}")
-        user_id = state_data['user_id']
-        logger.info(f"Processing callback for user_id: {user_id}")
-        
         try:
-            # Exchange code for tokens
-            tokens = await oauth_handler.get_access_token(code)
-            logger.debug(f"Received tokens from LinkedIn: {tokens}")
+            # Initialize OAuth handler
+            oauth_handler = await get_oauth_handler("linkedin")
             
-            # Store OAuth tokens first
-            token_manager = TokenManager()
-            await token_manager.store_token(
-                platform="linkedin",
-                user_id=user_id,
-                token_data=tokens
-            )
-            logger.info(f"Stored OAuth tokens for user {user_id}")
+            # Verify state
+            logger.info(f"Attempting to verify state: {state}")
+            state_data = oauth_handler.verify_state(state)
+            if not state_data:
+                return create_html_response(
+                    error="Invalid state",
+                    platform="linkedin",
+                    auto_close=True
+                )
             
-            # Generate and store API key
-            api_key = generate_api_key()
-            logger.info("=== API Key Generation ===")
-            logger.info(f"Generated API key: {api_key}")
+            logger.info(f"State verification successful. State data: {state_data}")
+            user_id = state_data['user_id']
+            logger.info(f"Processing callback for user_id: {user_id}")
             
-            # Prepare payload for external storage
-            external_storage_payload = {
-                "user_id": user_id,
-                "platform": "linkedin",
-                "api_key": api_key
-            }
-            logger.info("=== External Storage Request ===")
-            logger.info(f"Full payload being sent to external storage: {external_storage_payload}")
-            logger.info(f"Headers for external storage: x-api-key: {api_key}")
-            
-            # Store API key in external service first
-            api_key_storage = APIKeyStorage()
-            stored = await api_key_storage.store_api_key(
-                user_id=user_id,
-                platform="linkedin",
-                api_key=api_key
-            )
-            
-            if not stored:
-                raise ValueError("Failed to store API key in external service")
-            logger.info("Successfully stored API key in external service")
-            
-            # Store the SAME api_key locally
             try:
-                logger.info("=== Local Database Storage ===")
-                logger.info(f"Attempting to store in SQLite - User ID: {user_id}, Platform: linkedin, API Key: {api_key}")
+                # Exchange code for tokens
+                tokens = await oauth_handler.get_access_token(code)
+                logger.debug(f"Received tokens from LinkedIn: {tokens}")
                 
-                db = SqliteDB()
-                db.store_user_api_key(user_id, platform="linkedin", api_key=api_key)
-                logger.info("Successfully stored API key in local database")
+                # Store OAuth tokens first
+                token_manager = TokenManager()
+                await token_manager.store_token(
+                    platform="linkedin",
+                    user_id=user_id,
+                    token_data=tokens
+                )
+                logger.info(f"Stored OAuth tokens for user {user_id}")
                 
-                # Verify the stored key
-                stored_key = db.get_user_api_key(user_id, "linkedin")
-                logger.info("=== Local Storage Verification ===")
-                logger.info("API key storage verification completed")
+                # Generate and store API key
+                api_key = generate_api_key()
+                logger.info("=== API Key Generation ===")
+                logger.info(f"Generated API key: {api_key}")
                 
-                if stored_key != api_key:
-                    logger.error("Stored key verification failed - mismatch between stored and original")
-                    logger.error(f"Original length: {len(api_key)}, Stored length: {len(stored_key) if stored_key else 0}")
-            except Exception as e:
-                logger.error(f"Failed to store API key in local database: {str(e)}")
-                raise
-            
-            logger.info("=== LinkedIn OAuth Flow Complete ===")
-            logger.info(f"Successfully stored API key for user {user_id} in both external and local storage")
-            success = True
-            
-            # Return success response with API key for frontend
-            message_type = "LINKEDIN_AUTH_CALLBACK"
-            html_content = f"""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>LinkedIn OAuth Callback</title>
-                </head>
-                <body>
-                    <h2>Authentication Successful</h2>
-                    <p>This window will close automatically.</p>
-                    <script>
-                        const message = {{
-                            type: '{message_type}',
-                            success: true,
-                            api_key: '{api_key}',
-                            platform: 'linkedin'
-                        }};
-                        
-                        if (window.opener) {{
-                            window.opener.postMessage(message, '*');
-                            console.log('Message sent:', message);
-                        }}
-                        
-                        // Close window immediately
-                        window.close();
-                        
-                        // Fallback if window.close() doesn't work
-                        setTimeout(() => {{
-                            window.location.href = 'about:blank';
+                # Prepare payload for external storage
+                external_storage_payload = {
+                    "user_id": user_id,
+                    "platform": "linkedin",
+                    "api_key": api_key
+                }
+                logger.info("=== External Storage Request ===")
+                logger.info(f"Full payload being sent to external storage: {external_storage_payload}")
+                logger.info(f"Headers for external storage: x-api-key: {api_key}")
+                
+                # Store API key in external service first
+                api_key_storage = APIKeyStorage()
+                stored = await api_key_storage.store_api_key(
+                    user_id=user_id,
+                    platform="linkedin",
+                    api_key=api_key
+                )
+                
+                if not stored:
+                    raise ValueError("Failed to store API key in external service")
+                logger.info("Successfully stored API key in external service")
+                
+                # Store the SAME api_key locally
+                try:
+                    logger.info("=== Local Database Storage ===")
+                    logger.info(f"Attempting to store in SQLite - User ID: {user_id}, Platform: linkedin, API Key: {api_key}")
+                    
+                    db = SqliteDB()
+                    db.store_user_api_key(user_id, platform="linkedin", api_key=api_key)
+                    logger.info("Successfully stored API key in local database")
+                    
+                    # Verify the stored key
+                    stored_key = db.get_user_api_key(user_id, "linkedin")
+                    logger.info("=== Local Storage Verification ===")
+                    logger.info("API key storage verification completed")
+                    
+                    if stored_key != api_key:
+                        logger.error("Stored key verification failed - mismatch between stored and original")
+                        logger.error(f"Original length: {len(api_key)}, Stored length: {len(stored_key) if stored_key else 0}")
+                except Exception as e:
+                    logger.error(f"Failed to store API key in local database: {str(e)}")
+                    raise
+                
+                logger.info("=== LinkedIn OAuth Flow Complete ===")
+                logger.info(f"Successfully stored API key for user {user_id} in both external and local storage")
+                success = True
+                
+                # Return success response with API key for frontend
+                message_type = "LINKEDIN_AUTH_CALLBACK"
+                html_content = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>LinkedIn OAuth Callback</title>
+                    </head>
+                    <body>
+                        <h2>Authentication Successful</h2>
+                        <p>This window will close automatically.</p>
+                        <script>
+                            const message = {{
+                                type: '{message_type}',
+                                success: true,
+                                api_key: '{api_key}',
+                                platform: 'linkedin'
+                            }};
+                            
+                            if (window.opener) {{
+                                window.opener.postMessage(message, '*');
+                                console.log('Message sent:', message);
+                            }}
+                            
+                            // Close window immediately
                             window.close();
-                        }}, 100);
-                    </script>
-                </body>
-                </html>
-            """
-            
-            # If we get here, mark the code as processed
-            await _mark_code_processed(code)
-            
-            return HTMLResponse(content=html_content)
+                            
+                            // Fallback if window.close() doesn't work
+                            setTimeout(() => {{
+                                window.location.href = 'about:blank';
+                                window.close();
+                            }}, 100);
+                        </script>
+                    </body>
+                    </html>
+                """
+                
+                # If we get here, mark the code as processed
+                await _mark_code_processed(code)
+                await _cleanup_code_lock(code)  # Clean up the lock
+                
+                return HTMLResponse(content=html_content)
+                
+            except Exception as e:
+                await _cleanup_code_lock(code)  # Clean up the lock on error
+                logger.error(f"Error in LinkedIn callback: {str(e)}")
+                return create_html_response(
+                    error=str(e),
+                    platform="linkedin",
+                    auto_close=True
+                )
             
         except Exception as e:
-            logger.error(f"Error in LinkedIn callback: {str(e)}")
+            await _cleanup_code_lock(code)  # Clean up the lock on error
+            logger.error(f"LinkedIn callback error: {str(e)}")
             return create_html_response(
                 error=str(e),
                 platform="linkedin",
                 auto_close=True
             )
-        
-    except Exception as e:
-        logger.error(f"LinkedIn callback error: {str(e)}")
-        return create_html_response(
-            error=str(e),
-            platform="linkedin",
-            auto_close=True
-        )
 
 @callback_router.get("/{platform}/callback", include_in_schema=True)
 async def oauth_callback(
@@ -312,6 +331,9 @@ async def oauth_callback(
     error_description: Optional[str] = None
 ):
     """Handle OAuth callbacks for platforms other than LinkedIn."""
+    if platform == "linkedin":
+        return await linkedin_callback(request, code, state, error, error_description)
+        
     try:
         logger.info(f"Received {platform.title()} callback")
         logger.info(f"Code present: {bool(code)}")
