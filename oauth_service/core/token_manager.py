@@ -114,74 +114,49 @@ class TokenManager:
             raise
 
     async def get_token(self, platform: str, user_id: str) -> Optional[Dict]:
-        """Get token data for a user."""
+        """Get OAuth tokens for a user."""
         try:
             logger.debug("\n=== Token Retrieval Started ===")
             logger.debug(f"Getting token for platform: {platform}, user_id: {user_id}")
             
-            if platform.startswith('twitter'):
-                # Get both OAuth1 and OAuth2 tokens for Twitter
-                oauth1_data = None
-                oauth2_data = None
-                
-                # Get OAuth1 token
-                encrypted_oauth1 = self.db.get_token(user_id, 'twitter-oauth1')
-                if encrypted_oauth1:
-                    try:
-                        oauth1_token = self.decrypt_token_data(encrypted_oauth1)
-                        oauth1_data = {
-                            'oauth1': {
-                                'access_token': oauth1_token['access_token'],
-                                'access_token_secret': oauth1_token['token_secret']
-                            }
-                        }
-                        logger.debug("Successfully retrieved OAuth1 token")
-                    except Exception as e:
-                        logger.error(f"Error decrypting OAuth1 token: {str(e)}")
-                
-                # Get OAuth2 token
-                encrypted_oauth2 = self.db.get_token(user_id, 'twitter-oauth2')
-                if encrypted_oauth2:
-                    try:
-                        oauth2_token = self.decrypt_token_data(encrypted_oauth2)
-                        oauth2_data = {
-                            'oauth2': {
-                                'access_token': oauth2_token['access_token'],
-                                'refresh_token': oauth2_token['refresh_token'],
-                                'expires_at': oauth2_token['expires_at']
-                            }
-                        }
-                        logger.debug("Successfully retrieved OAuth2 token")
-                    except Exception as e:
-                        logger.error(f"Error decrypting OAuth2 token: {str(e)}")
-                
-                # Combine tokens for Twitter
-                if oauth1_data and oauth2_data:
-                    combined_data = {**oauth1_data, **oauth2_data}
-                    logger.debug("Retrieved both OAuth1 and OAuth2 tokens")
-                    return combined_data
-                elif oauth1_data:
-                    logger.debug("Retrieved only OAuth1 token")
-                    return oauth1_data
-                elif oauth2_data:
-                    logger.debug("Retrieved only OAuth2 token")
-                    return oauth2_data
-            else:
-                # Standard token retrieval for other platforms
-                encrypted_data = self.db.get_token(user_id, platform)
-                if encrypted_data:
-                    try:
-                        token_data = self.decrypt_token_data(encrypted_data)
-                        logger.debug(f"Successfully retrieved {platform} token")
-                        return token_data
-                    except Exception as e:
-                        logger.error(f"Error decrypting {platform} token: {str(e)}")
+            # Get encrypted token data from database
+            encrypted_data = self.db.get_token(user_id, platform)
+            if not encrypted_data:
+                logger.debug("No token data found in database")
+                return None
             
-            logger.debug("No tokens found")
-            return None
+            # Decrypt token data
+            token_data = self.decrypt_token_data(encrypted_data)
+            
+            # For Twitter, handle OAuth1 and OAuth2 tokens separately
+            if platform == "twitter-oauth1":
+                logger.debug("Successfully retrieved OAuth1 token")
+                return token_data
+            elif platform == "twitter-oauth2":
+                logger.debug("Successfully retrieved OAuth2 token")
+                return token_data
+            elif platform == "twitter":
+                # For general twitter platform, get both tokens
+                oauth1_data = self.db.get_token(user_id, "twitter-oauth1")
+                oauth2_data = self.db.get_token(user_id, "twitter-oauth2")
+                
+                result = {}
+                if oauth1_data:
+                    result['oauth1'] = self.decrypt_token_data(oauth1_data)
+                    logger.debug("Successfully retrieved OAuth1 token")
+                if oauth2_data:
+                    result['oauth2'] = self.decrypt_token_data(oauth2_data)
+                    logger.debug("Successfully retrieved OAuth2 token")
+                
+                if result:
+                    logger.debug("Retrieved both OAuth1 and OAuth2 tokens")
+                    return result
+                return None
+            
+            # For other platforms, return token data as is
+            return token_data
             
         except Exception as e:
-            logger.error(f"\n=== Token Retrieval Error ===")
             logger.error(f"Error getting token: {str(e)}")
             return None
 
