@@ -365,7 +365,7 @@ class TwitterOAuth(OAuthBase):
                 self._consumer_key,
                 client_secret=self._decrypted_consumer_secret,
                 resource_owner_key=oauth1_tokens['access_token'],
-                resource_owner_secret=oauth1_tokens['access_token_secret']
+                resource_owner_secret=oauth1_tokens['token_secret']
             )
 
             # Download image and save temporarily
@@ -459,13 +459,10 @@ class TwitterOAuth(OAuthBase):
                     logger.error("OAuth 1.0a tokens required but not found")
                     raise ValueError("OAuth 1.0a tokens required for media upload")
                 
-                # Wrap OAuth1 tokens in the expected structure
-                oauth1_wrapped = {'oauth1': oauth1_token_data}
-                logger.debug(f"OAuth1 token structure: {list(oauth1_wrapped.keys())}")
                 logger.debug(f"OAuth1 token data keys: {list(oauth1_token_data.keys())}")
                 
                 try:
-                    media_id = await self.upload_media_v1(oauth1_wrapped, content['image_url'])
+                    media_id = await self.upload_media_v1(oauth1_token_data, content['image_url'])
                     media_ids = [media_id]
                     logger.debug(f"Media uploaded successfully with ID: {media_id}")
                 except Exception as e:
@@ -737,6 +734,7 @@ class TwitterOAuth(OAuthBase):
         try:
             logger.debug("\n=== Media Upload Process ===")
             logger.debug("OAuth1 credentials configured")
+            logger.debug(f"OAuth1 token keys: {list(oauth1_tokens.keys())}")
             
             # Create OAuth1 auth object for requests
             from requests_oauthlib import OAuth1
@@ -744,7 +742,7 @@ class TwitterOAuth(OAuthBase):
                 self._consumer_key,
                 client_secret=self._decrypted_consumer_secret,
                 resource_owner_key=oauth1_tokens['access_token'],
-                resource_owner_secret=oauth1_tokens['access_token_secret']
+                resource_owner_secret=oauth1_tokens['token_secret']
             )
             
             logger.debug("2. Downloading image")
