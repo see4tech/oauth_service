@@ -224,15 +224,23 @@ class LinkedInOAuth(OAuthBase):
             Dictionary containing new access token data
         """
         try:
-            logger.debug("Attempting to refresh LinkedIn access token")
+            logger.debug("\n=== LinkedIn Token Refresh Started ===")
+            logger.debug(f"Refresh token provided (first 10 chars): {refresh_token[:10]}...")
             
             auth_str = f"{self.client_id}:{self.crypto.decrypt(self._client_secret)}"
             auth_header = base64.b64encode(auth_str.encode()).decode()
             
             data = {
                 "grant_type": "refresh_token",
-                "refresh_token": refresh_token
+                "refresh_token": refresh_token,
+                "client_id": self.client_id,
+                "client_secret": self.crypto.decrypt(self._client_secret)
             }
+            
+            logger.debug("\n=== LinkedIn Refresh Request Details ===")
+            logger.debug(f"Token URL: {self.token_url}")
+            logger.debug(f"Client ID length: {len(self.client_id)}")
+            logger.debug(f"Auth header length: {len(auth_header)}")
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -245,27 +253,46 @@ class LinkedInOAuth(OAuthBase):
                     }
                 ) as response:
                     response_text = await response.text()
-                    logger.debug(f"Refresh token response status: {response.status}")
+                    logger.debug(f"\n=== LinkedIn Refresh Response ===")
+                    logger.debug(f"Status code: {response.status}")
+                    logger.debug(f"Response headers: {dict(response.headers)}")
                     
                     if not response.ok:
-                        raise HTTPException(
-                            status_code=response.status,
-                            detail=f"Token refresh failed: {response_text}"
-                        )
+                        logger.error(f"\n=== LinkedIn Token Refresh Error ===")
+                        logger.error(f"Status code: {response.status}")
+                        logger.error(f"Response headers: {dict(response.headers)}")
+                        logger.error(f"Error response: {response_text}")
+                        raise ValueError(f"Failed to refresh token: {response_text}")
                     
-                    data = json.loads(response_text)
+                    try:
+                        token_data = json.loads(response_text)
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse refresh response as JSON: {response_text}")
+                        raise ValueError("Invalid token response format from LinkedIn")
+                    
+                    logger.debug("\n=== LinkedIn Token Refresh Success ===")
+                    logger.debug(f"Token data keys: {list(token_data.keys())}")
+                    logger.debug(f"Expires in: {token_data.get('expires_in')} seconds")
+                    logger.debug(f"Received refresh token: {bool(token_data.get('refresh_token'))}")
+                    
+                    # Calculate expires_at
+                    expires_in = token_data.get('expires_in', 3600)
+                    expires_at = datetime.datetime.utcnow().timestamp() + expires_in
+                    
                     return {
-                        "access_token": data["access_token"],
-                        "expires_in": data.get("expires_in", 3600),
-                        "refresh_token": data.get("refresh_token")
+                        'access_token': token_data['access_token'],
+                        'expires_in': expires_in,
+                        'expires_at': expires_at,
+                        'refresh_token': token_data.get('refresh_token', refresh_token)  # Use old refresh token if new one not provided
                     }
                     
         except Exception as e:
+            logger.error(f"\n=== LinkedIn Token Refresh Error ===")
             logger.error(f"Error refreshing token: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error refreshing token: {str(e)}"
-            )
+            if hasattr(e, 'response'):
+                logger.error(f"Response status: {e.response.status_code}")
+                logger.error(f"Response text: {e.response.text}")
+            raise
 
     async def get_user_profile(self, token: str) -> str:
         """Get LinkedIn user profile to obtain member ID."""

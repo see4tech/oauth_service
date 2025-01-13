@@ -101,7 +101,9 @@ class TokenRefreshHandler:
                     
                     # Get platform-specific OAuth handler
                     from ..routes.oauth_routes import get_oauth_handler
-                    oauth_handler = await get_oauth_handler("twitter")
+                    # Use the actual platform, but strip -oauth1/-oauth2 suffix if present
+                    base_platform = platform.split('-')[0] if '-' in platform else platform
+                    oauth_handler = await get_oauth_handler(base_platform)
                     
                     # Get refresh token based on platform
                     refresh_token = None
