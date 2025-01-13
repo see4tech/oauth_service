@@ -234,7 +234,8 @@ class TwitterOAuth(OAuthBase):
             Dictionary containing new access token data
         """
         try:
-            logger.debug("Attempting to refresh Twitter OAuth 2.0 token")
+            logger.debug("\n=== Twitter OAuth2 Token Refresh Started ===")
+            logger.debug(f"Refresh token provided (first 10 chars): {refresh_token[:10]}...")
             
             # Create a new OAuth2Session for the refresh
             refresh_session = OAuth2Session(
@@ -243,11 +244,15 @@ class TwitterOAuth(OAuthBase):
             )
             
             # Log refresh attempt details
-            logger.debug(f"Refresh token length: {len(refresh_token)}")
+            logger.debug("\n=== Twitter OAuth2 Refresh Parameters ===")
             logger.debug(f"Client ID length: {len(self.client_id)}")
             logger.debug(f"Client secret length: {len(self._decrypted_client_secret)}")
+            logger.debug(f"Scopes: tweet.read, tweet.write, users.read, offline.access")
             
             # Refresh the token
+            logger.debug("\n=== Twitter OAuth2 Refresh Request ===")
+            logger.debug(f"Token exchange URL: https://api.twitter.com/2/oauth2/token")
+            
             token = refresh_session.refresh_token(
                 'https://api.twitter.com/2/oauth2/token',
                 refresh_token=refresh_token,
@@ -256,16 +261,21 @@ class TwitterOAuth(OAuthBase):
                 include_client_id=True
             )
             
-            # Log token response for debugging
-            logger.debug(f"Refresh token response keys: {list(token.keys())}")
-            logger.debug(f"Refresh token response scopes: {token.get('scope', '')}")
-            logger.debug(f"New refresh token received: {bool(token.get('refresh_token'))}")
+            logger.debug("\n=== Twitter OAuth2 New Token Data ===")
+            logger.debug(f"Response keys: {list(token.keys())}")
+            logger.debug(f"New access token received (first 10 chars): {token.get('access_token', '')[:10]}...")
+            logger.debug(f"New refresh token received: {'yes' if 'refresh_token' in token else 'no'}")
+            logger.debug(f"Token type: {token.get('token_type')}")
+            logger.debug(f"Expires in: {token.get('expires_in')} seconds")
+            logger.debug(f"Scope: {token.get('scope')}")
             
-            # Ensure we have required fields
-            if 'access_token' not in token:
-                raise ValueError("Refresh response missing access_token")
+            # Calculate expires_at if not provided
+            if 'expires_in' in token and 'expires_at' not in token:
+                token['expires_at'] = datetime.utcnow().timestamp() + token['expires_in']
+                logger.debug(f"Calculated expires_at: {token['expires_at']}")
             
-            return {
+            # Structure the response
+            oauth2_token = {
                 'oauth2': {
                     'access_token': token['access_token'],
                     'refresh_token': token.get('refresh_token', refresh_token),  # Use old refresh token if new one not provided
@@ -274,11 +284,16 @@ class TwitterOAuth(OAuthBase):
                 }
             }
             
+            logger.debug("\n=== Twitter OAuth2 Refresh Complete ===")
+            logger.debug("Successfully refreshed OAuth2 token")
+            return oauth2_token
+            
         except Exception as e:
-            logger.error(f"Error refreshing Twitter OAuth 2.0 token: {str(e)}")
+            logger.error("\n=== Twitter OAuth2 Refresh Error ===")
+            logger.error(f"Error refreshing token: {str(e)}")
             if hasattr(e, 'response'):
                 logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response body: {e.response.text}")
+                logger.error(f"Response text: {e.response.text}")
             raise
     
     async def upload_media(self, token_data: Dict, media_content: bytes,

@@ -57,10 +57,16 @@ class TokenManager:
     async def store_token(self, platform: str, user_id: str, token_data: Dict) -> None:
         """Store OAuth tokens for a user."""
         try:
-            logger.info("=== Storing OAuth Token ===")
-            logger.info(f"Platform: {platform}")
-            logger.info(f"User ID: {user_id}")
-            logger.info(f"Token data keys: {list(token_data.keys())}")
+            logger.debug("\n=== Token Storage Started ===")
+            logger.debug(f"Storing token for platform: {platform}, user_id: {user_id}")
+            logger.debug(f"Token data keys to store: {list(token_data.keys())}")
+            
+            if platform == "twitter" and "oauth2" in token_data:
+                logger.debug("\n=== Twitter OAuth2 Token Storage ===")
+                logger.debug(f"OAuth2 token keys: {list(token_data['oauth2'].keys())}")
+                logger.debug(f"OAuth2 access token (first 10 chars): {token_data['oauth2'].get('access_token', '')[:10]}...")
+                logger.debug(f"OAuth2 refresh token exists: {'yes' if token_data['oauth2'].get('refresh_token') else 'no'}")
+                logger.debug(f"OAuth2 token expiration: {token_data['oauth2'].get('expires_at')}")
             
             # Get existing tokens first
             existing_tokens = await self.get_token(platform, user_id) or {}
@@ -77,32 +83,47 @@ class TokenManager:
             # Verify storage by retrieving and decrypting
             stored_data = await self.get_token(platform, user_id)
             if stored_data:
-                logger.info("Successfully verified token storage and retrieval")
+                logger.debug("Successfully verified token storage and retrieval")
                 logger.debug(f"Retrieved token keys: {list(stored_data.keys())}")
             else:
                 logger.error("Failed to verify token storage")
             
         except Exception as e:
+            logger.error("\n=== Token Storage Error ===")
             logger.error(f"Error storing token: {str(e)}")
             raise
 
     async def get_token(self, platform: str, user_id: str) -> Optional[Dict]:
         """Get token data for a user."""
         try:
+            logger.debug("\n=== Token Retrieval Started ===")
+            logger.debug(f"Getting token for platform: {platform}, user_id: {user_id}")
+            
             encrypted_data = self.db.get_token(user_id, platform)
             if encrypted_data:
                 logger.debug("Found encrypted token data, attempting to decrypt")
                 try:
                     token_data = self.decrypt_token_data(encrypted_data)
                     logger.debug(f"Successfully decrypted token with keys: {list(token_data.keys())}")
+                    
+                    # For Twitter, handle nested OAuth structure
+                    if platform == "twitter" and "oauth2" in token_data:
+                        logger.debug(f"OAuth2 token keys: {list(token_data['oauth2'].keys())}")
+                        logger.debug(f"OAuth2 access token (first 10 chars): {token_data['oauth2'].get('access_token', '')[:10]}...")
+                        logger.debug(f"OAuth2 refresh token exists: {'yes' if token_data['oauth2'].get('refresh_token') else 'no'}")
+                        logger.debug(f"OAuth2 token expiration: {token_data['oauth2'].get('expires_at')}")
+                    
                     return token_data
                 except Exception as decrypt_error:
                     logger.error(f"Failed to decrypt token: {str(decrypt_error)}")
                     return None
+            
             logger.debug(f"No token found for user {user_id} on platform {platform}")
             return None
+            
         except Exception as e:
-            logger.error(f"Error retrieving token: {str(e)}")
+            logger.error(f"\n=== Token Retrieval Error ===")
+            logger.error(f"Error getting token: {str(e)}")
             return None
 
     async def get_valid_token(self, platform: str, user_id: str) -> Optional[Dict]:

@@ -79,10 +79,13 @@ class TokenRefreshHandler:
                     logger.error(f"No token found for user {user_id} on platform {platform}")
                     return None
                 
-                logger.debug(f"Current token data keys: {list(token_data.keys())}")
+                logger.debug(f"\n=== Current Token Data ===")
+                logger.debug(f"Token data keys: {list(token_data.keys())}")
                 if platform == "twitter" and "oauth2" in token_data:
-                    logger.debug(f"OAuth2 token keys: {list(token_data['oauth2'].keys())}")
-                    logger.debug(f"OAuth2 token expiration: {token_data['oauth2'].get('expires_at')}")
+                    logger.debug(f"Current OAuth2 token keys: {list(token_data['oauth2'].keys())}")
+                    logger.debug(f"Current OAuth2 access token (first 10 chars): {token_data['oauth2'].get('access_token', '')[:10]}...")
+                    logger.debug(f"Current OAuth2 refresh token exists: {'yes' if token_data['oauth2'].get('refresh_token') else 'no'}")
+                    logger.debug(f"Current OAuth2 token expiration: {token_data['oauth2'].get('expires_at')}")
                 
                 # Verify x-api-key if provided
                 if x_api_key:
@@ -92,7 +95,11 @@ class TokenRefreshHandler:
                         return None
                 
                 # Check if token needs refresh
-                if self._is_token_expired(token_data, platform):
+                is_expired = self._is_token_expired(token_data, platform)
+                logger.debug(f"\n=== Token Expiration Check ===")
+                logger.debug(f"Token expired: {is_expired}")
+                
+                if is_expired:
                     logger.debug(f"\n=== Token Refresh Required ===")
                     logger.debug(f"Token expired for user {user_id} on platform {platform}")
                     
@@ -105,7 +112,10 @@ class TokenRefreshHandler:
                     if platform == "twitter":
                         oauth2_data = token_data.get('oauth2', {})
                         refresh_token = oauth2_data.get('refresh_token')
+                        logger.debug(f"\n=== Refresh Token Check ===")
                         logger.debug(f"Twitter OAuth2 refresh token found: {'yes' if refresh_token else 'no'}")
+                        if refresh_token:
+                            logger.debug(f"Refresh token (first 10 chars): {refresh_token[:10]}...")
                     else:
                         refresh_token = token_data.get('refresh_token')
                     
@@ -115,37 +125,49 @@ class TokenRefreshHandler:
                     
                     try:
                         # Attempt to refresh the token
-                        logger.debug("Attempting token refresh")
+                        logger.debug("\n=== Starting Token Refresh ===")
+                        logger.debug("Calling OAuth handler refresh_token method")
                         new_token_data = await oauth_handler.refresh_token(refresh_token)
+                        logger.debug("\n=== Token Refresh Response ===")
+                        logger.debug(f"New token data received: {'yes' if new_token_data else 'no'}")
                         
                         if platform == "twitter":
                             # Preserve OAuth 1.0a tokens if they exist
                             if 'oauth1' in token_data:
                                 new_token_data['oauth1'] = token_data['oauth1']
-                                logger.debug("Preserved OAuth 1.0a tokens")
+                                logger.debug("Preserved OAuth 1.0a tokens in new token data")
+                            
+                            if 'oauth2' in new_token_data:
+                                logger.debug(f"New OAuth2 token keys: {list(new_token_data['oauth2'].keys())}")
+                                logger.debug(f"New OAuth2 access token (first 10 chars): {new_token_data['oauth2'].get('access_token', '')[:10]}...")
+                                logger.debug(f"New OAuth2 refresh token exists: {'yes' if new_token_data['oauth2'].get('refresh_token') else 'no'}")
+                                logger.debug(f"New OAuth2 token expiration: {new_token_data['oauth2'].get('expires_at')}")
                         
                         # Store the new token
+                        logger.debug("\n=== Storing New Token ===")
+                        logger.debug("Calling token_manager.store_token")
                         await self.token_manager.store_token(platform, user_id, new_token_data)
+                        logger.debug("Successfully stored new token data in database")
                         
+                        logger.debug(f"\n=== Token Refresh Complete ===")
                         logger.debug(f"Successfully refreshed token for user {user_id} on platform {platform}")
-                        logger.debug(f"New token data keys: {list(new_token_data.keys())}")
-                        if platform == "twitter" and "oauth2" in new_token_data:
-                            logger.debug(f"New OAuth2 token keys: {list(new_token_data['oauth2'].keys())}")
-                            logger.debug(f"New OAuth2 token expiration: {new_token_data['oauth2'].get('expires_at')}")
                         
                         return new_token_data
                         
                     except Exception as e:
+                        logger.error(f"\n=== Token Refresh Error ===")
                         logger.error(f"Failed to refresh token: {str(e)}")
                         if hasattr(e, 'response'):
                             logger.error(f"Response status: {e.response.status_code}")
                             logger.error(f"Response text: {e.response.text}")
                         return None
                 
+                logger.debug(f"\n=== Using Existing Token ===")
                 logger.debug(f"Token is still valid for user {user_id} on platform {platform}")
                 return token_data
                 
         except Exception as e:
+            logger.error(f"\n=== Unexpected Error ===")
             logger.error(f"Error in get_valid_token: {str(e)}")
             return None
 
