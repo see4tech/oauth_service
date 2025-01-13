@@ -111,19 +111,12 @@ class SqliteDB:
             with self._lock:
                 cursor = self.conn.cursor()
                 
-                # Get existing API key for this user
-                api_key = self.get_user_api_key(user_id, platform)
-                
-                if not api_key:
-                    # If no API key exists, generate one
-                    api_key = generate_api_key()
-                
                 # Store token with platform-specific suffix
                 cursor.execute('''
                     INSERT OR REPLACE INTO oauth_tokens
-                    (user_id, platform, token_data, api_key)
-                    VALUES (?, ?, ?, ?)
-                ''', (user_id, platform, token_data, api_key))
+                    (user_id, platform, token_data)
+                    VALUES (?, ?, ?)
+                ''', (user_id, platform, token_data))
                 
                 self.conn.commit()
                 return True
@@ -271,7 +264,7 @@ class SqliteDB:
                     # First try exact platform match
                     cursor.execute('''
                         SELECT api_key
-                        FROM oauth_tokens
+                        FROM user_api_keys
                         WHERE user_id = ? AND platform = ?
                     ''', (user_id, platform))
                     result = cursor.fetchone()
@@ -280,7 +273,7 @@ class SqliteDB:
                         # If not found and looking for OAuth2, try OAuth1
                         cursor.execute('''
                             SELECT api_key
-                            FROM oauth_tokens
+                            FROM user_api_keys
                             WHERE user_id = ? AND platform = ?
                         ''', (user_id, 'twitter-oauth1'))
                         result = cursor.fetchone()
@@ -288,7 +281,7 @@ class SqliteDB:
                         # If not found and looking for OAuth1, try OAuth2
                         cursor.execute('''
                             SELECT api_key
-                            FROM oauth_tokens
+                            FROM user_api_keys
                             WHERE user_id = ? AND platform = ?
                         ''', (user_id, 'twitter-oauth2'))
                         result = cursor.fetchone()
@@ -296,7 +289,7 @@ class SqliteDB:
                     # Standard API key lookup for other platforms
                     cursor.execute('''
                         SELECT api_key
-                        FROM oauth_tokens
+                        FROM user_api_keys
                         WHERE user_id = ? AND platform = ?
                     ''', (user_id, platform))
                     result = cursor.fetchone()
