@@ -14,10 +14,32 @@ import os
 import base64
 import aiohttp
 from datetime import datetime
+import logging
+import time
 
 logger = get_logger(__name__)
 callback_router = APIRouter()
 settings = get_settings()
+
+# Cache to store recently processed auth codes with timestamps
+_processed_codes: Dict[str, float] = {}
+_CACHE_EXPIRY = 60  # Clear codes from cache after 60 seconds
+
+async def _is_code_processed(code: str) -> bool:
+    """Check if an authorization code was recently processed and clean expired entries."""
+    current_time = time.time()
+    
+    # Clean expired entries
+    expired = [k for k, v in _processed_codes.items() if current_time - v > _CACHE_EXPIRY]
+    for k in expired:
+        _processed_codes.pop(k)
+    
+    # Check if code was processed
+    return code in _processed_codes
+
+async def _mark_code_processed(code: str) -> None:
+    """Mark an authorization code as processed."""
+    _processed_codes[code] = time.time()
 
 async def get_stored_user_id(oauth_token: str) -> Optional[str]:
     """Get stored user_id for OAuth 1.0a token."""
@@ -118,27 +140,25 @@ async def linkedin_callback(
     error_description: Optional[str] = None
 ) -> HTMLResponse:
     """Handle LinkedIn OAuth callback"""
+    logger.info("=== LinkedIn OAuth Callback Start ===")
+    
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    
+    logger.info(f"Code present: {bool(code)}")
+    logger.info(f"State present: {bool(state)}")
+    
+    if not code or not state:
+        error_msg = "Missing code or state parameter"
+        logger.error(f"Error in LinkedIn callback: {error_msg}")
+        return create_html_response(success=False, error=error_msg)
+    
+    # Check if this code was already processed
+    if await _is_code_processed(code):
+        logger.info(f"Skipping duplicate callback for code: {code[:10]}...")
+        return create_html_response(success=True, message="Authorization already processed")
+    
     try:
-        logger.info("=== LinkedIn OAuth Callback Start ===")
-        logger.info(f"Code present: {bool(code)}")
-        logger.info(f"State present: {bool(state)}")
-        
-        if error:
-            logger.error(f"OAuth error: {error}")
-            logger.error(f"Error description: {error_description}")
-            return create_html_response(
-                error=error_description or error,
-                platform="linkedin",
-                auto_close=True
-            )
-
-        if not code or not state:
-            return create_html_response(
-                error="Missing OAuth parameters",
-                platform="linkedin",
-                auto_close=True
-            )
-        
         # Initialize OAuth handler
         oauth_handler = await get_oauth_handler("linkedin")
         
@@ -258,6 +278,9 @@ async def linkedin_callback(
                 </body>
                 </html>
             """
+            
+            # If we get here, mark the code as processed
+            await _mark_code_processed(code)
             
             return HTMLResponse(content=html_content)
             
