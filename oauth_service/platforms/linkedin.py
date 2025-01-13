@@ -16,11 +16,25 @@ logger = get_logger(__name__)
 class LinkedInOAuth(OAuthBase):
     """LinkedIn OAuth 2.0 implementation."""
     
+    # Class-level rate limiters
+    _token_exchange_limiter = None
+    _api_limiter = None
+
     def __init__(self, client_id: str, client_secret: str, callback_url: str):
         super().__init__(client_id, client_secret, callback_url)
-        # LinkedIn allows 100 requests per minute for token exchange
-        self.token_exchange_limiter = RateLimiter(platform="linkedin_token_exchange")
-        self.api_limiter = RateLimiter(platform="linkedin")
+        
+        # Initialize rate limiters only if not already initialized
+        if LinkedInOAuth._token_exchange_limiter is None:
+            LinkedInOAuth._token_exchange_limiter = RateLimiter(platform="linkedin_token_exchange")
+            logger.debug("Initialized class-level token exchange rate limiter")
+        if LinkedInOAuth._api_limiter is None:
+            LinkedInOAuth._api_limiter = RateLimiter(platform="linkedin")
+            logger.debug("Initialized class-level API rate limiter")
+        
+        # Use class-level rate limiters
+        self.token_exchange_limiter = LinkedInOAuth._token_exchange_limiter
+        self.api_limiter = LinkedInOAuth._api_limiter
+        
         self.token_url = "https://www.linkedin.com/oauth/v2/accessToken"
         self.api_url = "https://api.linkedin.com/v2"
         
