@@ -4,6 +4,7 @@ import json
 from ..utils.key_manager import KeyManager
 from ..core.db import SqliteDB
 from ..utils.logger import get_logger
+from ..routes.oauth_utils import get_oauth_handler
 
 logger = get_logger(__name__)
 
