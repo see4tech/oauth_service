@@ -141,6 +141,39 @@ async def init_twitter_oauth(user_id: str, frontend_callback_url: str, use_oauth
             detail=f"Failed to initialize Twitter OAuth: {str(e)}"
         )
 
+async def _update_twitter_api_keys(user_id: str, new_api_key: str) -> None:
+    """Update API keys for both Twitter OAuth versions."""
+    try:
+        logger.info("=== Updating Twitter API Keys ===")
+        logger.info(f"User ID: {user_id}")
+        logger.info("Updating both OAuth1 and OAuth2 API keys")
+        
+        db = SqliteDB()
+        api_key_storage = APIKeyStorage()
+        
+        # Update OAuth1 API key
+        logger.info("Updating OAuth1 API key")
+        await api_key_storage.store_api_key(user_id=user_id, platform="twitter-oauth1", api_key=new_api_key)
+        db.store_user_api_key(user_id, platform="twitter-oauth1", api_key=new_api_key)
+        
+        # Update OAuth2 API key
+        logger.info("Updating OAuth2 API key")
+        await api_key_storage.store_api_key(user_id=user_id, platform="twitter-oauth2", api_key=new_api_key)
+        db.store_user_api_key(user_id, platform="twitter-oauth2", api_key=new_api_key)
+        
+        # Verify storage
+        oauth1_key = db.get_user_api_key(user_id, "twitter-oauth1")
+        oauth2_key = db.get_user_api_key(user_id, "twitter-oauth2")
+        
+        if oauth1_key != new_api_key or oauth2_key != new_api_key:
+            raise ValueError("API key verification failed - mismatch in stored keys")
+            
+        logger.info("Successfully updated API keys for both OAuth versions")
+        
+    except Exception as e:
+        logger.error(f"Error updating Twitter API keys: {str(e)}")
+        raise
+
 @callback_router.get("/linkedin/callback", include_in_schema=True)
 async def linkedin_callback(
     request: Request,
@@ -471,62 +504,13 @@ async def twitter_oauth1_callback(
             token_data={'oauth1': token_data}
         )
         
-        # Check for existing Twitter API key first
-        db = SqliteDB()
-        existing_api_key = db.get_user_api_key(user_id, "twitter-oauth1")
-
-        if existing_api_key:
-            # Reuse the existing API key for OAuth 2.0
-            api_key = existing_api_key
-            logger.info("=== Reusing Existing Twitter API Key ===")
-            logger.info("Using existing API key from OAuth 1.0a")
-        else:
-            # Generate new API key if none exists
-            api_key = generate_api_key()
-            logger.info("=== API Key Generation ===")
-            logger.info("Generated new API key")
+        # Generate new API key
+        api_key = generate_api_key()
+        logger.info("=== API Key Generation ===")
+        logger.info("Generated new API key")
         
-        # Store with oauth1 suffix
-        platform_with_version = "twitter-oauth1"
-        
-        # Prepare payload for external storage
-        external_storage_payload = {
-            "user_id": user_id,
-            "platform": platform_with_version,  # "twitter-oauth1"
-            "api_key": api_key
-        }
-        
-        # Store API key in external service
-        api_key_storage = APIKeyStorage()
-        stored = await api_key_storage.store_api_key(
-            user_id=user_id,
-            platform=platform_with_version,
-            api_key=api_key
-        )
-        if not stored:
-            raise ValueError("Failed to store API key in external service")
-        logger.info(f"Successfully stored API key in external service for {platform_with_version}")
-        
-        # Store the SAME api_key locally
-        try:
-            logger.info("=== Local Database Storage ===")
-            logger.info(f"Attempting to store in SQLite - User ID: {user_id}, Platform: {platform_with_version}, API Key: {api_key}")
-            
-            db = SqliteDB()
-            db.store_user_api_key(user_id, platform=platform_with_version, api_key=api_key)
-            logger.info(f"Successfully stored API key in local database for {platform_with_version}")
-            
-            # Verify the stored key
-            stored_key = db.get_user_api_key(user_id, platform_with_version)
-            logger.info("=== Local Storage Verification ===")
-            logger.info("API key storage verification completed")
-            
-            if stored_key != api_key:
-                logger.error("Stored key verification failed - mismatch between stored and original")
-                logger.error(f"Original length: {len(api_key)}, Stored length: {len(stored_key) if stored_key else 0}")
-        except Exception as e:
-            logger.error(f"Failed to store API key in local database: {str(e)}")
-            raise
+        # Update API keys for both OAuth versions
+        await _update_twitter_api_keys(user_id, api_key)
         
         return create_html_response(
             platform="twitter",
@@ -601,62 +585,13 @@ async def twitter_oauth2_callback(
             token_data=token_data
         )
         
-        # Check for existing Twitter API key first
-        db = SqliteDB()
-        existing_api_key = db.get_user_api_key(user_id, "twitter-oauth1")
-
-        if existing_api_key:
-            # Reuse the existing API key for OAuth 2.0
-            api_key = existing_api_key
-            logger.info("=== Reusing Existing Twitter API Key ===")
-            logger.info("Using existing API key from OAuth 1.0a")
-        else:
-            # Generate new API key if none exists
-            api_key = generate_api_key()
-            logger.info("=== API Key Generation ===")
-            logger.info("Generated new API key")
+        # Generate new API key
+        api_key = generate_api_key()
+        logger.info("=== API Key Generation ===")
+        logger.info("Generated new API key")
         
-        # Store with oauth2 suffix
-        platform_with_version = "twitter-oauth2"
-        
-        # Prepare payload for external storage
-        external_storage_payload = {
-            "user_id": user_id,
-            "platform": platform_with_version,  # "twitter-oauth2"
-            "api_key": api_key
-        }
-        
-        # Store API key in external service
-        api_key_storage = APIKeyStorage()
-        stored = await api_key_storage.store_api_key(
-            user_id=user_id,
-            platform=platform_with_version,
-            api_key=api_key
-        )
-        if not stored:
-            raise ValueError("Failed to store API key in external service")
-        logger.info(f"Successfully stored API key in external service for {platform_with_version}")
-        
-        # Store the SAME api_key locally
-        try:
-            logger.info("=== Local Database Storage ===")
-            logger.info(f"Attempting to store in SQLite - User ID: {user_id}, Platform: {platform_with_version}, API Key: {api_key}")
-            
-            db = SqliteDB()
-            db.store_user_api_key(user_id, platform=platform_with_version, api_key=api_key)
-            logger.info(f"Successfully stored API key in local database for {platform_with_version}")
-            
-            # Verify the stored key
-            stored_key = db.get_user_api_key(user_id, platform_with_version)
-            logger.info("=== Local Storage Verification ===")
-            logger.info("API key storage verification completed")
-            
-            if stored_key != api_key:
-                logger.error("Stored key verification failed - mismatch between stored and original")
-                logger.error(f"Original length: {len(api_key)}, Stored length: {len(stored_key) if stored_key else 0}")
-        except Exception as e:
-            logger.error(f"Failed to store API key in local database: {str(e)}")
-            raise
+        # Update API keys for both OAuth versions
+        await _update_twitter_api_keys(user_id, api_key)
         
         return create_html_response(
             platform="twitter",
