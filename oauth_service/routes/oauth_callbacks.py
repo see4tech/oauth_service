@@ -26,15 +26,12 @@ _processed_codes: Dict[str, float] = {}
 _CACHE_EXPIRY = 60  # Clear codes from cache after 60 seconds
 
 async def _is_code_processed(code: str) -> bool:
-    """Check if an authorization code was recently processed and clean expired entries."""
+    """Check if an authorization code was already processed."""
     current_time = time.time()
-    
     # Clean expired entries
     expired = [k for k, v in _processed_codes.items() if current_time - v > _CACHE_EXPIRY]
     for k in expired:
-        _processed_codes.pop(k)
-    
-    # Check if code was processed
+        del _processed_codes[k]
     return code in _processed_codes
 
 async def _mark_code_processed(code: str) -> None:
@@ -154,9 +151,9 @@ async def linkedin_callback(
         return create_html_response(success=False, error=error_msg)
     
     # Check if this code was already processed
-    if await _is_code_processed(code):
+    if _is_code_processed(code):
         logger.info(f"Skipping duplicate callback for code: {code[:10]}...")
-        return create_html_response(success=True, message="Authorization already processed")
+        return create_html_response(success=True, message="OAuth flow already completed")
     
     try:
         # Initialize OAuth handler
