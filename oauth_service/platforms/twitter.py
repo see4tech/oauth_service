@@ -338,26 +338,35 @@ class TwitterOAuth(OAuthBase):
             Media ID string
         """
         try:
-            logger.debug("Starting media upload process")
-            logger.debug(f"Token data contains keys: {list(token_data.keys())}")
+            logger.debug("\n=== Starting Media Upload Process ===")
+            logger.debug(f"Token data structure: {list(token_data.keys())}")
             
             # First check if we have OAuth 1.0a tokens
             if not isinstance(token_data, dict):
                 logger.error("Token data is not a dictionary")
+                logger.error(f"Received type: {type(token_data)}")
                 raise ValueError("Invalid token data structure")
                 
             if 'oauth1' not in token_data:
                 logger.error("OAuth 1.0a tokens not found in token data")
+                logger.error(f"Available keys: {list(token_data.keys())}")
                 raise ValueError("OAuth 1.0a tokens required for media upload")
             
             oauth1_tokens = token_data['oauth1']
             if not isinstance(oauth1_tokens, dict):
                 logger.error("OAuth 1.0a token data is not a dictionary")
+                logger.error(f"Received type: {type(oauth1_tokens)}")
                 raise ValueError("Invalid OAuth 1.0a token structure")
                 
-            if not oauth1_tokens.get('access_token') or not oauth1_tokens.get('access_token_secret'):
-                logger.error("Missing required OAuth 1.0a token components")
-                raise ValueError("Missing OAuth 1.0a access token or secret")
+            logger.debug(f"OAuth1 token keys: {list(oauth1_tokens.keys())}")
+            
+            if not oauth1_tokens.get('access_token'):
+                logger.error("Missing access_token in OAuth1 tokens")
+                raise ValueError("Missing OAuth 1.0a access token")
+                
+            if not oauth1_tokens.get('token_secret'):
+                logger.error("Missing token_secret in OAuth1 tokens")
+                raise ValueError("Missing OAuth 1.0a token secret")
 
             # Create OAuth1 auth object for requests
             from requests_oauthlib import OAuth1
@@ -367,7 +376,9 @@ class TwitterOAuth(OAuthBase):
                 resource_owner_key=oauth1_tokens['access_token'],
                 resource_owner_secret=oauth1_tokens['token_secret']
             )
-
+            
+            logger.debug("OAuth1 authentication object created successfully")
+            
             # Download image and save temporarily
             logger.debug("2. Downloading image")
             logger.debug(f"   URL: {image_url}")
@@ -414,9 +425,6 @@ class TwitterOAuth(OAuthBase):
             logger.debug(f"6. Success! Media ID: {media_id}")
             return media_id
 
-        except ValueError as e:
-            logger.error(f"Validation error in media upload: {str(e)}")
-            raise
         except Exception as e:
             logger.error(f"Error uploading media to Twitter: {str(e)}")
             raise ValueError(f"Failed to upload media: {str(e)}")
@@ -461,8 +469,13 @@ class TwitterOAuth(OAuthBase):
                 
                 logger.debug(f"OAuth1 token data keys: {list(oauth1_token_data.keys())}")
                 
+                # Wrap OAuth1 tokens in the expected structure
+                oauth1_wrapped = {'oauth1': oauth1_token_data}
+                logger.debug(f"Wrapped OAuth1 token data keys: {list(oauth1_wrapped.keys())}")
+                logger.debug(f"Inner OAuth1 token data keys: {list(oauth1_token_data.keys())}")
+                
                 try:
-                    media_id = await self.upload_media_v1(oauth1_token_data, content['image_url'])
+                    media_id = await self.upload_media_v1(oauth1_wrapped, content['image_url'])
                     media_ids = [media_id]
                     logger.debug(f"Media uploaded successfully with ID: {media_id}")
                 except Exception as e:
