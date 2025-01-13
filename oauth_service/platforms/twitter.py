@@ -432,100 +432,89 @@ class TwitterOAuth(OAuthBase):
             # For media upload, we need OAuth 1.0a tokens
             media_ids = None
             if content.get('image_url'):
-                if not isinstance(token_data, dict) or 'oauth1' not in token_data:
+                # Get OAuth 1.0a tokens
+                oauth1_token_data = await refresh_handler.get_valid_token(user_id, "twitter-oauth1", x_api_key)
+                if not oauth1_token_data:
                     logger.error("OAuth 1.0a tokens required but not found")
                     raise ValueError("OAuth 1.0a tokens required for media upload")
                 
                 try:
-                    media_id = await self.upload_media_v1(token_data, content['image_url'])
+                    media_id = await self.upload_media_v1(oauth1_token_data, content['image_url'])
                     media_ids = [media_id]
                     logger.debug(f"Media uploaded successfully with ID: {media_id}")
                 except Exception as e:
                     logger.error(f"Media upload failed: {str(e)}")
                     raise ValueError(f"Media upload failed: {str(e)}")
 
-            # Get fresh token data if user_id is provided
-            if user_id:
-                logger.debug(f"\n=== Token Refresh Check ===")
-                logger.debug(f"Checking token validity for user {user_id}")
-                fresh_token_data = await refresh_handler.get_valid_token(user_id, "twitter-oauth2", x_api_key)
-                if not fresh_token_data:
-                    logger.error("Failed to get valid token from refresh handler")
-                    raise ValueError("Failed to get valid token")
-                logger.debug(f"Fresh token data keys: {list(fresh_token_data.keys())}")
-                token_data = fresh_token_data
+            # Get fresh OAuth 2.0 token data for tweet creation
+            logger.debug(f"\n=== Token Refresh Check ===")
+            logger.debug(f"Getting OAuth 2.0 token for user {user_id}")
+            oauth2_token_data = await refresh_handler.get_valid_token(user_id, "twitter-oauth2", x_api_key)
+            if not oauth2_token_data:
+                logger.error("Failed to get valid OAuth 2.0 token")
+                raise ValueError("Failed to get valid OAuth 2.0 token")
+            logger.debug(f"OAuth 2.0 token data keys: {list(oauth2_token_data.keys())}")
 
-            # For creating the tweet, use OAuth 2.0 User Context
-            if isinstance(token_data, dict) and 'oauth2' in token_data:
-                oauth2_data = token_data['oauth2']
-                oauth2_token = oauth2_data.get('access_token')
-                if not oauth2_token:
-                    logger.error("OAuth 2.0 access token not found in token data")
-                    raise ValueError("OAuth 2.0 access token not found")
-                
-                # Create tweet using OAuth 2.0 User Context
-                logger.debug("\n=== Creating Tweet ===")
-                logger.debug("Using OAuth 2.0 User Context")
-                
-                tweet_data = {
-                    "text": content['text']
+            # Extract OAuth 2.0 token
+            oauth2_token = oauth2_token_data.get('access_token')
+            if not oauth2_token:
+                logger.error("OAuth 2.0 access token not found in token data")
+                raise ValueError("OAuth 2.0 access token not found")
+            
+            # Create tweet using OAuth 2.0 User Context
+            logger.debug("\n=== Creating Tweet ===")
+            logger.debug("Using OAuth 2.0 User Context")
+            
+            tweet_data = {
+                "text": content['text']
+            }
+            if media_ids:
+                tweet_data["media"] = {"media_ids": media_ids}
+                logger.debug(f"Including media in tweet: {media_ids}")
+            
+            logger.debug(f"Tweet data: {tweet_data}")
+            
+            # Use the session to make the request
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    'Authorization': f'Bearer {oauth2_token}',
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'v2TweetPoster'
                 }
-                if media_ids:
-                    tweet_data["media"] = {"media_ids": media_ids}
-                    logger.debug(f"Including media in tweet: {media_ids}")
                 
-                logger.debug(f"Tweet data: {tweet_data}")
+                logger.debug("\n=== Request Details ===")
+                logger.debug(f"URL: https://api.twitter.com/2/tweets")
+                logger.debug(f"Headers: {headers}")
+                logger.debug(f"Data: {tweet_data}")
                 
-                # Create OAuth2Session for the request
-                oauth2_session = OAuth2Session(
-                    client_id=self.client_id,
-                    token={'access_token': oauth2_token}
-                )
-                
-                # Use the session to make the request
-                async with aiohttp.ClientSession() as session:
-                    headers = {
-                        'Authorization': f'Bearer {oauth2_token}',
-                        'Content-Type': 'application/json',
-                        'User-Agent': 'v2TweetPoster'
+                # Make the request with OAuth 2.0 User Context
+                async with session.post(
+                    "https://api.twitter.com/2/tweets",
+                    headers=headers,
+                    json=tweet_data
+                ) as response:
+                    response_text = await response.text()
+                    logger.debug(f"\n=== Twitter API Response ===")
+                    logger.debug(f"Status code: {response.status}")
+                    logger.debug(f"Response text: {response_text}")
+                    
+                    if response.status != 201:
+                        # Sanitize error message in case it contains tokens
+                        safe_error = response_text.replace(oauth2_token, '[REDACTED]') if oauth2_token in response_text else response_text
+                        raise ValueError(f"Failed to create tweet: {safe_error}")
+                    
+                    tweet = await response.json()
+                    
+                    if not tweet or 'data' not in tweet:
+                        raise ValueError("Invalid response from Twitter API")
+                    
+                    logger.debug("Tweet created successfully")
+                    return {
+                        'post_id': str(tweet['data']['id']),
+                        'text': tweet['data']['text'],
+                        'platform': 'twitter',
+                        'url': f"https://twitter.com/i/web/status/{tweet['data']['id']}"
                     }
-                    
-                    logger.debug("\n=== Request Details ===")
-                    logger.debug(f"URL: https://api.twitter.com/2/tweets")
-                    logger.debug(f"Headers: {headers}")
-                    logger.debug(f"Data: {tweet_data}")
-                    
-                    # Make the request with OAuth 2.0 User Context
-                    async with session.post(
-                        "https://api.twitter.com/2/tweets",
-                        headers=headers,
-                        json=tweet_data
-                    ) as response:
-                        response_text = await response.text()
-                        logger.debug(f"\n=== Twitter API Response ===")
-                        logger.debug(f"Status code: {response.status}")
-                        logger.debug(f"Response text: {response_text}")
-                        
-                        if response.status != 201:
-                            # Sanitize error message in case it contains tokens
-                            safe_error = response_text.replace(oauth2_token, '[REDACTED]') if oauth2_token in response_text else response_text
-                            raise ValueError(f"Failed to create tweet: {safe_error}")
-                        
-                        tweet = await response.json()
-                        
-                        if not tweet or 'data' not in tweet:
-                            raise ValueError("Invalid response from Twitter API")
-                        
-                        logger.debug("Tweet created successfully")
-                        return {
-                            'post_id': str(tweet['data']['id']),
-                            'text': tweet['data']['text'],
-                            'platform': 'twitter',
-                            'url': f"https://twitter.com/i/web/status/{tweet['data']['id']}"
-                        }
-            else:
-                logger.error("OAuth 2.0 tokens required but not found in token data")
-                raise ValueError("OAuth 2.0 tokens required for tweet creation")
                 
         except Exception as e:
             # Ensure no tokens are logged in the error
