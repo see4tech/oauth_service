@@ -340,7 +340,8 @@ async def create_post(
                             status_code=500,
                             detail="Invalid OAuth 1.0a token structure"
                         )
-                    if not oauth1_data.get('access_token') or not oauth1_data.get('access_token_secret'):
+                    if not oauth1_data.get('access_token') or not oauth1_data.get('token_secret'):
+                        logger.error(f"Missing OAuth 1.0a tokens. Available keys: {list(oauth1_data.keys())}")
                         raise HTTPException(
                             status_code=401,
                             detail="Missing OAuth 1.0a tokens"
