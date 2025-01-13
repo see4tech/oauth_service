@@ -164,7 +164,7 @@ class TokenManager:
                 if expires_at and datetime.fromtimestamp(expires_at) <= datetime.utcnow():
                     logger.debug(f"Token expired for user {user_id} on platform {platform}")
                     if token_data.get('refresh_token'):
-                        return await self.refresh_token(platform, user_id, token_data, x_api_key)
+                        return await self.refresh_token(platform, user_id, x_api_key)
                     return None
                 return token_data
             
@@ -176,7 +176,7 @@ class TokenManager:
                     refresh_token = token_data.get('refresh_token')
                     if refresh_token:
                         logger.debug(f"Found refresh token for Twitter user {user_id}, attempting refresh")
-                        return await self.refresh_token(platform, user_id, token_data, x_api_key)
+                        return await self.refresh_token(platform, user_id, x_api_key)
                     return None
                 return token_data
             
