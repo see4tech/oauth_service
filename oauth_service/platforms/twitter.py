@@ -242,18 +242,18 @@ class TwitterOAuth(OAuthBase):
             logger.debug("Refreshing Twitter OAuth2 token")
             
             # Create OAuth2 session
-            client = OAuth2Session(self._client_id)
+            client = OAuth2Session(self.client_id)
             
             # Prepare token refresh parameters
             token_url = "https://api.twitter.com/2/oauth2/token"
             refresh_params = {
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
-                "client_id": self._client_id,
+                "client_id": self.client_id,
             }
             
             # Create basic auth header
-            auth_string = f"{self._client_id}:{self._decrypted_client_secret}"
+            auth_string = f"{self.client_id}:{self._decrypted_client_secret}"
             b64_auth = base64.b64encode(auth_string.encode()).decode()
             
             headers = {
