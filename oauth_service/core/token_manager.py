@@ -4,7 +4,6 @@ import json
 from ..utils.key_manager import KeyManager
 from ..core.db import SqliteDB
 from ..utils.logger import get_logger
-from ..routes.oauth_utils import get_oauth_handler
 
 logger = get_logger(__name__)
 
@@ -192,10 +191,10 @@ class TokenManager:
             return None
     
     async def refresh_token(self, platform: str, user_id: str, x_api_key: Optional[str] = None) -> Optional[Dict]:
-        """Refresh the token for the specified platform and user."""
+        """Refresh an expired token using the platform's refresh mechanism."""
         try:
-            logger.debug(f"\n=== Token Refresh Started ===")
-            logger.debug(f"Platform: {platform}, User ID: {user_id}")
+            from ..routes.oauth_utils import get_oauth_handler  # Import moved here
+            logger.debug(f"Refreshing token for {platform} user {user_id}")
             
             # Get base platform name for OAuth handler
             base_platform = "twitter" if platform.startswith("twitter-") else platform
