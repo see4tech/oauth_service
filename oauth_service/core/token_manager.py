@@ -58,7 +58,7 @@ class TokenManager:
         """Store OAuth tokens for a user."""
         try:
             # Normalize platform name for Twitter
-            if platform == "twitter" and "oauth2" in token_data:
+            if platform == "twitter" and ("oauth2" in token_data or "token_type" in token_data):
                 platform = "twitter-oauth2"
             elif platform == "twitter" and ("oauth1" in token_data or "access_token" in token_data):
                 platform = "twitter-oauth1"
@@ -89,14 +89,22 @@ class TokenManager:
             # Handle Twitter OAuth2 token storage
             elif platform == "twitter-oauth2":
                 logger.debug("\n=== Twitter OAuth2 Token Storage ===")
+                
+                # Handle nested oauth2 structure
+                if 'oauth2' in token_data:
+                    oauth2_data = token_data['oauth2']
+                    token_to_store = oauth2_data
+                else:
+                    token_to_store = token_data
+                
                 # Ensure token has Bearer prefix
-                access_token = token_data.get('access_token', '')
+                access_token = token_to_store.get('access_token', '')
                 if not access_token.startswith('Bearer '):
                     token_to_store['access_token'] = f"Bearer {access_token}"
                 
                 # Calculate expires_at if expires_in is present
-                if 'expires_in' in token_data:
-                    token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + token_data['expires_in'])
+                if 'expires_in' in token_to_store:
+                    token_to_store['expires_at'] = int(datetime.utcnow().timestamp() + token_to_store['expires_in'])
                 
                 logger.debug(f"Token structure: {list(token_to_store.keys())}")
                 logger.debug(f"Has refresh token: {'yes' if token_to_store.get('refresh_token') else 'no'}")
