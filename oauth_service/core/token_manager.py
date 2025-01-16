@@ -60,7 +60,7 @@ class TokenManager:
             # Normalize platform name for Twitter
             if platform == "twitter" and "oauth2" in token_data:
                 platform = "twitter-oauth2"
-            elif platform == "twitter" and "oauth1" in token_data:
+            elif platform == "twitter" and ("oauth1" in token_data or "access_token" in token_data):
                 platform = "twitter-oauth1"
                 
             logger.debug("\n=== Token Storage Started ===")
@@ -105,9 +105,21 @@ class TokenManager:
             # Handle Twitter OAuth1 token storage
             elif platform == "twitter-oauth1":
                 logger.debug("\n=== Twitter OAuth1 Token Storage ===")
-                # Ensure we have the required OAuth1 tokens
-                if not token_data.get('access_token') or not token_data.get('token_secret'):
-                    raise ValueError("Missing required OAuth1 tokens")
+                
+                # Handle nested oauth1 structure
+                if 'oauth1' in token_data:
+                    oauth1_data = token_data['oauth1']
+                    if not oauth1_data.get('access_token') or not oauth1_data.get('access_token_secret'):
+                        raise ValueError("Missing required OAuth1 tokens in nested structure")
+                    token_to_store = {
+                        'access_token': oauth1_data['access_token'],
+                        'token_secret': oauth1_data['access_token_secret']
+                    }
+                # Handle flat structure
+                else:
+                    if not token_data.get('access_token') or not token_data.get('token_secret'):
+                        raise ValueError("Missing required OAuth1 tokens")
+                    token_to_store = token_data
                     
                 logger.debug(f"Token structure: {list(token_to_store.keys())}")
             
