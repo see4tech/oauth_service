@@ -240,9 +240,7 @@ class TwitterOAuth(OAuthBase):
                 return None
                 
             logger.debug("Refreshing Twitter OAuth2 token")
-            
-            # Create OAuth2 session
-            client = OAuth2Session(self.client_id)
+            logger.debug(f"Token data keys available: {list(token_data.keys())}")
             
             # Prepare token refresh parameters
             token_url = "https://api.twitter.com/2/oauth2/token"
@@ -252,7 +250,7 @@ class TwitterOAuth(OAuthBase):
                 "client_id": self.client_id,
             }
             
-            # Create basic auth header
+            # Create basic auth header with client_id and client_secret
             auth_string = f"{self.client_id}:{self._decrypted_client_secret}"
             b64_auth = base64.b64encode(auth_string.encode()).decode()
             
@@ -261,26 +259,34 @@ class TwitterOAuth(OAuthBase):
                 "Content-Type": "application/x-www-form-urlencoded",
             }
             
+            logger.debug("Making token refresh request with params:")
+            logger.debug(f"URL: {token_url}")
+            logger.debug(f"Headers: {headers}")
+            logger.debug(f"Refresh params: {refresh_params}")
+            
             # Make token refresh request
             async with aiohttp.ClientSession() as session:
                 async with session.post(token_url, data=refresh_params, headers=headers) as response:
+                    response_text = await response.text()
+                    logger.debug(f"Token refresh response status: {response.status}")
+                    logger.debug(f"Token refresh response: {response_text}")
+                    
                     if response.status != 200:
-                        error_text = await response.text()
-                        logger.error(f"Token refresh failed: {error_text}")
+                        logger.error(f"Token refresh failed: {response_text}")
                         return None
                         
-                    new_token_data = await response.json()
+                    new_token_data = json.loads(response_text)
                     
-            # Add Bearer prefix if not present
-            access_token = new_token_data.get('access_token', '')
-            if not access_token.startswith('Bearer '):
-                new_token_data['access_token'] = f"Bearer {access_token}"
+            # Keep the token_type if it exists
+            if 'token_type' in token_data:
+                new_token_data['token_type'] = token_data['token_type']
                 
             # Calculate expires_at
             if 'expires_in' in new_token_data:
                 new_token_data['expires_at'] = int(datetime.utcnow().timestamp() + new_token_data['expires_in'])
                 
             logger.debug("Successfully refreshed Twitter OAuth2 token")
+            logger.debug(f"New token data keys: {list(new_token_data.keys())}")
             return new_token_data
             
         except Exception as e:

@@ -57,6 +57,12 @@ class TokenManager:
     async def store_token(self, platform: str, user_id: str, token_data: Dict) -> None:
         """Store OAuth tokens for a user."""
         try:
+            # Normalize platform name for Twitter
+            if platform == "twitter" and "oauth2" in token_data:
+                platform = "twitter-oauth2"
+            elif platform == "twitter" and "oauth1" in token_data:
+                platform = "twitter-oauth1"
+                
             logger.debug("\n=== Token Storage Started ===")
             logger.debug(f"Storing token for platform: {platform}, user_id: {user_id}")
             logger.debug(f"Token data keys to store: {list(token_data.keys())}")
