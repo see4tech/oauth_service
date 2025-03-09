@@ -514,7 +514,12 @@ class TwitterOAuth(OAuthBase):
                 logger.error("OAuth 2.0 access token not found in token data")
                 raise ValueError("OAuth 2.0 access token not found")
             
+            # Log detailed token information for debugging
+            logger.debug(f"OAuth2 token type: {type(oauth2_token)}")
+            logger.debug(f"OAuth2 token length: {len(oauth2_token)}")
             logger.debug(f"OAuth2 token first 10 chars: {oauth2_token[:10]}...")
+            logger.debug(f"OAuth2 token last 10 chars: {oauth2_token[-10:] if len(oauth2_token) >= 10 else oauth2_token}")
+            logger.debug(f"OAuth2 token starts with 'Bearer ': {oauth2_token.startswith('Bearer ')}")
             
             # Now that we have a valid OAuth2 token, proceed with media upload if needed
             media_ids = None
@@ -577,11 +582,22 @@ class TwitterOAuth(OAuthBase):
                 # Clean token for header (remove Bearer prefix if present)
                 clean_token = oauth2_token.replace("Bearer ", "")
                 
+                # Log detailed clean token information for debugging
+                logger.debug(f"Clean token type: {type(clean_token)}")
+                logger.debug(f"Clean token length: {len(clean_token)}")
+                logger.debug(f"Clean token first 10 chars: {clean_token[:10]}...")
+                logger.debug(f"Clean token last 10 chars: {clean_token[-10:] if len(clean_token) >= 10 else clean_token}")
+                logger.debug(f"Clean token starts with 'Bearer ': {clean_token.startswith('Bearer ')}")
+                
                 headers = {
                     'Authorization': f'Bearer {clean_token}',
                     'Content-Type': 'application/json',
                     'User-Agent': 'v2TweetPoster'
                 }
+                
+                # Log the full Authorization header for debugging (safely)
+                auth_header = headers['Authorization']
+                logger.debug(f"Full Authorization header: {auth_header[:20]}...{auth_header[-10:] if len(auth_header) >= 30 else ''}")
                 
                 logger.debug("\n=== Request Details ===")
                 logger.debug(f"URL: https://api.twitter.com/2/tweets")
