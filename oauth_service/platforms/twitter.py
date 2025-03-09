@@ -234,13 +234,15 @@ class TwitterOAuth(OAuthBase):
             Dict: New token data with refreshed access token
         """
         try:
+            logger.debug("\n=== Twitter OAuth2 Token Refresh ===")
+            logger.debug(f"Token data keys available: {list(token_data.keys())}")
+            
             refresh_token = token_data.get('refresh_token')
             if not refresh_token:
                 logger.error("No refresh token found in token data")
                 return None
                 
-            logger.debug("Refreshing Twitter OAuth2 token")
-            logger.debug(f"Token data keys available: {list(token_data.keys())}")
+            logger.debug(f"Refresh token found: {refresh_token[:5]}...{refresh_token[-5:] if len(refresh_token) > 10 else ''}")
             
             # Prepare token refresh parameters
             token_url = "https://api.twitter.com/2/oauth2/token"
@@ -261,21 +263,46 @@ class TwitterOAuth(OAuthBase):
             
             logger.debug("Making token refresh request with params:")
             logger.debug(f"URL: {token_url}")
-            logger.debug(f"Headers: {headers}")
-            logger.debug(f"Refresh params: {refresh_params}")
+            logger.debug(f"Headers: {{'Authorization': 'Basic ***', 'Content-Type': '{headers['Content-Type']}'}}")
+            logger.debug(f"Refresh params: {{'grant_type': '{refresh_params['grant_type']}', 'refresh_token': '***', 'client_id': '{refresh_params['client_id']}'}}")
             
             # Make token refresh request
             async with aiohttp.ClientSession() as session:
                 async with session.post(token_url, data=refresh_params, headers=headers) as response:
                     response_text = await response.text()
                     logger.debug(f"Token refresh response status: {response.status}")
-                    logger.debug(f"Token refresh response: {response_text}")
+                    logger.debug(f"Token refresh response headers: {dict(response.headers)}")
+                    
+                    # Sanitize the response text to avoid logging tokens
+                    safe_response = response_text
+                    if response.status == 200 and "access_token" in response_text:
+                        try:
+                            resp_json = json.loads(response_text)
+                            if "access_token" in resp_json:
+                                access_token = resp_json["access_token"]
+                                safe_response = response_text.replace(access_token, "[REDACTED_ACCESS_TOKEN]")
+                            if "refresh_token" in resp_json:
+                                refresh_token = resp_json["refresh_token"]
+                                safe_response = safe_response.replace(refresh_token, "[REDACTED_REFRESH_TOKEN]")
+                        except json.JSONDecodeError:
+                            pass
+                    
+                    logger.debug(f"Token refresh response (sanitized): {safe_response}")
                     
                     if response.status != 200:
-                        logger.error(f"Token refresh failed: {response_text}")
+                        logger.error(f"Token refresh failed with status {response.status}")
+                        logger.error(f"Error response: {response_text}")
                         return None
                         
-                    new_token_data = json.loads(response_text)
+                    try:
+                        new_token_data = json.loads(response_text)
+                        logger.debug(f"Successfully parsed token response")
+                        logger.debug(f"New token data keys: {list(new_token_data.keys())}")
+                        logger.debug(f"Has new access_token: {bool(new_token_data.get('access_token'))}")
+                        logger.debug(f"Has new refresh_token: {bool(new_token_data.get('refresh_token'))}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse token response: {str(e)}")
+                        return None
                     
             # Keep the token_type if it exists
             if 'token_type' in token_data:
@@ -283,14 +310,17 @@ class TwitterOAuth(OAuthBase):
                 
             # Calculate expires_at
             if 'expires_in' in new_token_data:
-                new_token_data['expires_at'] = int(datetime.utcnow().timestamp() + new_token_data['expires_in'])
+                expires_in = new_token_data['expires_in']
+                expires_at = int(datetime.utcnow().timestamp() + expires_in)
+                new_token_data['expires_at'] = expires_at
+                logger.debug(f"Token expires in {expires_in} seconds (at timestamp {expires_at})")
                 
             logger.debug("Successfully refreshed Twitter OAuth2 token")
-            logger.debug(f"New token data keys: {list(new_token_data.keys())}")
             return new_token_data
             
         except Exception as e:
             logger.error(f"Error refreshing token: {str(e)}")
+            logger.error("Stack trace:", exc_info=True)
             return None
     
     async def upload_media(self, token_data: Dict, media_content: bytes,
@@ -432,6 +462,8 @@ class TwitterOAuth(OAuthBase):
             logger.debug("\n=== Starting Tweet Creation Process ===")
             logger.debug(f"User ID from payload: {user_id}")
             logger.debug(f"Has x-api-key: {'yes' if x_api_key else 'no'}")
+            if x_api_key:
+                logger.debug(f"x-api-key: {x_api_key[:5]}...{x_api_key[-5:] if len(x_api_key) > 10 else ''}")
             logger.debug(f"Token data keys: {list(token_data.keys())}")
             
             if not user_id:
@@ -443,10 +475,37 @@ class TwitterOAuth(OAuthBase):
             # First, validate and refresh OAuth2 token if needed
             logger.debug(f"\n=== OAuth2 Token Validation ===")
             logger.debug(f"Getting OAuth 2.0 token for user {user_id}")
+            
+            # Log the API key being used for token validation
+            db = SqliteDB()
+            stored_api_key = db.get_user_api_key(user_id, "twitter-oauth2")
+            if stored_api_key:
+                logger.debug(f"Found stored OAuth2 API key: {stored_api_key[:5]}...{stored_api_key[-5:] if len(stored_api_key) > 10 else ''}")
+                logger.debug(f"OAuth2 API key matches provided x-api-key: {stored_api_key == x_api_key}")
+            else:
+                logger.debug("No OAuth2 API key found in database")
+            
             oauth2_token_data = await refresh_handler.get_valid_token(user_id, "twitter-oauth2", x_api_key)
             if not oauth2_token_data:
                 logger.error("Failed to get valid OAuth 2.0 token")
+                
+                # Check if token exists but couldn't be refreshed
+                token_manager = TokenManager()
+                raw_token = await token_manager.get_token("twitter-oauth2", user_id)
+                if raw_token:
+                    logger.error(f"Token exists but refresh failed. Token keys: {list(raw_token.keys())}")
+                    if 'expires_at' in raw_token:
+                        now = datetime.utcnow().timestamp()
+                        logger.error(f"Token expired: {raw_token['expires_at'] < now} (Expires at: {raw_token['expires_at']}, Now: {now})")
+                    if 'refresh_token' in raw_token:
+                        logger.error(f"Refresh token exists but refresh operation failed")
+                    else:
+                        logger.error(f"No refresh token available")
+                else:
+                    logger.error("No token found in database")
+                
                 raise ValueError("Failed to get valid OAuth 2.0 token")
+            
             logger.debug(f"OAuth 2.0 token data keys: {list(oauth2_token_data.keys())}")
             
             # Extract OAuth 2.0 token
@@ -455,13 +514,34 @@ class TwitterOAuth(OAuthBase):
                 logger.error("OAuth 2.0 access token not found in token data")
                 raise ValueError("OAuth 2.0 access token not found")
             
+            logger.debug(f"OAuth2 token first 10 chars: {oauth2_token[:10]}...")
+            
             # Now that we have a valid OAuth2 token, proceed with media upload if needed
             media_ids = None
             if content.get('image_url'):
                 # Get OAuth 1.0a tokens
+                logger.debug(f"\n=== OAuth1 Token Validation for Media Upload ===")
+                
+                # Log the API key being used for OAuth1 token validation
+                stored_oauth1_api_key = db.get_user_api_key(user_id, "twitter-oauth1")
+                if stored_oauth1_api_key:
+                    logger.debug(f"Found stored OAuth1 API key: {stored_oauth1_api_key[:5]}...{stored_oauth1_api_key[-5:] if len(stored_oauth1_api_key) > 10 else ''}")
+                    logger.debug(f"OAuth1 API key matches provided x-api-key: {stored_oauth1_api_key == x_api_key}")
+                else:
+                    logger.debug("No OAuth1 API key found in database")
+                
                 oauth1_token_data = await refresh_handler.get_valid_token(user_id, "twitter-oauth1", x_api_key)
                 if not oauth1_token_data:
                     logger.error("OAuth 1.0a tokens required but not found")
+                    
+                    # Check if token exists
+                    token_manager = TokenManager()
+                    raw_oauth1_token = await token_manager.get_token("twitter-oauth1", user_id)
+                    if raw_oauth1_token:
+                        logger.error(f"OAuth1 token exists but validation failed. Token keys: {list(raw_oauth1_token.keys())}")
+                    else:
+                        logger.error("No OAuth1 token found in database")
+                    
                     raise ValueError("OAuth 1.0a tokens required for media upload")
                 
                 logger.debug(f"OAuth1 token data keys: {list(oauth1_token_data.keys())}")
@@ -494,15 +574,18 @@ class TwitterOAuth(OAuthBase):
             
             # Use the session to make the request
             async with aiohttp.ClientSession() as session:
+                # Clean token for header (remove Bearer prefix if present)
+                clean_token = oauth2_token.replace("Bearer ", "")
+                
                 headers = {
-                    'Authorization': f'Bearer {oauth2_token.replace("Bearer ", "")}',
+                    'Authorization': f'Bearer {clean_token}',
                     'Content-Type': 'application/json',
                     'User-Agent': 'v2TweetPoster'
                 }
                 
                 logger.debug("\n=== Request Details ===")
                 logger.debug(f"URL: https://api.twitter.com/2/tweets")
-                logger.debug(f"Headers: {headers}")
+                logger.debug(f"Headers: {{'Authorization': 'Bearer {clean_token[:5]}...{clean_token[-5:] if len(clean_token) > 10 else ''}', 'Content-Type': '{headers['Content-Type']}', 'User-Agent': '{headers['User-Agent']}'}}")
                 logger.debug(f"Data: {tweet_data}")
                 
                 # Make the request with OAuth 2.0 User Context
@@ -514,11 +597,12 @@ class TwitterOAuth(OAuthBase):
                     response_text = await response.text()
                     logger.debug(f"\n=== Twitter API Response ===")
                     logger.debug(f"Status code: {response.status}")
+                    logger.debug(f"Response headers: {dict(response.headers)}")
                     logger.debug(f"Response text: {response_text}")
                     
                     if response.status != 201:
                         # Sanitize error message in case it contains tokens
-                        safe_error = response_text.replace(oauth2_token, '[REDACTED]') if oauth2_token in response_text else response_text
+                        safe_error = response_text.replace(clean_token, '[REDACTED]') if clean_token in response_text else response_text
                         raise ValueError(f"Failed to create tweet: {safe_error}")
                     
                     tweet = await response.json()
@@ -540,6 +624,8 @@ class TwitterOAuth(OAuthBase):
             if 'oauth2_token' in locals() and oauth2_token and oauth2_token in error_msg:
                 error_msg = error_msg.replace(oauth2_token, '[REDACTED]')
             logger.error(f"Error creating tweet: {error_msg}")
+            # Log the stack trace for better debugging
+            logger.error("Stack trace:", exc_info=True)
             raise
     
     async def _fetch_media(self, url: str) -> bytes:

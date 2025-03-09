@@ -71,6 +71,8 @@ class TokenRefreshHandler:
                 logger.debug(f"Platform: {platform}")
                 logger.debug(f"User ID: {user_id}")
                 logger.debug(f"Has x-api-key: {'yes' if x_api_key else 'no'}")
+                if x_api_key:
+                    logger.debug(f"x-api-key: {x_api_key[:5]}...{x_api_key[-5:] if len(x_api_key) > 10 else ''}")
                 
                 # Get current token
                 token_data = await self.token_manager.get_token(platform, user_id)
@@ -80,7 +82,19 @@ class TokenRefreshHandler:
                 
                 logger.debug(f"\n=== Current Token Data ===")
                 logger.debug(f"Token data keys: {list(token_data.keys())}")
-                logger.debug(f"Token data values: {json.dumps({k: '***' if k in ['access_token', 'refresh_token'] else v for k, v in token_data.items()})}")
+                
+                # Log token details without exposing sensitive information
+                safe_token_data = {}
+                for k, v in token_data.items():
+                    if k in ['access_token', 'refresh_token', 'token_secret']:
+                        if v:
+                            safe_token_data[k] = f"{v[:5]}...{v[-5:] if len(v) > 10 else ''}"
+                        else:
+                            safe_token_data[k] = None
+                    else:
+                        safe_token_data[k] = v
+                
+                logger.debug(f"Token data values (sanitized): {json.dumps(safe_token_data)}")
                 
                 # Verify x-api-key if provided
                 if x_api_key:
@@ -93,6 +107,13 @@ class TokenRefreshHandler:
                     if not stored_api_key:
                         logger.error(f"No API key found for user {user_id} on platform {validation_platform}")
                         return None
+                    
+                    # Log API key comparison (sanitized)
+                    if stored_api_key:
+                        stored_key_preview = f"{stored_api_key[:5]}...{stored_api_key[-5:] if len(stored_api_key) > 10 else ''}"
+                        logger.debug(f"Stored API key: {stored_key_preview}")
+                        logger.debug(f"API keys match: {stored_api_key == x_api_key}")
+                    
                     if stored_api_key != x_api_key:
                         logger.error(f"Invalid x-api-key for user {user_id} on platform {validation_platform}")
                         return None
@@ -102,6 +123,14 @@ class TokenRefreshHandler:
                 is_expired = self._is_token_expired(token_data, platform)
                 logger.debug(f"\n=== Token Expiration Check ===")
                 logger.debug(f"Token expired: {is_expired}")
+                
+                # For Twitter OAuth2, log expiration details
+                if platform == "twitter-oauth2" and 'expires_at' in token_data:
+                    expires_at = token_data['expires_at']
+                    now = datetime.utcnow().timestamp()
+                    logger.debug(f"Token expires at: {expires_at} (timestamp)")
+                    logger.debug(f"Current time: {now} (timestamp)")
+                    logger.debug(f"Time until expiration: {expires_at - now} seconds")
                 
                 if is_expired:
                     logger.debug(f"\n=== Token Refresh Required ===")
@@ -117,12 +146,17 @@ class TokenRefreshHandler:
                     refresh_token = None
                     if platform == "twitter-oauth2":
                         refresh_token = token_data.get('refresh_token')
+                        logger.debug(f"Twitter OAuth2 refresh token found: {'yes' if refresh_token else 'no'}")
+                        if refresh_token:
+                            logger.debug(f"Refresh token preview: {refresh_token[:5]}...{refresh_token[-5:] if len(refresh_token) > 10 else ''}")
                     elif platform == "linkedin":
                         refresh_token = token_data.get('refresh_token')
                         logger.debug(f"\n=== LinkedIn Refresh Token Details ===")
-                        logger.debug(f"Raw refresh token value: {refresh_token}")
+                        logger.debug(f"Refresh token found: {'yes' if refresh_token else 'no'}")
+                        if refresh_token:
+                            logger.debug(f"Refresh token preview: {refresh_token[:5]}...{refresh_token[-5:] if len(refresh_token) > 10 else ''}")
                         logger.debug(f"Refresh token type: {type(refresh_token)}")
-                        logger.debug(f"Token data dump: {json.dumps(token_data, indent=2)}")
+                        logger.debug(f"Token data keys: {list(token_data.keys())}")
                     
                     logger.debug(f"\n=== Refresh Token Check ===")
                     logger.debug(f"Refresh token found: {'yes' if refresh_token else 'no'}")
@@ -131,45 +165,35 @@ class TokenRefreshHandler:
                         logger.error(f"No refresh token available for user {user_id} on platform {platform}")
                         return None
                     
+                    # Attempt to refresh the token
+                    logger.debug(f"\n=== Token Refresh Attempt ===")
                     try:
-                        # Attempt to refresh the token
-                        logger.debug("\n=== Starting Token Refresh ===")
-                        logger.debug("Calling OAuth handler refresh_token method")
-                        new_token_data = await oauth_handler.refresh_token(refresh_token)
-                        logger.debug("\n=== Token Refresh Response ===")
-                        logger.debug(f"New token data received: {'yes' if new_token_data else 'no'}")
+                        new_token_data = await oauth_handler.refresh_token(token_data, x_api_key)
                         
                         if new_token_data:
+                            logger.debug(f"Token refresh successful")
                             logger.debug(f"New token data keys: {list(new_token_data.keys())}")
-                            logger.debug(f"New refresh token exists: {'yes' if new_token_data.get('refresh_token') else 'no'}")
-                            logger.debug(f"New token expiration: {new_token_data.get('expires_at')}")
-                        
-                        # Store the new token
-                        logger.debug("\n=== Storing New Token ===")
-                        logger.debug("Calling token_manager.store_token")
-                        await self.token_manager.store_token(platform, user_id, new_token_data)
-                        logger.debug("Successfully stored new token data in database")
-                        
-                        logger.debug(f"\n=== Token Refresh Complete ===")
-                        logger.debug(f"Successfully refreshed token for user {user_id} on platform {platform}")
-                        
-                        return new_token_data
-                        
-                    except Exception as e:
-                        logger.error(f"\n=== Token Refresh Error ===")
-                        logger.error(f"Failed to refresh token: {str(e)}")
-                        if hasattr(e, 'response'):
-                            logger.error(f"Response status: {e.response.status_code}")
-                            logger.error(f"Response text: {e.response.text}")
+                            
+                            # Store the refreshed token
+                            await self.token_manager.store_token(platform, user_id, new_token_data)
+                            logger.debug(f"Refreshed token stored successfully")
+                            
+                            return new_token_data
+                        else:
+                            logger.error(f"Token refresh failed - no new token data returned")
+                            return None
+                    except Exception as refresh_error:
+                        logger.error(f"Error during token refresh: {str(refresh_error)}")
+                        logger.error("Token refresh error details:", exc_info=True)
                         return None
                 
-                logger.debug(f"\n=== Using Existing Token ===")
-                logger.debug(f"Token is still valid for user {user_id} on platform {platform}")
+                # Token is still valid
+                logger.debug(f"Token is valid, no refresh needed")
                 return token_data
                 
         except Exception as e:
-            logger.error(f"\n=== Unexpected Error ===")
             logger.error(f"Error in get_valid_token: {str(e)}")
+            logger.error("Stack trace:", exc_info=True)
             return None
 
 # Global instance

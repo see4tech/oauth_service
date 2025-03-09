@@ -21,6 +21,7 @@ from ..utils.crypto import generate_oauth_state
 import json
 from urllib.parse import urlparse, urljoin
 from ..utils.encryption import encrypt_api_key
+from datetime import datetime
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -263,23 +264,35 @@ async def refresh_token(
 
 async def validate_api_keys(user_id: str, platform: str, x_api_key: str) -> bool:
     """Validate user-specific API keys."""
-    logger.debug("=== API Key Validation ===")
+    logger.debug("\n=== API Key Validation ===")
     logger.debug(f"Platform: {platform}")
+    logger.debug(f"User ID: {user_id}")
+    logger.debug(f"Received x-api-key: {x_api_key[:5]}...{x_api_key[-5:] if len(x_api_key) > 10 else ''}")
     
     try:
         # Get user's stored API key
         db = SqliteDB()
+        platform_key = platform
+        
+        # For Twitter, we need to check the specific OAuth version
         if platform == "twitter":
-            stored_api_key = db.get_user_api_key(user_id, "twitter-oauth1")
-        else:
-            stored_api_key = db.get_user_api_key(user_id, platform)
+            platform_key = "twitter-oauth1"
+            logger.debug(f"Using platform key for validation: {platform_key}")
             
-        logger.debug("Validating API key")
+        stored_api_key = db.get_user_api_key(user_id, platform_key)
+        
+        if stored_api_key:
+            logger.debug(f"Found stored API key: {stored_api_key[:5]}...{stored_api_key[-5:] if len(stored_api_key) > 10 else ''}")
+            logger.debug(f"API keys match: {stored_api_key == x_api_key}")
+        else:
+            logger.debug(f"No API key found for user {user_id} on platform {platform_key}")
 
         # Only validate against stored user key
         if not stored_api_key or stored_api_key != x_api_key:
+            logger.error(f"API key validation failed for user {user_id} on platform {platform}")
             raise HTTPException(status_code=401, detail="Invalid API key")
             
+        logger.debug("API key validation successful")
         return True
         
     except HTTPException:
@@ -473,12 +486,56 @@ async def post_twitter_content(
     try:
         logger.debug("\n=== Twitter Post Route ===")
         logger.debug(f"1. Entering route handler")
+        logger.debug(f"User ID: {user_id}")
+        logger.debug(f"Content keys: {list(content.keys())}")
+        logger.debug(f"Received x-api-key: {x_api_key[:5]}...{x_api_key[-5:] if len(x_api_key) > 10 else ''}")
+        
+        # Validate API key
+        db = SqliteDB()
+        stored_api_key = db.get_user_api_key(user_id, "twitter-oauth1")
+        logger.debug(f"Stored API key: {stored_api_key[:5]}...{stored_api_key[-5:] if stored_api_key and len(stored_api_key) > 10 else 'None'}")
+        logger.debug(f"API keys match: {stored_api_key == x_api_key}")
         
         logger.debug("2. Getting OAuth handler")
         oauth_handler = await get_oauth_handler("twitter")
         
+        # Get token data for debugging
+        token_manager = TokenManager()
+        tokens = await token_manager.get_token("twitter", user_id)
+        
+        if tokens:
+            logger.debug(f"Retrieved token data keys: {list(tokens.keys())}")
+            
+            # Log OAuth1 token details if available
+            if 'oauth1' in tokens:
+                oauth1_data = tokens['oauth1']
+                logger.debug(f"OAuth1 token data keys: {list(oauth1_data.keys())}")
+                logger.debug(f"OAuth1 access_token exists: {bool(oauth1_data.get('access_token'))}")
+                logger.debug(f"OAuth1 token_secret exists: {bool(oauth1_data.get('token_secret'))}")
+            else:
+                logger.debug("No OAuth1 token data found")
+                
+            # Log OAuth2 token details if available
+            if 'oauth2' in tokens:
+                oauth2_data = tokens['oauth2']
+                logger.debug(f"OAuth2 token data keys: {list(oauth2_data.keys())}")
+                logger.debug(f"OAuth2 access_token exists: {bool(oauth2_data.get('access_token'))}")
+                logger.debug(f"OAuth2 refresh_token exists: {bool(oauth2_data.get('refresh_token'))}")
+                logger.debug(f"OAuth2 token expiration: {oauth2_data.get('expires_at', 'Not set')}")
+                
+                # Check if token is expired
+                if 'expires_at' in oauth2_data:
+                    expires_at = oauth2_data['expires_at']
+                    now = datetime.utcnow().timestamp()
+                    logger.debug(f"OAuth2 token expired: {expires_at < now} (Expires at: {expires_at}, Now: {now})")
+            else:
+                logger.debug("No OAuth2 token data found")
+        else:
+            logger.debug("No token data found for this user")
+        
         logger.debug("3. Attempting to post")
         if "image_url" in content:
+            logger.debug("Posting tweet with media")
             response = await oauth_handler.post_tweet_with_media(
                 user_id=user_id,
                 text=content["text"],
@@ -486,9 +543,9 @@ async def post_twitter_content(
             )
         else:
             # Simple text-only tweet using OAuth 2.0
-            token_manager = TokenManager()
-            tokens = await token_manager.get_token("twitter", user_id)
-            oauth2_token = tokens.get('oauth2', {}).get('access_token')
+            logger.debug("Posting text-only tweet")
+            oauth2_token = tokens.get('oauth2', {}).get('access_token') if tokens else None
+            logger.debug(f"Using OAuth2 token: {bool(oauth2_token)}")
             
             response = await oauth_handler.post_tweet(
                 access_token=oauth2_token,
