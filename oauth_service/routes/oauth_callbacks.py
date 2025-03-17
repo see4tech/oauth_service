@@ -151,24 +151,26 @@ async def _update_twitter_api_keys(user_id: str, new_api_key: str) -> None:
         db = SqliteDB()
         api_key_storage = APIKeyStorage()
         
-        # Update OAuth1 API key
-        logger.info("Updating OAuth1 API key")
-        await api_key_storage.store_api_key(user_id=user_id, platform="twitter-oauth1", api_key=new_api_key)
+        # Update OAuth1 API key locally
+        logger.info("Updating OAuth1 API key locally")
         db.store_user_api_key(user_id, platform="twitter-oauth1", api_key=new_api_key)
         
-        # Update OAuth2 API key
-        logger.info("Updating OAuth2 API key")
-        await api_key_storage.store_api_key(user_id=user_id, platform="twitter-oauth2", api_key=new_api_key)
+        # Update OAuth2 API key locally
+        logger.info("Updating OAuth2 API key locally")
         db.store_user_api_key(user_id, platform="twitter-oauth2", api_key=new_api_key)
         
-        # Verify storage
+        # Store single API key in external storage with platform="x"
+        logger.info("Storing single API key in external storage with platform='x'")
+        await api_key_storage.store_api_key(user_id=user_id, platform="x", api_key=new_api_key)
+        
+        # Verify local storage
         oauth1_key = db.get_user_api_key(user_id, "twitter-oauth1")
         oauth2_key = db.get_user_api_key(user_id, "twitter-oauth2")
         
         if oauth1_key != new_api_key or oauth2_key != new_api_key:
             raise ValueError("API key verification failed - mismatch in stored keys")
             
-        logger.info("Successfully updated API keys for both OAuth versions")
+        logger.info("Successfully updated API keys")
         
     except Exception as e:
         logger.error(f"Error updating Twitter API keys: {str(e)}")
