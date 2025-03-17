@@ -185,6 +185,10 @@ async def validate_api_key(request: Request, call_next):
                         # Just check if the provided key matches either stored key
                         stored_key = db.get_user_api_key(user_id, "twitter-oauth1")  # We can just check one since they're the same
                         
+                        logger.debug(f"=== Twitter API Key Comparison ===")
+                        logger.debug(f"Received API key: '{api_key}'")
+                        logger.debug(f"Stored API key: '{stored_key}'")
+                        
                         if not stored_key or stored_key != api_key:
                             logger.debug("User-specific API key mismatch")
                             logger.debug("Keys do not match")
@@ -193,7 +197,13 @@ async def validate_api_key(request: Request, call_next):
                         # For other platforms, check normally
                         platform = request.url.path.split("/")[2]  # Get platform from URL
                         stored_key = db.get_user_api_key(user_id, platform)
-                        logger.debug("Retrieved stored API key from DB")
+                        logger.debug(f"=== LinkedIn API Key Validation ===")
+                        logger.debug(f"Request URL path: {request.url.path}")
+                        logger.debug(f"Extracted platform: {platform}")
+                        logger.debug(f"User ID from request: {user_id}")
+                        logger.debug(f"Received API key: '{api_key}'")
+                        logger.debug(f"Stored API key: '{stored_key}'")
+                        logger.debug(f"Global API key: '{settings.API_KEY}'")
 
                         if not stored_key or stored_key != api_key:
                             logger.debug("User-specific API key mismatch")
